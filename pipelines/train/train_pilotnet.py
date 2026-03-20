@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import random
+from math import sqrt
 
 import matplotlib
 
@@ -16,7 +17,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from libs.ml import PilotNet, PilotNetDataset, load_episode_records
+from libs.ml import PilotNet, PilotNetDataset, command_vocab_size, load_episode_records, normalize_command
 from libs.ml.driving_dataset import split_frames
 
 
@@ -40,6 +41,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-height", type=int, default=66)
     parser.add_argument("--crop-top-ratio", type=float, default=0.35)
     parser.add_argument("--speed-norm-mps", type=float, default=10.0)
+    parser.add_argument(
+        "--command-conditioning",
+        choices=("none", "embedding"),
+        default="none",
+    )
+    parser.add_argument("--command-embedding-dim", type=int, default=8)
+    parser.add_argument(
+        "--rebalance-commands",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
     return parser
@@ -53,14 +65,27 @@ def select_device(explicit_device: str | None) -> torch.device:
     return torch.device("cpu")
 
 
-def build_output_dir(explicit_output_dir: str | None) -> Path:
+def build_output_dir(explicit_output_dir: str | None, default_prefix: str) -> Path:
     if explicit_output_dir:
         output_dir = Path(explicit_output_dir)
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = PROJECT_ROOT / "outputs" / "train" / f"pilotnet_{timestamp}"
+        output_dir = PROJECT_ROOT / "outputs" / "train" / f"{default_prefix}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
+
+
+def build_command_weight_map(frames: list, enabled: bool) -> dict[str, float]:
+    if not enabled:
+        return {}
+    counts = Counter(normalize_command(frame.command) for frame in frames)
+    if not counts:
+        return {}
+    max_count = max(counts.values())
+    weights: dict[str, float] = {}
+    for command_name, count in counts.items():
+        weights[command_name] = min(5.0, sqrt(max_count / count))
+    return weights
 
 
 def load_frames(manifest_glob: str) -> tuple[list[Path], list]:
@@ -91,10 +116,11 @@ def evaluate_epoch(
         for batch in data_loader:
             image = batch["image"].to(device)
             speed = batch["speed"].to(device)
+            command_index = batch["command_index"].to(device)
             target = batch["target_steer"].to(device)
             sample_weight = batch["sample_weight"].to(device)
 
-            prediction = model(image, speed)
+            prediction = model(image, speed, command_index)
             loss = weighted_mse(prediction, target, sample_weight)
             mse = ((prediction - target) ** 2).mean()
             mae = (prediction - target).abs().mean()
@@ -117,12 +143,15 @@ def main() -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
-    output_dir = build_output_dir(args.output_dir)
+    default_prefix = "pilotnet_cmd" if args.command_conditioning == "embedding" else "pilotnet"
+    output_dir = build_output_dir(args.output_dir, default_prefix=default_prefix)
     device = select_device(args.device)
     manifest_paths, frames = load_frames(args.manifest_glob)
     train_frames, val_frames = split_frames(frames, train_ratio=args.train_ratio, seed=args.seed)
     if not train_frames or not val_frames:
         raise RuntimeError("Train/val split produced an empty partition. Adjust train_ratio or add more data.")
+
+    command_weight_map = build_command_weight_map(train_frames, enabled=args.rebalance_commands)
 
     train_dataset = PilotNetDataset(
         train_frames,
@@ -130,6 +159,7 @@ def main() -> None:
         image_height=args.image_height,
         crop_top_ratio=args.crop_top_ratio,
         speed_norm_mps=args.speed_norm_mps,
+        command_weight_map=command_weight_map,
     )
     val_dataset = PilotNetDataset(
         val_frames,
@@ -137,6 +167,7 @@ def main() -> None:
         image_height=args.image_height,
         crop_top_ratio=args.crop_top_ratio,
         speed_norm_mps=args.speed_norm_mps,
+        command_weight_map=command_weight_map,
     )
 
     train_loader = DataLoader(
@@ -154,7 +185,17 @@ def main() -> None:
         pin_memory=device.type == "cuda",
     )
 
-    model = PilotNet(image_height=args.image_height, image_width=args.image_width).to(device)
+    if args.command_conditioning == "embedding":
+        model = PilotNet(
+            image_height=args.image_height,
+            image_width=args.image_width,
+            command_vocab_size=command_vocab_size(),
+            command_embedding_dim=args.command_embedding_dim,
+        ).to(device)
+        model_name = "pilotnet_commanded"
+    else:
+        model = PilotNet(image_height=args.image_height, image_width=args.image_width).to(device)
+        model_name = "pilotnet"
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=args.learning_rate,
@@ -186,6 +227,10 @@ def main() -> None:
         "image_height": args.image_height,
         "crop_top_ratio": args.crop_top_ratio,
         "speed_norm_mps": args.speed_norm_mps,
+        "command_conditioning": args.command_conditioning,
+        "command_embedding_dim": args.command_embedding_dim,
+        "command_weight_map": command_weight_map,
+        "rebalance_commands": args.rebalance_commands,
         "train_ratio": args.train_ratio,
     }
     with (output_dir / "config.json").open("w", encoding="utf-8") as handle:
@@ -202,12 +247,13 @@ def main() -> None:
         for batch in progress:
             image = batch["image"].to(device, non_blocking=True)
             speed = batch["speed"].to(device, non_blocking=True)
+            command_index = batch["command_index"].to(device, non_blocking=True)
             target = batch["target_steer"].to(device, non_blocking=True)
             sample_weight = batch["sample_weight"].to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=device.type == "cuda"):
-                prediction = model(image, speed)
+                prediction = model(image, speed, command_index)
                 loss = weighted_mse(prediction, target, sample_weight)
                 mse = ((prediction - target) ** 2).mean()
                 mae = (prediction - target).abs().mean()
@@ -246,12 +292,15 @@ def main() -> None:
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
-                    "model_name": "pilotnet",
+                    "model_name": model_name,
                     "model_config": {
                         "image_width": args.image_width,
                         "image_height": args.image_height,
                         "crop_top_ratio": args.crop_top_ratio,
                         "speed_norm_mps": args.speed_norm_mps,
+                        "command_conditioning": args.command_conditioning,
+                        "command_embedding_dim": args.command_embedding_dim,
+                        "command_vocab_size": command_vocab_size() if args.command_conditioning == "embedding" else 0,
                     },
                     "train_run_config": run_config,
                     "best_epoch": epoch,
@@ -282,6 +331,7 @@ def main() -> None:
         "best_epoch": min(history, key=lambda item: item["val_loss"])["epoch"],
         "final_train_loss": history[-1]["train_loss"],
         "final_val_loss": history[-1]["val_loss"],
+        "model_name": model_name,
         "device": str(device),
         "frame_count": len(frames),
         "train_frame_count": len(train_frames),

@@ -10,6 +10,7 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset
 
+from .commands import command_to_index, normalize_command
 from .preprocessing import preprocess_pil_rgb
 
 
@@ -80,12 +81,14 @@ class PilotNetDataset(Dataset[dict[str, Any]]):
         image_height: int = 66,
         crop_top_ratio: float = 0.35,
         speed_norm_mps: float = 10.0,
+        command_weight_map: dict[str, float] | None = None,
     ) -> None:
         self.frames = frames
         self.image_width = image_width
         self.image_height = image_height
         self.crop_top_ratio = crop_top_ratio
         self.speed_norm_mps = speed_norm_mps
+        self.command_weight_map = command_weight_map or {}
 
     def __len__(self) -> int:
         return len(self.frames)
@@ -101,10 +104,14 @@ class PilotNetDataset(Dataset[dict[str, Any]]):
             )
         speed_tensor = torch.tensor([frame.speed_mps / self.speed_norm_mps], dtype=torch.float32)
         steer_tensor = torch.tensor([frame.steer], dtype=torch.float32)
-        sample_weight = torch.tensor([1.0 + 4.0 * abs(frame.steer)], dtype=torch.float32)
+        command_name = normalize_command(frame.command)
+        command_weight = self.command_weight_map.get(command_name, 1.0)
+        sample_weight = torch.tensor([(1.0 + 4.0 * abs(frame.steer)) * command_weight], dtype=torch.float32)
         return {
             "image": image_tensor,
             "speed": speed_tensor,
+            "command_index": torch.tensor(command_to_index(command_name), dtype=torch.long),
+            "command_name": command_name,
             "target_steer": steer_tensor,
             "sample_weight": sample_weight,
             "episode_id": frame.episode_id,

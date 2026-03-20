@@ -31,7 +31,7 @@ from libs.carla_utils import (
     speed_mps,
     wait_for_image,
 )
-from libs.ml import PilotNet, preprocess_numpy_rgb
+from libs.ml import PilotNet, command_to_index, preprocess_numpy_rgb
 from libs.schemas import EpisodeRecord, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 
@@ -118,9 +118,12 @@ def carla_image_to_rgb_array(image: "carla.Image") -> np.ndarray:
 def load_model(checkpoint_path: Path, device: torch.device) -> tuple[PilotNet, dict]:
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model_config = checkpoint["model_config"]
+    command_conditioning = model_config.get("command_conditioning", "none")
     model = PilotNet(
         image_height=int(model_config["image_height"]),
         image_width=int(model_config["image_width"]),
+        command_vocab_size=int(model_config.get("command_vocab_size", 0)),
+        command_embedding_dim=int(model_config.get("command_embedding_dim", 0)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
@@ -132,6 +135,7 @@ def predict_steer(
     checkpoint: dict,
     image: "carla.Image",
     speed: float,
+    command: str,
     device: torch.device,
 ) -> float:
     model_config = checkpoint["model_config"]
@@ -147,8 +151,11 @@ def predict_steer(
         dtype=torch.float32,
         device=device,
     )
+    command_index = None
+    if model_config.get("command_conditioning", "none") == "embedding":
+        command_index = torch.tensor([command_to_index(command)], dtype=torch.long, device=device)
     with torch.no_grad():
-        prediction = model(image_tensor, speed_tensor)
+        prediction = model(image_tensor, speed_tensor, command_index)
     return float(prediction.squeeze().clamp(-1.0, 1.0).item())
 
 
@@ -257,7 +264,8 @@ def main() -> None:
         current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
         while True:
             current_speed = speed_mps(vehicle)
-            predicted_steer = predict_steer(model, checkpoint, current_image, current_speed, device)
+            command = road_option_name(agent.get_local_planner().target_road_option)
+            predicted_steer = predict_steer(model, checkpoint, current_image, current_speed, command, device)
             longitudinal_control = agent.run_step()
             control = carla.VehicleControl(
                 throttle=longitudinal_control.throttle,
@@ -288,7 +296,6 @@ def main() -> None:
             current_completion_ratio = completion_ratio(initial_waypoint_count, remaining_waypoints(agent))
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
             distance_to_goal_m = vehicle.get_location().distance(goal_location)
-            command = road_option_name(agent.get_local_planner().target_road_option)
 
             record = EpisodeRecord(
                 episode_id=episode_id,
@@ -369,6 +376,7 @@ def main() -> None:
         "is_camera_e2e_policy": True,
         "e2e_scope": "front_rgb_plus_speed_to_steer",
         "model_checkpoint_path": relative_to_project(checkpoint_path),
+        "model_name": checkpoint.get("model_name"),
         "route_name": route_config.name,
         "route_config_path": relative_to_project(route_config_path),
         "town": route_config.town,
