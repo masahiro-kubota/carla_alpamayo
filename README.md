@@ -17,7 +17,7 @@
 1. 仮想環境を作る
 
 ```bash
-cd /home/masa/carla_alpamayo
+cd /media/masa/ssd_data/carla_alpamayo
 python3 -m venv .venv
 source .venv/bin/activate
 ```
@@ -40,7 +40,7 @@ export DISPLAY=:1
 4. 最小収集を走らせる
 
 ```bash
-cd /home/masa/carla_alpamayo
+cd /media/masa/ssd_data/carla_alpamayo
 ./scripts/run_collect_town01.sh
 ```
 

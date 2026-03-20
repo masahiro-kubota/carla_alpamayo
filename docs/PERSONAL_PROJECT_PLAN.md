@@ -4,7 +4,7 @@
 
 ## このディレクトリをどう使うか
 
-`/home/masa/carla_alpamayo` は、このプロジェクトの **作業ルート兼モノレポ** として使う。
+`/media/masa/ssd_data/carla_alpamayo` は、このプロジェクトの **作業ルート兼モノレポ** として使う。
 
 このディレクトリに置くもの:
 
@@ -221,7 +221,7 @@ carla_alpamayo/
 最初の骨組みを作るコマンド例:
 
 ```bash
-cd /home/masa/carla_alpamayo
+cd /media/masa/ssd_data/carla_alpamayo
 
 mkdir -p docs configs apps/search-ui \
   pipelines/{collect,curate,index,train,evaluate} \
@@ -234,14 +234,14 @@ mkdir -p docs configs apps/search-ui \
 Git 管理を始めるなら:
 
 ```bash
-cd /home/masa/carla_alpamayo
+cd /media/masa/ssd_data/carla_alpamayo
 git init
 ```
 
 Python 仮想環境を作るなら:
 
 ```bash
-cd /home/masa/carla_alpamayo
+cd /media/masa/ssd_data/carla_alpamayo
 python3 -m venv .venv
 source .venv/bin/activate
 ```
