@@ -1,0 +1,41 @@
+{
+  "name": "town01_left_focus_south",
+  "town": "Town01",
+  "description": "South-central left-turn route mined from the fixed loop. Dense LEFT segment with minimal route detour.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    111,
+    95
+  ],
+  "anchors": [
+    {
+      "spawn_index": 111,
+      "x": 158.12,
+      "y": 45.08,
+      "yaw_deg": -90.0
+    },
+    {
+      "spawn_index": 95,
+      "x": 170.55,
+      "y": 59.9,
+      "yaw_deg": 0.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 111,
+      "end_spawn_index": 95,
+      "waypoint_count": 123,
+      "length_m": 243.76
+    }
+  ],
+  "total_waypoint_count": 123,
+  "total_length_m": 243.76,
+  "road_option_counts": {
+    "LANEFOLLOW": 80,
+    "LEFT": 31,
+    "STRAIGHT": 12
+  },
+  "plot_path": "docs/assets/town01_left_routes/town01_left_focus_south.png"
+}

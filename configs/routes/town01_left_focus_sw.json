@@ -1,0 +1,8 @@
+{
+  "name": "town01_left_focus_sw",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [84, 91],
+  "description": "Southwest left-turn route aligned with the fixed loop's lower-left corner."
+}

@@ -1,0 +1,42 @@
+{
+  "name": "town01_left_focus_west",
+  "town": "Town01",
+  "description": "West-side left-turn route with moderate LEFT density and long approach/exit context.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    92,
+    77
+  ],
+  "anchors": [
+    {
+      "spawn_index": 92,
+      "x": 334.73,
+      "y": 210.67,
+      "yaw_deg": 90.0
+    },
+    {
+      "spawn_index": 77,
+      "x": 321.75,
+      "y": 194.73,
+      "yaw_deg": -180.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 92,
+      "end_spawn_index": 77,
+      "waypoint_count": 385,
+      "length_m": 759.94
+    }
+  ],
+  "total_waypoint_count": 385,
+  "total_length_m": 759.94,
+  "road_option_counts": {
+    "LANEFOLLOW": 331,
+    "LEFT": 20,
+    "RIGHT": 10,
+    "STRAIGHT": 24
+  },
+  "plot_path": "docs/assets/town01_left_routes/town01_left_focus_west.png"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "town01_left_focus_ne",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [82, 125],
+  "description": "Northeast left-turn route mined from the fixed loop's upper-right left branch."
+}
