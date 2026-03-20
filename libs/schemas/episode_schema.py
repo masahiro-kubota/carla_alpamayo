@@ -23,6 +23,13 @@ class EpisodeRecord:
     collision: bool
     lane_invasion: bool
     success: bool
+    vehicle_x: float | None = None
+    vehicle_y: float | None = None
+    vehicle_z: float | None = None
+    vehicle_yaw_deg: float | None = None
+    route_completion_ratio: float | None = None
+    distance_to_goal_m: float | None = None
+    expert_steer: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

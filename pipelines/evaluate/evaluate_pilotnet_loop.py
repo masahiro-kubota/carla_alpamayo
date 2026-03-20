@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import queue
 import random
+from typing import Any
 
 import numpy as np
 
@@ -42,6 +43,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate a learned PilotNet steer policy on the Town01 fixed loop.")
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--lanefollow-checkpoint", default=None)
+    parser.add_argument("--left-checkpoint", default=None)
+    parser.add_argument("--right-checkpoint", default=None)
+    parser.add_argument("--straight-checkpoint", default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
@@ -59,6 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
+    parser.add_argument("--steer-smoothing", type=float, default=1.0)
+    parser.add_argument("--max-steer-delta", type=float, default=None)
     parser.add_argument(
         "--record-video",
         action=argparse.BooleanOptionalAction,
@@ -130,9 +137,40 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[PilotNet, d
     return model, checkpoint
 
 
+def load_checkpoint_bundle(
+    default_checkpoint_path: Path,
+    device: torch.device,
+    *,
+    lanefollow_checkpoint_path: str | None,
+    left_checkpoint_path: str | None,
+    right_checkpoint_path: str | None,
+    straight_checkpoint_path: str | None,
+) -> dict[str, tuple[PilotNet, dict]]:
+    bundle: dict[str, tuple[PilotNet, dict]] = {"default": load_model(default_checkpoint_path, device)}
+    overrides = {
+        "lanefollow": lanefollow_checkpoint_path,
+        "left": left_checkpoint_path,
+        "right": right_checkpoint_path,
+        "straight": straight_checkpoint_path,
+    }
+    for command_name, override_path in overrides.items():
+        if override_path is None:
+            continue
+        resolved_path = Path(override_path).resolve()
+        if resolved_path == default_checkpoint_path:
+            bundle[command_name] = bundle["default"]
+        else:
+            bundle[command_name] = load_model(resolved_path, device)
+    return bundle
+
+
+def select_model_bundle(command: str, bundle: dict[str, tuple[PilotNet, dict]]) -> tuple[PilotNet, dict]:
+    return bundle.get(command, bundle["default"])
+
+
 def predict_steer(
     model: PilotNet,
-    checkpoint: dict,
+    checkpoint: dict[str, Any],
     image: "carla.Image",
     speed: float,
     command: str,
@@ -159,6 +197,26 @@ def predict_steer(
     return float(prediction.squeeze().clamp(-1.0, 1.0).item())
 
 
+def smooth_steer(
+    raw_steer: float,
+    previous_steer: float | None,
+    *,
+    smoothing: float,
+    max_delta: float | None,
+) -> float:
+    if previous_steer is None:
+        applied = raw_steer
+    else:
+        applied = ((1.0 - smoothing) * previous_steer) + (smoothing * raw_steer)
+    if previous_steer is not None and max_delta is not None:
+        delta = applied - previous_steer
+        if delta > max_delta:
+            applied = previous_steer + max_delta
+        elif delta < -max_delta:
+            applied = previous_steer - max_delta
+    return max(-1.0, min(1.0, applied))
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if carla is None:
@@ -172,7 +230,15 @@ def main() -> None:
 
     device = select_device(args.device)
     checkpoint_path = Path(args.checkpoint).resolve()
-    model, checkpoint = load_model(checkpoint_path, device)
+    model_bundle = load_checkpoint_bundle(
+        checkpoint_path,
+        device,
+        lanefollow_checkpoint_path=args.lanefollow_checkpoint,
+        left_checkpoint_path=args.left_checkpoint,
+        right_checkpoint_path=args.right_checkpoint,
+        straight_checkpoint_path=args.straight_checkpoint,
+    )
+    model, checkpoint = model_bundle["default"]
 
     random_seed = random.Random(args.seed)
     route_config_path = Path(args.route_config).resolve()
@@ -208,6 +274,7 @@ def main() -> None:
     distance_to_goal_m = 0.0
     video_path: str | None = None
     video_error: str | None = None
+    previous_applied_steer: float | None = None
 
     planned_route = build_planned_route(world.get_map(), route_config)
     goal_location = planned_route.trace[-1][0].transform.location
@@ -265,8 +332,23 @@ def main() -> None:
         while True:
             current_speed = speed_mps(vehicle)
             command = road_option_name(agent.get_local_planner().target_road_option)
-            predicted_steer = predict_steer(model, checkpoint, current_image, current_speed, command, device)
+            selected_model, selected_checkpoint = select_model_bundle(command, model_bundle)
+            predicted_steer_raw = predict_steer(
+                selected_model,
+                selected_checkpoint,
+                current_image,
+                current_speed,
+                command,
+                device,
+            )
             longitudinal_control = agent.run_step()
+            predicted_steer = smooth_steer(
+                predicted_steer_raw,
+                previous_applied_steer,
+                smoothing=args.steer_smoothing,
+                max_delta=args.max_steer_delta,
+            )
+            previous_applied_steer = predicted_steer
             control = carla.VehicleControl(
                 throttle=longitudinal_control.throttle,
                 steer=predicted_steer,
@@ -295,7 +377,9 @@ def main() -> None:
 
             current_completion_ratio = completion_ratio(initial_waypoint_count, remaining_waypoints(agent))
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
-            distance_to_goal_m = vehicle.get_location().distance(goal_location)
+            vehicle_transform = vehicle.get_transform()
+            vehicle_location = vehicle_transform.location
+            distance_to_goal_m = vehicle_location.distance(goal_location)
 
             record = EpisodeRecord(
                 episode_id=episode_id,
@@ -313,6 +397,13 @@ def main() -> None:
                 collision=collision,
                 lane_invasion=lane_invasion,
                 success=not collision,
+                vehicle_x=vehicle_location.x,
+                vehicle_y=vehicle_location.y,
+                vehicle_z=vehicle_location.z,
+                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                route_completion_ratio=current_completion_ratio,
+                distance_to_goal_m=distance_to_goal_m,
+                expert_steer=longitudinal_control.steer,
             )
             append_jsonl(manifest_path, record)
 
@@ -377,6 +468,14 @@ def main() -> None:
         "e2e_scope": "front_rgb_plus_speed_to_steer",
         "model_checkpoint_path": relative_to_project(checkpoint_path),
         "model_name": checkpoint.get("model_name"),
+        "model_checkpoint_overrides": {
+            "lanefollow": args.lanefollow_checkpoint,
+            "left": args.left_checkpoint,
+            "right": args.right_checkpoint,
+            "straight": args.straight_checkpoint,
+        },
+        "steer_smoothing": args.steer_smoothing,
+        "max_steer_delta": args.max_steer_delta,
         "route_name": route_config.name,
         "route_config_path": relative_to_project(route_config_path),
         "town": route_config.town,
