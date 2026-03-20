@@ -6,30 +6,25 @@
 
 ## 前提
 
+- `uv` を使えること
 - `CARLA 0.9.16` を `~/sim/carla-0.9.16` で参照できること
-- `carla` Python wheel をインストール済み
 - Python 3.10 以上
 
 今回の環境では、本体は容量都合で `/media/masa/ssd_data/sim/carla-0.9.16` に置き、`/home/masa/sim/carla-0.9.16` は symlink にしています。
+Python ライブラリは `uv` で管理します。lockfile は `uv.lock`、仮想環境は `uv sync` が作る `.venv` を使います。
 
 ## クイックスタート
 
-1. 仮想環境を作る
+1. 依存を同期する
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-python3 -m venv .venv
-source .venv/bin/activate
+uv sync
 ```
 
-2. `CARLA` の Python API を入れる
+`carla` wheel は `pyproject.toml` から参照します。`CARLA` の配置を変えたら、その wheel パスに対して `uv add /path/to/carla-....whl` をやり直します。
 
-```bash
-cd ~/sim/carla-0.9.16/PythonAPI/carla/dist
-python3 -m pip install ./carla-*.whl
-```
-
-3. `CARLA` を起動する
+2. `CARLA` を起動する
 
 ```bash
 cd ~/sim/carla-0.9.16
@@ -37,14 +32,14 @@ export DISPLAY=:1
 ./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound
 ```
 
-4. 最小収集を走らせる
+3. 最小収集を走らせる
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
 ./scripts/run_collect_town01.sh
 ```
 
-このラッパーは `.venv/bin/python` があればそれを優先して使います。
+このラッパーは `uv run` で project の lock 済み環境を使います。`PYTHONPATH` は明示的に空にして、ROS 環境が混ざらないようにしています。
 
 ## いま入っているもの
 

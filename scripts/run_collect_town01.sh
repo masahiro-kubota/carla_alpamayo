@@ -3,15 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-PYTHON_BIN="${REPO_ROOT}/.venv/bin/python"
 
 cd "${REPO_ROOT}"
 
-if [[ ! -x "${PYTHON_BIN}" ]]; then
-  PYTHON_BIN="$(command -v python3)"
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required but was not found in PATH." >&2
+  exit 1
 fi
 
-"${PYTHON_BIN}" -m pipelines.collect.minimal_collect \
+PYTHONPATH="" uv run python -m pipelines.collect.minimal_collect \
   --town "${CARLA_TOWN:-Town01}" \
   --host "${CARLA_HOST:-127.0.0.1}" \
   --port "${CARLA_PORT:-2000}" \

@@ -1,0 +1,15 @@
+[project]
+name = "carla-alpamayo"
+version = "0.1.0"
+description = "Personal CARLA workspace for data collection, E2E experiments, and route tooling."
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "carla",
+    "matplotlib>=3.10.8",
+    "networkx>=3.4.2",
+    "numpy>=2.2.6",
+]
+
+[tool.uv.sources]
+carla = { path = "../../../../home/masa/sim/carla-0.9.16/PythonAPI/carla/dist/carla-0.9.16-cp310-cp310-manylinux_2_31_x86_64.whl" }

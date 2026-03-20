@@ -54,8 +54,7 @@ plot の再生成:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-PYTHONPATH=/home/masa/sim/carla-0.9.16/PythonAPI/carla \
-  ./.venv/bin/python ./scripts/plot_route.py
+PYTHONPATH="" uv run python ./scripts/plot_route.py
 ```
 
 ## メモ
