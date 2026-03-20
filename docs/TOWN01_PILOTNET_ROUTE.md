@@ -8,6 +8,43 @@
 - 交差点の自由意思決定はまだ入れず、route は固定する
 - まずは clockwise で回し、学習データの steering 符号バランスを取るために後で counter-clockwise も追加する
 
+## Success Criteria
+
+最初のベースライン成功条件は「fixed-loop route を planner 付き closed-loop で 1 周完走し、その expert 走行を学習データとして再現対象にできること」。
+
+- map: `Town01`
+- route: `configs/routes/town01_pilotnet_loop.json`
+- lateral model target: `front RGB + speed -> steer`
+- longitudinal control: planner / PID 側が担当
+- weather: `ClearNoon`
+- traffic: なし
+
+`success` は次をすべて満たしたとき:
+
+- `route_completion_ratio >= 0.99`
+- `collision_count == 0`
+- `max_stationary_seconds < 10`
+- `distance_to_goal_m <= 10`
+- `manual_interventions == 0`
+
+補助メトリクス:
+
+- `lane_invasion_count`
+- `lap_time_seconds`
+- `average_speed_kmh`
+- `road_option_counts`
+
+この段階では lane invasion を失敗条件にはしない。まずは「ループを止まらずに 1 周できる expert run を作る」ことを優先する。
+
+検証済みの baseline 実行条件:
+
+- `target_speed_kmh = 30`
+- `image_width = 320`
+- `image_height = 180`
+- `max_seconds = 600`
+
+2026-03-21 の確認では、この設定で `508.75 s`、`collision_count = 0`、`route_completion_ratio = 1.0` で 1 周完走した。
+
 ## Route File
 
 - `configs/routes/town01_pilotnet_loop.json`
@@ -56,6 +93,19 @@ plot の再生成:
 cd /media/masa/ssd_data/carla_alpamayo
 PYTHONPATH="" uv run python ./scripts/plot_route.py
 ```
+
+fixed-loop expert 収集:
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+./scripts/run_collect_town01_loop.sh
+```
+
+出力:
+
+- frame manifest: `data/manifests/episodes/<episode_id>.jsonl`
+- front RGB: `outputs/collect/<episode_id>/front_rgb/*.png`
+- summary: `outputs/collect/<episode_id>/summary.json`
 
 ## メモ
 

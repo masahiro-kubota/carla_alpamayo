@@ -41,6 +41,15 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 このラッパーは `uv run` で project の lock 済み環境を使います。`PYTHONPATH` は明示的に空にして、ROS 環境が混ざらないようにしています。
 
+4. 固定ループ expert 収集を走らせる
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+./scripts/run_collect_town01_loop.sh
+```
+
+この run は `configs/routes/town01_pilotnet_loop.json` の loop を `BasicAgent + PID` で 1 周させ、front camera と frame manifest に加えて `summary.json` を出します。既定値は `320x180`, `30 km/h`, `max_seconds=600` です。
+
 ## いま入っているもの
 
 - `pipelines.collect.minimal_collect`
@@ -50,11 +59,16 @@ cd /media/masa/ssd_data/carla_alpamayo
   - frame ごとに PNG と JSONL manifest を出す
 - `libs.schemas.episode_schema`
   - 最低限の frame schema を定義する
+- `pipelines.collect.collect_route_loop`
+  - `Town01` の固定 loop route を planner で完走させる
+  - front RGB と frame manifest を出す
+  - success criteria に沿った summary JSON を出す
 
 ## 出力先
 
 - frame manifest: `data/manifests/episodes/<episode_id>.jsonl`
 - 画像: `outputs/collect/<episode_id>/front_rgb/*.png`
+- fixed-loop summary: `outputs/collect/<episode_id>/summary.json`
 
 2026-03-21 の確認結果:
 
@@ -67,8 +81,19 @@ cd /media/masa/ssd_data/carla_alpamayo
 ## 制約
 
 - high-level command は今は `lane_follow` 固定
-- route planning はまだ未実装
+- fixed loop の route planning は `Town01` だけ実装済み
 - `collision` と `lane_invasion` はセンサーイベントがあった frame だけ反映する
+
+## Town01 Baseline
+
+固定ループの最初の成功条件は [docs/TOWN01_PILOTNET_ROUTE.md](docs/TOWN01_PILOTNET_ROUTE.md) にまとめています。現時点の定義は次です。
+
+- map: `Town01`
+- route: `configs/routes/town01_pilotnet_loop.json`
+- target task: `front RGB + speed -> steer`
+- success: `route_completion_ratio >= 0.99`, `collision_count == 0`, `max_stationary_seconds < 10`, `distance_to_goal_m <= 10`
+
+2026-03-21 の確認では、`30 km/h`、`320x180` の fixed-loop run が `508.75 s` で成功しています。
 
 ## リポジトリ構成
 

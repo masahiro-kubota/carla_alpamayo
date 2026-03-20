@@ -102,6 +102,16 @@
 
 最初の目標は `Level 2` で十分です。
 
+Town01 の最初の閉ループ基準はさらに絞る:
+
+- map は `Town01`
+- route は固定ループ `configs/routes/town01_pilotnet_loop.json`
+- planner が route intent と longitudinal を持つ
+- 学習対象はまず `front RGB + speed -> steer`
+- `route_completion_ratio >= 0.99`, `collision == 0`, `max_stationary_seconds < 10`, `distance_to_goal_m <= 10` を満たしたら成功
+
+詳細は `docs/TOWN01_PILOTNET_ROUTE.md` に固定する。
+
 ## 難しいシナリオ集をどう作るか
 
 難しいケースは自然発生を待つのではなく、**scenario family を定義して量産する**。
