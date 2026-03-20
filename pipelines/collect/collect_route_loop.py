@@ -28,6 +28,7 @@ from libs.carla_utils import (
     wait_for_image,
 )
 from libs.schemas import EpisodeRecord, append_jsonl
+from libs.utils import render_png_sequence_to_mp4
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -53,6 +54,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-seconds", type=float, default=600.0)
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--record-video",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--video-fps", type=float, default=None)
+    parser.add_argument("--video-crf", type=int, default=23)
     parser.add_argument(
         "--ignore-traffic-lights",
         action=argparse.BooleanOptionalAction,
@@ -132,6 +140,8 @@ def main() -> None:
     success = False
     failure_reason = ""
     distance_to_goal_m = 0.0
+    video_path: str | None = None
+    video_error: str | None = None
 
     planned_route = build_planned_route(world.get_map(), route_config)
     goal_location = planned_route.trace[-1][0].transform.location
@@ -268,8 +278,26 @@ def main() -> None:
         world.apply_settings(original_settings)
         destroy_actors(reversed(actors))
 
+    video_fps = args.video_fps or (1.0 / args.fixed_delta_seconds)
+    if args.record_video:
+        try:
+            rendered_video = render_png_sequence_to_mp4(
+                image_dir=image_dir,
+                output_path=episode_dir / "front_rgb.mp4",
+                fps=video_fps,
+                crf=args.video_crf,
+            )
+            video_path = relative_to_project(rendered_video)
+        except Exception as exc:
+            video_error = str(exc)
+
     summary = {
         "episode_id": episode_id,
+        "policy_type": "expert_demonstration",
+        "control_source": "carla_basic_agent",
+        "route_intent_source": "global_route_planner",
+        "lateral_control_source": "basic_agent_local_planner_pid",
+        "is_camera_e2e_policy": False,
         "route_name": route_config.name,
         "route_config_path": relative_to_project(route_config_path),
         "town": route_config.town,
@@ -292,6 +320,10 @@ def main() -> None:
         "segment_summaries": planned_route.segment_summaries,
         "road_option_counts": planned_route.road_option_counts,
         "front_rgb_dir": relative_to_project(image_dir),
+        "video_path": video_path,
+        "video_fps": round(video_fps, 3) if video_path else None,
+        "video_crf": args.video_crf if video_path else None,
+        "video_error": video_error,
         "manifest_path": relative_to_project(manifest_path),
     }
     with summary_path.open("w", encoding="utf-8") as handle:

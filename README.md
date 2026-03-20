@@ -48,7 +48,21 @@ cd /media/masa/ssd_data/carla_alpamayo
 ./scripts/run_collect_town01_loop.sh
 ```
 
-この run は `configs/routes/town01_pilotnet_loop.json` の loop を `BasicAgent + PID` で 1 周させ、front camera と frame manifest に加えて `summary.json` を出します。既定値は `320x180`, `30 km/h`, `max_seconds=600` です。
+この run は `configs/routes/town01_pilotnet_loop.json` の loop を `BasicAgent + PID` で 1 周させ、front camera と frame manifest に加えて `summary.json` と `front_rgb.mp4` を出します。既定値は `320x180`, `30 km/h`, `max_seconds=600` です。
+
+5. 既存 episode から動画を再生成する
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+PYTHONPATH="" uv run python -m pipelines.collect.render_episode_video \
+  --episode-dir outputs/collect/<episode_id>
+```
+
+重要:
+
+- 現時点の fixed-loop run はまだ camera-to-steer の E2E 推論ではありません
+- `steer/throttle/brake` は `BasicAgent.run_step()` が返す expert control です
+- front camera は学習用の観測と teacher label を記録するために使っています
 
 ## いま入っているもの
 
@@ -62,13 +76,16 @@ cd /media/masa/ssd_data/carla_alpamayo
 - `pipelines.collect.collect_route_loop`
   - `Town01` の固定 loop route を planner で完走させる
   - front RGB と frame manifest を出す
-  - success criteria に沿った summary JSON を出す
+  - success criteria に沿った summary JSON と MP4 を出す
+- `pipelines.collect.render_episode_video`
+  - 既存 episode の PNG 列から MP4 を再生成する
 
 ## 出力先
 
 - frame manifest: `data/manifests/episodes/<episode_id>.jsonl`
 - 画像: `outputs/collect/<episode_id>/front_rgb/*.png`
 - fixed-loop summary: `outputs/collect/<episode_id>/summary.json`
+- fixed-loop video: `outputs/collect/<episode_id>/front_rgb.mp4`
 
 2026-03-21 の確認結果:
 
@@ -83,6 +100,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 - high-level command は今は `lane_follow` 固定
 - fixed loop の route planning は `Town01` だけ実装済み
 - `collision` と `lane_invasion` はセンサーイベントがあった frame だけ反映する
+- verified baseline の steering は learned E2E ではなく planner/PID expert 制御
 
 ## Town01 Baseline
 

@@ -36,6 +36,12 @@
 
 この段階では lane invasion を失敗条件にはしない。まずは「ループを止まらずに 1 周できる expert run を作る」ことを優先する。
 
+重要:
+
+- この verified baseline はまだ camera-to-steer の learned E2E policy ではない
+- `steer/throttle/brake` は `BasicAgent.run_step()` が返す expert control
+- front camera は後段の `PilotNet風 + steer-only` 学習用に観測と教師信号をそろえている段階
+
 検証済みの baseline 実行条件:
 
 - `target_speed_kmh = 30`
@@ -106,6 +112,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 - frame manifest: `data/manifests/episodes/<episode_id>.jsonl`
 - front RGB: `outputs/collect/<episode_id>/front_rgb/*.png`
 - summary: `outputs/collect/<episode_id>/summary.json`
+- video: `outputs/collect/<episode_id>/front_rgb.mp4`
 
 ## メモ
 
