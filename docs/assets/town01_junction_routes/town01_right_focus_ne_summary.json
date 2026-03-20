@@ -1,0 +1,41 @@
+{
+  "name": "town01_right_focus_ne",
+  "town": "Town01",
+  "description": "Northeast junction route. RIGHT-heavy route with additional STRAIGHT supervision.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    74,
+    105
+  ],
+  "anchors": [
+    {
+      "spawn_index": 74,
+      "x": 322.1,
+      "y": 55.15,
+      "yaw_deg": -180.0
+    },
+    {
+      "spawn_index": 105,
+      "x": 334.22,
+      "y": 145.67,
+      "yaw_deg": 90.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 74,
+      "end_spawn_index": 105,
+      "waypoint_count": 273,
+      "length_m": 527.5
+    }
+  ],
+  "total_waypoint_count": 273,
+  "total_length_m": 527.5,
+  "road_option_counts": {
+    "LANEFOLLOW": 219,
+    "RIGHT": 30,
+    "STRAIGHT": 24
+  },
+  "plot_path": "docs/assets/town01_junction_routes/town01_right_focus_ne.png"
+}

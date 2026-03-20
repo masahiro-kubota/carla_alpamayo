@@ -1,0 +1,40 @@
+{
+  "name": "town01_straight_focus_south",
+  "town": "Town01",
+  "description": "South edge straight-through route. Pure LANEFOLLOW + STRAIGHT supervision.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    35,
+    124
+  ],
+  "anchors": [
+    {
+      "spawn_index": 35,
+      "x": 173.12,
+      "y": 326.97,
+      "yaw_deg": 180.0
+    },
+    {
+      "spawn_index": 124,
+      "x": 76.45,
+      "y": 326.43,
+      "yaw_deg": -180.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 35,
+      "end_spawn_index": 124,
+      "waypoint_count": 49,
+      "length_m": 94.08
+    }
+  ],
+  "total_waypoint_count": 49,
+  "total_length_m": 94.08,
+  "road_option_counts": {
+    "LANEFOLLOW": 38,
+    "STRAIGHT": 11
+  },
+  "plot_path": "docs/assets/town01_junction_routes/town01_straight_focus_south.png"
+}

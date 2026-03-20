@@ -73,9 +73,9 @@ def plot_topology(ax: plt.Axes, world_map: carla.Map) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
-    route_config_path = Path(args.route_config)
-    output_path = Path(args.output)
-    summary_path = Path(args.summary_output)
+    route_config_path = Path(args.route_config).resolve()
+    output_path = Path(args.output).resolve()
+    summary_path = Path(args.summary_output).resolve()
 
     config = load_route_config(route_config_path)
     client = carla.Client(args.host, args.port)
@@ -124,7 +124,8 @@ def main() -> None:
 
     route_xs = [point[0] for point in all_route_points]
     route_ys = [point[1] for point in all_route_points]
-    ax.plot(route_xs, route_ys, color="#e67e22", linewidth=2.6, zorder=3, label="Loop route")
+    route_label = "Loop route" if config.get("closed_loop", False) else "Open route"
+    ax.plot(route_xs, route_ys, color="#e67e22", linewidth=2.6, zorder=3, label=route_label)
 
     for order, (spawn_index, transform) in enumerate(zip(anchor_indices, anchor_transforms), start=1):
         x = transform.location.x
