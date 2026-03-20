@@ -95,6 +95,24 @@ export CARLA_WEATHER=ClearNoon
   - `collision_count = 0`
   - `elapsed_seconds = 9.05`
 
+## Execution Result
+
+2026-03-21 に first pack を最後まで実行しました。
+
+- executed episodes: `31 / 31`
+- success episodes: `31 / 31`
+- added command frames:
+  - `right = 1006`
+  - `straight = 1584`
+  - `lanefollow = 10091`
+- updated total command counts:
+  - `lanefollow = 23694`
+  - `left = 600`
+  - `straight = 2113`
+  - `right = 1225`
+
+収集自体は計画どおり成功です。ただし、この追加収集のあとに回した command-conditioned 再学習では fixed-loop completion は改善しませんでした。詳細は [TOWN01_CAMERA_E2E_RESULTS.md](TOWN01_CAMERA_E2E_RESULTS.md) にまとめています。
+
 ## Route Plots
 
 ### Right-Focused
@@ -117,4 +135,5 @@ export CARLA_WEATHER=ClearNoon
 
 - 目標: closed-loop `route_completion_ratio > 0.30`
 - できれば `> 0.50`
-- ここで改善しなければ、次は model より先に evaluator と temporal context を見直す
+- 実際には `0.0788` と `0.0797` で失敗
+- 次は model より先に evaluator と temporal context を見直す

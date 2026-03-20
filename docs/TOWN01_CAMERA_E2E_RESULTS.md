@@ -31,6 +31,20 @@
 - うち full lap success expert: `town01_pilotnet_loop_20260321_030547`
 - CCW expert は `65.6 s` で collision。turn 例としてだけ使う
 
+### Junction Pack Expansion
+
+追加収集:
+
+- `docs/TOWN01_JUNCTION_COLLECTION_PLAN.md` の first pack を `31 / 31` 成功で回した
+- 新規 route は `right_focus_*` と `straight_focus_*`
+
+追加後の command counts:
+
+- `lanefollow = 23694`
+- `left = 600`
+- `straight = 2113`
+- `right = 1225`
+
 ## Training
 
 ### Baseline A: Camera + Speed
@@ -74,6 +88,42 @@ command frame counts:
 - `straight = 529`
 - `right = 219`
 
+### Baseline C: Camera + Speed + Command + Junction Pack
+
+train output:
+
+- `outputs/train/pilotnet_cmd_20260321_051543/`
+
+best checkpoint:
+
+- `outputs/train/pilotnet_cmd_20260321_051543/best.pt`
+
+best summary:
+
+- best epoch: `8`
+- best val loss: `0.013738`
+- device: `cuda`
+- split mode: `episode`
+- command rebalancing: `enabled`
+
+### Baseline D: Camera + Speed + Command + Junction Pack, No Rebalance
+
+train output:
+
+- `outputs/train/pilotnet_cmd_20260321_051903/`
+
+best checkpoint:
+
+- `outputs/train/pilotnet_cmd_20260321_051903/best.pt`
+
+best summary:
+
+- best epoch: `6`
+- best val loss: `0.011287`
+- device: `cuda`
+- split mode: `episode`
+- command rebalancing: `disabled`
+
 ## Closed-Loop Experiment
 
 ### Experiment A: Camera + Speed
@@ -111,9 +161,43 @@ evaluation output:
 - `route_completion_ratio = 0.0797`
 - `failure_reason = collision`
 
+### Experiment C: Junction Pack + Rebalanced Command Model
+
+evaluation output:
+
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_051826/summary.json`
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_051826/front_rgb.mp4`
+
+結果:
+
+- `policy_type = learned_lateral_policy`
+- `model_name = pilotnet_commanded`
+- `elapsed_seconds = 41.05`
+- `collision_count = 2`
+- `lane_invasion_count = 5`
+- `route_completion_ratio = 0.0788`
+- `failure_reason = collision`
+
+### Experiment D: Junction Pack + No-Rebalance Command Model
+
+evaluation output:
+
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_052143/summary.json`
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_052143/front_rgb.mp4`
+
+結果:
+
+- `policy_type = learned_lateral_policy`
+- `model_name = pilotnet_commanded`
+- `elapsed_seconds = 41.5`
+- `collision_count = 1`
+- `lane_invasion_count = 7`
+- `route_completion_ratio = 0.0797`
+- `failure_reason = collision`
+
 ## Interpretation
 
-この時点では、**追加収集なしで command conditioning を足しても fixed loop 完走には届かなかった**。
+この時点では、**追加収集なしでも、`right/straight` を増やしたあとでも fixed loop 完走には届いていない**。
 
 観察:
 
@@ -123,17 +207,19 @@ evaluation output:
 - `command` を入れた再学習は val loss では大きく悪化していない
 - それでも closed-loop では `15.47% -> 7.97%` に下がり、`41.5 s` で collision した
 - つまり、このデータ量と分布では `command` を入れるだけでは十分ではない
+- `right/straight` を増やしたあとでも closed-loop は `0.0788-0.0797` に張り付いた
+- `rebalance_commands` を切っても結果はほぼ同じで、重み付けだけが原因ではない
 
 一番自然な解釈:
 
 - camera-only baseline の失敗要因はやはり junction の route intent 不足だった
-- ただし `command` を architecture に足しても、`right` と `straight` の教師例が少なすぎて分岐で安定しない
-- frame 単位のランダム split で見える val loss は、closed-loop の改善を保証しない
+- ただし `right` と `straight` を増やしただけでは足りず、`left` の不足か、単発 frame-based architecture 自体の限界が残っている
+- `split_mode = episode` と `rebalance off` でも fixed-loop completion は改善しない
+- open-loop の val loss は下がっても、closed-loop の改善を保証しない
 
 ## Next
 
-- `front RGB + speed + command -> steer` はこのまま維持する
-- 追加収集は `right` と `straight` の junction 例を優先する
-- 最低ラインとして `right` を `219 -> 1000-1500 frames` に増やす
-- 再学習後の主評価指標は val loss ではなく closed-loop `route_completion_ratio`
-- 同一路線で改善しなければ、次に evaluator と route design を見直す
+- `front RGB + speed + command -> steer` は維持するが、次は model だけをいじらない
+- まず evaluator で collision 位置と最初の failure 区間を可視化する
+- そのうえで `left` junction 例を追加するか、temporal context を入れる
+- 再学習後の主評価指標は引き続き closed-loop `route_completion_ratio`

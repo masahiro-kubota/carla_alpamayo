@@ -28,7 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Train a PilotNet-style front-camera-to-steer model.")
     parser.add_argument(
         "--manifest-glob",
-        default="data/manifests/episodes/town01_pilotnet_loop_*.jsonl",
+        action="append",
+        default=None,
     )
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--epochs", type=int, default=8)
@@ -37,6 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--train-ratio", type=float, default=0.9)
+    parser.add_argument(
+        "--split-mode",
+        choices=("frame", "episode"),
+        default="frame",
+    )
     parser.add_argument("--image-width", type=int, default=200)
     parser.add_argument("--image-height", type=int, default=66)
     parser.add_argument("--crop-top-ratio", type=float, default=0.35)
@@ -98,6 +104,43 @@ def load_frames(manifest_glob: str) -> tuple[list[Path], list]:
     return manifest_paths, frames
 
 
+def load_frames_from_globs(manifest_globs: list[str]) -> tuple[list[Path], list]:
+    manifest_paths: list[Path] = []
+    seen_paths: set[Path] = set()
+    for manifest_glob in manifest_globs:
+        for path in sorted(PROJECT_ROOT.glob(manifest_glob)):
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            manifest_paths.append(path)
+    if not manifest_paths:
+        raise FileNotFoundError(f"No manifests matched: {manifest_globs}")
+    frames = load_episode_records(manifest_paths)
+    if not frames:
+        raise RuntimeError("No usable frames were found in the selected manifests.")
+    return manifest_paths, frames
+
+
+def split_frames_by_episode(
+    frames: list,
+    train_ratio: float,
+    seed: int,
+) -> tuple[list, list]:
+    rng = random.Random(seed)
+    episode_ids = sorted({frame.episode_id for frame in frames})
+    rng.shuffle(episode_ids)
+    if len(episode_ids) < 2:
+        raise RuntimeError("Episode-level split requires at least two episodes.")
+    target_train = max(1, int(len(episode_ids) * train_ratio))
+    target_train = min(target_train, len(episode_ids) - 1)
+    train_episode_ids = set(episode_ids[:target_train])
+    train = [frame for frame in frames if frame.episode_id in train_episode_ids]
+    val = [frame for frame in frames if frame.episode_id not in train_episode_ids]
+    if not train or not val:
+        raise RuntimeError("Episode-level split produced an empty partition.")
+    return train, val
+
+
 def weighted_mse(prediction: torch.Tensor, target: torch.Tensor, sample_weight: torch.Tensor) -> torch.Tensor:
     return (((prediction - target) ** 2) * sample_weight).mean()
 
@@ -146,8 +189,12 @@ def main() -> None:
     default_prefix = "pilotnet_cmd" if args.command_conditioning == "embedding" else "pilotnet"
     output_dir = build_output_dir(args.output_dir, default_prefix=default_prefix)
     device = select_device(args.device)
-    manifest_paths, frames = load_frames(args.manifest_glob)
-    train_frames, val_frames = split_frames(frames, train_ratio=args.train_ratio, seed=args.seed)
+    manifest_globs = args.manifest_glob or ["data/manifests/episodes/town01_pilotnet_loop_*.jsonl"]
+    manifest_paths, frames = load_frames_from_globs(manifest_globs)
+    if args.split_mode == "episode":
+        train_frames, val_frames = split_frames_by_episode(frames, train_ratio=args.train_ratio, seed=args.seed)
+    else:
+        train_frames, val_frames = split_frames(frames, train_ratio=args.train_ratio, seed=args.seed)
     if not train_frames or not val_frames:
         raise RuntimeError("Train/val split produced an empty partition. Adjust train_ratio or add more data.")
 
@@ -208,7 +255,7 @@ def main() -> None:
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
 
     run_config = {
-        "manifest_glob": args.manifest_glob,
+        "manifest_globs": manifest_globs,
         "manifest_paths": [str(path.relative_to(PROJECT_ROOT)) for path in manifest_paths],
         "train_episode_ids": sorted({frame.episode_id for frame in train_frames}),
         "val_episode_ids": sorted({frame.episode_id for frame in val_frames}),
@@ -232,6 +279,7 @@ def main() -> None:
         "command_weight_map": command_weight_map,
         "rebalance_commands": args.rebalance_commands,
         "train_ratio": args.train_ratio,
+        "split_mode": args.split_mode,
     }
     with (output_dir / "config.json").open("w", encoding="utf-8") as handle:
         json.dump(run_config, handle, indent=2)
