@@ -6,9 +6,11 @@
 
 ## 前提
 
-- `CARLA 0.9.16` を `~/sim/carla-0.9.16` にインストール済み
+- `CARLA 0.9.16` を `~/sim/carla-0.9.16` で参照できること
 - `carla` Python wheel をインストール済み
 - Python 3.10 以上
+
+今回の環境では、本体は容量都合で `/media/masa/ssd_data/sim/carla-0.9.16` に置き、`/home/masa/sim/carla-0.9.16` は symlink にしています。
 
 ## クイックスタート
 
@@ -31,7 +33,8 @@ python3 -m pip install ./carla-*.whl
 
 ```bash
 cd ~/sim/carla-0.9.16
-./CarlaUE4.sh -quality-level=Low -RenderOffScreen
+export DISPLAY=:1
+./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound
 ```
 
 4. 最小収集を走らせる
@@ -40,6 +43,8 @@ cd ~/sim/carla-0.9.16
 cd /home/masa/carla_alpamayo
 ./scripts/run_collect_town01.sh
 ```
+
+このラッパーは `.venv/bin/python` があればそれを優先して使います。
 
 ## いま入っているもの
 
@@ -55,6 +60,14 @@ cd /home/masa/carla_alpamayo
 
 - frame manifest: `data/manifests/episodes/<episode_id>.jsonl`
 - 画像: `outputs/collect/<episode_id>/front_rgb/*.png`
+
+2026-03-21 の確認結果:
+
+- `Town01`
+- `640x360`
+- `400 frames`
+- 約 `20` 秒
+- 出力例: `outputs/collect/town01_20260321_022519/front_rgb/`
 
 ## 制約
 
