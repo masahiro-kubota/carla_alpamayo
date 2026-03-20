@@ -1,0 +1,74 @@
+{
+  "name": "town01_pilotnet_loop",
+  "town": "Town01",
+  "description": "Clockwise perimeter loop around Town01 using four corner anchors.",
+  "closed_loop": true,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    70,
+    67,
+    64,
+    181
+  ],
+  "anchors": [
+    {
+      "spawn_index": 70,
+      "x": -1.76,
+      "y": 9.56,
+      "yaw_deg": 90.0
+    },
+    {
+      "spawn_index": 67,
+      "x": 2.05,
+      "y": 318.38,
+      "yaw_deg": -90.0
+    },
+    {
+      "spawn_index": 64,
+      "x": 396.64,
+      "y": 318.38,
+      "yaw_deg": -90.0
+    },
+    {
+      "spawn_index": 181,
+      "x": 392.47,
+      "y": 9.19,
+      "yaw_deg": 90.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 70,
+      "end_spawn_index": 67,
+      "waypoint_count": 627,
+      "length_m": 1244.02
+    },
+    {
+      "start_spawn_index": 67,
+      "end_spawn_index": 64,
+      "waypoint_count": 525,
+      "length_m": 1028.83
+    },
+    {
+      "start_spawn_index": 64,
+      "end_spawn_index": 181,
+      "waypoint_count": 455,
+      "length_m": 898.97
+    },
+    {
+      "start_spawn_index": 181,
+      "end_spawn_index": 70,
+      "waypoint_count": 527,
+      "length_m": 1032.17
+    }
+  ],
+  "total_waypoint_count": 2134,
+  "total_length_m": 4213.08,
+  "road_option_counts": {
+    "LANEFOLLOW": 1891,
+    "LEFT": 90,
+    "RIGHT": 48,
+    "STRAIGHT": 105
+  },
+  "plot_path": "docs/assets/town01_pilotnet_loop.png"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "town01_pilotnet_loop",
+  "town": "Town01",
+  "closed_loop": true,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [70, 67, 64, 181],
+  "description": "Clockwise perimeter loop around Town01 using four corner anchors."
+}
