@@ -1,0 +1,36 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+.DS_Store
+
+# Generated manifests
+data/manifests/episodes/*.jsonl
+data/manifests/clips/*.json
+
+# Generated outputs
+outputs/*
+!outputs/.gitkeep
+!outputs/collect/
+!outputs/curate/
+!outputs/index/
+!outputs/train/
+!outputs/evaluate/
+outputs/collect/*
+!outputs/collect/.gitkeep
+outputs/curate/*
+!outputs/curate/.gitkeep
+outputs/index/*
+!outputs/index/.gitkeep
+outputs/train/*
+!outputs/train/.gitkeep
+outputs/evaluate/*
+!outputs/evaluate/.gitkeep
+
+# Logs
+*.log
