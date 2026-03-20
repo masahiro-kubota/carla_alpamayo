@@ -37,6 +37,22 @@ if [[ -n "${PILOTNET_INIT_CHECKPOINT:-}" ]]; then
   extra_args+=(--init-checkpoint "${PILOTNET_INIT_CHECKPOINT}")
 fi
 
+if [[ -n "${PILOTNET_FRAME_STACK:-}" ]]; then
+  extra_args+=(--frame-stack "${PILOTNET_FRAME_STACK}")
+fi
+
+if [[ -n "${PILOTNET_ROUTE_CONDITIONING:-}" ]]; then
+  extra_args+=(--route-conditioning "${PILOTNET_ROUTE_CONDITIONING}")
+fi
+
+if [[ -n "${PILOTNET_ROUTE_LOOKAHEAD_M:-}" ]]; then
+  extra_args+=(--route-lookahead-m "${PILOTNET_ROUTE_LOOKAHEAD_M}")
+fi
+
+if [[ -n "${PILOTNET_ROUTE_TARGET_NORMALIZATION_M:-}" ]]; then
+  extra_args+=(--route-target-normalization-m "${PILOTNET_ROUTE_TARGET_NORMALIZATION_M}")
+fi
+
 PYTHONPATH="" uv run python -m pipelines.train.train_pilotnet \
   --manifest-glob "${PILOTNET_MANIFEST_GLOB:-data/manifests/episodes/town01_pilotnet_loop_*.jsonl}" \
   --epochs "${PILOTNET_EPOCHS:-8}" \

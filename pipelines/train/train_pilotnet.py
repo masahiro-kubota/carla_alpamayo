@@ -17,7 +17,15 @@ from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from libs.ml import PilotNet, PilotNetDataset, command_vocab_size, load_episode_records, normalize_command
+from libs.carla_utils import load_route_geometries_for_ids
+from libs.ml import (
+    PilotNet,
+    PilotNetDataset,
+    attach_route_target_points,
+    command_vocab_size,
+    load_episode_records,
+    normalize_command,
+)
 from libs.ml.driving_dataset import split_frames
 
 
@@ -51,13 +59,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-width", type=int, default=200)
     parser.add_argument("--image-height", type=int, default=66)
     parser.add_argument("--crop-top-ratio", type=float, default=0.35)
+    parser.add_argument("--frame-stack", type=int, default=1)
     parser.add_argument("--speed-norm-mps", type=float, default=10.0)
     parser.add_argument("--target-steer-field", default="steer")
     parser.add_argument("--fallback-target-steer-field", default="steer")
     parser.add_argument("--include-command", action="append", default=None)
     parser.add_argument(
+        "--route-conditioning",
+        choices=("none", "target-point"),
+        default="none",
+    )
+    parser.add_argument("--route-lookahead-m", type=float, default=8.0)
+    parser.add_argument("--route-target-normalization-m", type=float, default=20.0)
+    parser.add_argument("--carla-host", default="127.0.0.1")
+    parser.add_argument("--carla-port", type=int, default=2000)
+    parser.add_argument(
         "--command-conditioning",
-        choices=("none", "embedding"),
+        choices=("none", "embedding", "branch"),
         default="none",
     )
     parser.add_argument("--command-embedding-dim", type=int, default=8)
@@ -205,10 +223,11 @@ def evaluate_epoch(
             image = batch["image"].to(device)
             speed = batch["speed"].to(device)
             command_index = batch["command_index"].to(device)
+            route_point = batch["route_point"].to(device)
             target = batch["target_steer"].to(device)
             sample_weight = batch["sample_weight"].to(device)
 
-            prediction = model(image, speed, command_index)
+            prediction = model(image, speed, command_index, route_point)
             loss = weighted_mse(prediction, target, sample_weight)
             mse = ((prediction - target) ** 2).mean()
             mae = (prediction - target).abs().mean()
@@ -231,7 +250,16 @@ def main() -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
 
-    default_prefix = "pilotnet_cmd" if args.command_conditioning == "embedding" else "pilotnet"
+    prefix_parts = ["pilotnet"]
+    if args.command_conditioning == "embedding":
+        prefix_parts.append("cmd")
+    elif args.command_conditioning == "branch":
+        prefix_parts.append("branch")
+    if args.route_conditioning == "target-point":
+        prefix_parts.append("tp")
+    if args.frame_stack > 1:
+        prefix_parts.append(f"fs{args.frame_stack}")
+    default_prefix = "_".join(prefix_parts)
     output_dir = build_output_dir(args.output_dir, default_prefix=default_prefix)
     device = select_device(args.device)
     manifest_globs = args.manifest_glob or ["data/manifests/episodes/town01_pilotnet_loop_*.jsonl"]
@@ -246,6 +274,18 @@ def main() -> None:
         fallback_target_steer_field=args.fallback_target_steer_field,
         include_commands=include_commands,
     )
+    if args.route_conditioning == "target-point":
+        route_geometries = load_route_geometries_for_ids(
+            {frame.route_id for frame in frames},
+            host=args.carla_host,
+            port=args.carla_port,
+        )
+        frames = attach_route_target_points(
+            frames,
+            route_geometries=route_geometries,
+            lookahead_m=args.route_lookahead_m,
+            target_normalization_m=args.route_target_normalization_m,
+        )
     if args.split_mode == "episode":
         train_frames, val_frames = split_frames_by_episode(frames, train_ratio=args.train_ratio, seed=args.seed)
     else:
@@ -262,6 +302,7 @@ def main() -> None:
         crop_top_ratio=args.crop_top_ratio,
         speed_norm_mps=args.speed_norm_mps,
         command_weight_map=command_weight_map,
+        frame_stack=args.frame_stack,
     )
     val_dataset = PilotNetDataset(
         val_frames,
@@ -270,7 +311,10 @@ def main() -> None:
         crop_top_ratio=args.crop_top_ratio,
         speed_norm_mps=args.speed_norm_mps,
         command_weight_map=command_weight_map,
+        frame_stack=args.frame_stack,
     )
+
+    image_channels = 3 * args.frame_stack
 
     train_loader = DataLoader(
         train_dataset,
@@ -289,14 +333,31 @@ def main() -> None:
 
     if args.command_conditioning == "embedding":
         model = PilotNet(
+            image_channels=image_channels,
             image_height=args.image_height,
             image_width=args.image_width,
+            route_point_dim=2 if args.route_conditioning == "target-point" else 0,
             command_vocab_size=command_vocab_size(),
             command_embedding_dim=args.command_embedding_dim,
         ).to(device)
         model_name = "pilotnet_commanded"
+    elif args.command_conditioning == "branch":
+        model = PilotNet(
+            image_channels=image_channels,
+            image_height=args.image_height,
+            image_width=args.image_width,
+            route_point_dim=2 if args.route_conditioning == "target-point" else 0,
+            command_vocab_size=command_vocab_size(),
+            command_branching=True,
+        ).to(device)
+        model_name = "pilotnet_branched"
     else:
-        model = PilotNet(image_height=args.image_height, image_width=args.image_width).to(device)
+        model = PilotNet(
+            image_channels=image_channels,
+            image_height=args.image_height,
+            image_width=args.image_width,
+            route_point_dim=2 if args.route_conditioning == "target-point" else 0,
+        ).to(device)
         model_name = "pilotnet"
     init_checkpoint = load_initial_checkpoint(model, args.init_checkpoint, device)
     optimizer = torch.optim.AdamW(
@@ -332,7 +393,14 @@ def main() -> None:
         "image_width": args.image_width,
         "image_height": args.image_height,
         "crop_top_ratio": args.crop_top_ratio,
+        "frame_stack": args.frame_stack,
+        "image_channels": image_channels,
         "speed_norm_mps": args.speed_norm_mps,
+        "route_conditioning": args.route_conditioning,
+        "route_lookahead_m": args.route_lookahead_m,
+        "route_target_normalization_m": args.route_target_normalization_m,
+        "carla_host": args.carla_host,
+        "carla_port": args.carla_port,
         "target_steer_field": args.target_steer_field,
         "fallback_target_steer_field": args.fallback_target_steer_field,
         "include_commands": sorted(include_commands) if include_commands else None,
@@ -360,12 +428,13 @@ def main() -> None:
             image = batch["image"].to(device, non_blocking=True)
             speed = batch["speed"].to(device, non_blocking=True)
             command_index = batch["command_index"].to(device, non_blocking=True)
+            route_point = batch["route_point"].to(device, non_blocking=True)
             target = batch["target_steer"].to(device, non_blocking=True)
             sample_weight = batch["sample_weight"].to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=device.type == "cuda"):
-                prediction = model(image, speed, command_index)
+                prediction = model(image, speed, command_index, route_point)
                 loss = weighted_mse(prediction, target, sample_weight)
                 mse = ((prediction - target) ** 2).mean()
                 mae = (prediction - target).abs().mean()
@@ -406,13 +475,20 @@ def main() -> None:
                     "model_state_dict": model.state_dict(),
                     "model_name": model_name,
                     "model_config": {
+                        "image_channels": image_channels,
                         "image_width": args.image_width,
                         "image_height": args.image_height,
                         "crop_top_ratio": args.crop_top_ratio,
+                        "frame_stack": args.frame_stack,
                         "speed_norm_mps": args.speed_norm_mps,
+                        "route_conditioning": args.route_conditioning,
+                        "route_point_dim": 2 if args.route_conditioning == "target-point" else 0,
+                        "route_lookahead_m": args.route_lookahead_m,
+                        "route_target_normalization_m": args.route_target_normalization_m,
                         "command_conditioning": args.command_conditioning,
                         "command_embedding_dim": args.command_embedding_dim,
-                        "command_vocab_size": command_vocab_size() if args.command_conditioning == "embedding" else 0,
+                        "command_branching": args.command_conditioning == "branch",
+                        "command_vocab_size": command_vocab_size() if args.command_conditioning in {"embedding", "branch"} else 0,
                     },
                     "train_run_config": run_config,
                     "best_epoch": epoch,
@@ -453,6 +529,7 @@ def main() -> None:
         "train_command_counts": run_config["train_command_counts"],
         "val_command_counts": run_config["val_command_counts"],
         "target_steer_field": args.target_steer_field,
+        "route_conditioning": args.route_conditioning,
         "include_commands": run_config["include_commands"],
         "init_checkpoint_path": args.init_checkpoint,
     }

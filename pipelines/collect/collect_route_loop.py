@@ -17,12 +17,14 @@ from libs.carla_utils import (
     attach_sensor,
     build_episode_id,
     build_planned_route,
+    compute_local_target_point,
     destroy_actors,
     ensure_carla_agents_on_path,
     load_route_config,
     relative_to_project,
     require_blueprint,
     road_option_name,
+    route_geometry_from_planned_route,
     setup_world,
     speed_mps,
     wait_for_image,
@@ -142,8 +144,10 @@ def main() -> None:
     distance_to_goal_m = 0.0
     video_path: str | None = None
     video_error: str | None = None
+    route_index_cursor: int | None = None
 
     planned_route = build_planned_route(world.get_map(), route_config)
+    route_geometry = route_geometry_from_planned_route(planned_route)
     goal_location = planned_route.trace[-1][0].transform.location
     success_criteria = {
         "route_completion_ratio_min": 0.99,
@@ -220,8 +224,19 @@ def main() -> None:
                 current_stationary_seconds = 0.0
             max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
 
-            distance_to_goal_m = vehicle.get_location().distance(goal_location)
+            vehicle_transform = vehicle.get_transform()
+            vehicle_location = vehicle_transform.location
+            distance_to_goal_m = vehicle_location.distance(goal_location)
             command = road_option_name(agent.get_local_planner().target_road_option)
+            route_point, route_index_cursor = compute_local_target_point(
+                route_geometry,
+                vehicle_x=vehicle_location.x,
+                vehicle_y=vehicle_location.y,
+                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                lookahead_m=8.0,
+                target_normalization_m=20.0,
+                previous_route_index=route_index_cursor,
+            )
 
             episode_success_so_far = not collision and not failure_reason
             record = EpisodeRecord(
@@ -240,6 +255,14 @@ def main() -> None:
                 collision=collision,
                 lane_invasion=lane_invasion,
                 success=episode_success_so_far,
+                vehicle_x=vehicle_location.x,
+                vehicle_y=vehicle_location.y,
+                vehicle_z=vehicle_location.z,
+                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                route_completion_ratio=current_completion_ratio,
+                distance_to_goal_m=distance_to_goal_m,
+                route_target_x=route_point[0],
+                route_target_y=route_point[1],
             )
             append_jsonl(manifest_path, record)
 

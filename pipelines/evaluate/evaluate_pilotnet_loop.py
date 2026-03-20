@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import json
 from pathlib import Path
 import queue
@@ -22,12 +23,14 @@ from libs.carla_utils import (
     attach_sensor,
     build_episode_id,
     build_planned_route,
+    compute_local_target_point,
     destroy_actors,
     ensure_carla_agents_on_path,
     load_route_config,
     relative_to_project,
     require_blueprint,
     road_option_name,
+    route_geometry_from_planned_route,
     setup_world,
     speed_mps,
     wait_for_image,
@@ -125,12 +128,14 @@ def carla_image_to_rgb_array(image: "carla.Image") -> np.ndarray:
 def load_model(checkpoint_path: Path, device: torch.device) -> tuple[PilotNet, dict]:
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model_config = checkpoint["model_config"]
-    command_conditioning = model_config.get("command_conditioning", "none")
     model = PilotNet(
+        image_channels=int(model_config.get("image_channels", 3)),
         image_height=int(model_config["image_height"]),
         image_width=int(model_config["image_width"]),
+        route_point_dim=int(model_config.get("route_point_dim", 0)),
         command_vocab_size=int(model_config.get("command_vocab_size", 0)),
         command_embedding_dim=int(model_config.get("command_embedding_dim", 0)),
+        command_branching=bool(model_config.get("command_branching", False)),
     ).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
@@ -171,29 +176,41 @@ def select_model_bundle(command: str, bundle: dict[str, tuple[PilotNet, dict]]) 
 def predict_steer(
     model: PilotNet,
     checkpoint: dict[str, Any],
-    image: "carla.Image",
+    rgb_history: list[np.ndarray],
     speed: float,
     command: str,
+    route_point: tuple[float, float] | None,
     device: torch.device,
 ) -> float:
     model_config = checkpoint["model_config"]
-    rgb_array = carla_image_to_rgb_array(image)
-    image_tensor = preprocess_numpy_rgb(
-        rgb_array,
-        image_width=int(model_config["image_width"]),
-        image_height=int(model_config["image_height"]),
-        crop_top_ratio=float(model_config["crop_top_ratio"]),
-    ).unsqueeze(0).to(device)
+    frame_stack = int(model_config.get("frame_stack", max(1, int(model_config.get("image_channels", 3)) // 3)))
+    image_tensors = [
+        preprocess_numpy_rgb(
+            rgb_array,
+            image_width=int(model_config["image_width"]),
+            image_height=int(model_config["image_height"]),
+            crop_top_ratio=float(model_config["crop_top_ratio"]),
+        )
+        for rgb_array in rgb_history[-frame_stack:]
+    ]
+    while len(image_tensors) < frame_stack:
+        image_tensors.insert(0, image_tensors[0])
+    image_tensor = torch.cat(image_tensors, dim=0).unsqueeze(0).to(device)
     speed_tensor = torch.tensor(
         [[speed / float(model_config["speed_norm_mps"])]],
         dtype=torch.float32,
         device=device,
     )
     command_index = None
-    if model_config.get("command_conditioning", "none") == "embedding":
+    if model_config.get("command_conditioning", "none") in {"embedding", "branch"}:
         command_index = torch.tensor([command_to_index(command)], dtype=torch.long, device=device)
+    route_point_tensor = None
+    if int(model_config.get("route_point_dim", 0)) > 0:
+        if route_point is None:
+            raise ValueError("route_point is required when the checkpoint expects route conditioning.")
+        route_point_tensor = torch.tensor([route_point], dtype=torch.float32, device=device)
     with torch.no_grad():
-        prediction = model(image_tensor, speed_tensor, command_index)
+        prediction = model(image_tensor, speed_tensor, command_index, route_point_tensor)
     return float(prediction.squeeze().clamp(-1.0, 1.0).item())
 
 
@@ -239,6 +256,10 @@ def main() -> None:
         straight_checkpoint_path=args.straight_checkpoint,
     )
     model, checkpoint = model_bundle["default"]
+    max_frame_stack = max(
+        int(bundle_checkpoint["model_config"].get("frame_stack", max(1, int(bundle_checkpoint["model_config"].get("image_channels", 3)) // 3)))
+        for _bundle_model, bundle_checkpoint in model_bundle.values()
+    )
 
     random_seed = random.Random(args.seed)
     route_config_path = Path(args.route_config).resolve()
@@ -275,8 +296,11 @@ def main() -> None:
     video_path: str | None = None
     video_error: str | None = None
     previous_applied_steer: float | None = None
+    rgb_history: deque[np.ndarray] = deque(maxlen=max_frame_stack)
+    route_index_cursor: int | None = None
 
     planned_route = build_planned_route(world.get_map(), route_config)
+    route_geometry = route_geometry_from_planned_route(planned_route)
     goal_location = planned_route.trace[-1][0].transform.location
     success_criteria = {
         "route_completion_ratio_min": 0.99,
@@ -330,15 +354,32 @@ def main() -> None:
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
         while True:
+            rgb_history.append(carla_image_to_rgb_array(current_image))
             current_speed = speed_mps(vehicle)
             command = road_option_name(agent.get_local_planner().target_road_option)
             selected_model, selected_checkpoint = select_model_bundle(command, model_bundle)
+            vehicle_transform = vehicle.get_transform()
+            vehicle_location = vehicle_transform.location
+            route_point = None
+            if int(selected_checkpoint["model_config"].get("route_point_dim", 0)) > 0:
+                route_point, route_index_cursor = compute_local_target_point(
+                    route_geometry,
+                    vehicle_x=vehicle_location.x,
+                    vehicle_y=vehicle_location.y,
+                    vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                    lookahead_m=float(selected_checkpoint["model_config"].get("route_lookahead_m", 8.0)),
+                    target_normalization_m=float(
+                        selected_checkpoint["model_config"].get("route_target_normalization_m", 20.0)
+                    ),
+                    previous_route_index=route_index_cursor,
+                )
             predicted_steer_raw = predict_steer(
                 selected_model,
                 selected_checkpoint,
-                current_image,
+                list(rgb_history),
                 current_speed,
                 command,
+                route_point,
                 device,
             )
             longitudinal_control = agent.run_step()
@@ -377,9 +418,13 @@ def main() -> None:
 
             current_completion_ratio = completion_ratio(initial_waypoint_count, remaining_waypoints(agent))
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
-            vehicle_transform = vehicle.get_transform()
-            vehicle_location = vehicle_transform.location
             distance_to_goal_m = vehicle_location.distance(goal_location)
+
+            reached_success_goal = (
+                not collision
+                and current_completion_ratio >= success_criteria["route_completion_ratio_min"]
+                and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
+            )
 
             record = EpisodeRecord(
                 episode_id=episode_id,
@@ -404,11 +449,16 @@ def main() -> None:
                 route_completion_ratio=current_completion_ratio,
                 distance_to_goal_m=distance_to_goal_m,
                 expert_steer=longitudinal_control.steer,
+                route_target_x=route_point[0] if route_point is not None else None,
+                route_target_y=route_point[1] if route_point is not None else None,
             )
             append_jsonl(manifest_path, record)
 
             if collision:
                 failure_reason = "collision"
+                break
+
+            if reached_success_goal:
                 break
 
             if max_stationary_seconds >= args.max_stop_seconds:

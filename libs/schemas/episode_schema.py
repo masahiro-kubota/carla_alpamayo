@@ -30,6 +30,8 @@ class EpisodeRecord:
     route_completion_ratio: float | None = None
     distance_to_goal_m: float | None = None
     expert_steer: float | None = None
+    route_target_x: float | None = None
+    route_target_y: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
