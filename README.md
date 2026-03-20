@@ -58,6 +58,20 @@ PYTHONPATH="" uv run python -m pipelines.collect.render_episode_video \
   --episode-dir outputs/collect/<episode_id>
 ```
 
+6. `PilotNet風 + speed -> steer` を学習する
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+./scripts/run_train_pilotnet.sh
+```
+
+7. 学習済み steer policy を fixed loop で評価する
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+./scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt
+```
+
 重要:
 
 - 現時点の fixed-loop run はまだ camera-to-steer の E2E 推論ではありません
@@ -79,6 +93,10 @@ PYTHONPATH="" uv run python -m pipelines.collect.render_episode_video \
   - success criteria に沿った summary JSON と MP4 を出す
 - `pipelines.collect.render_episode_video`
   - 既存 episode の PNG 列から MP4 を再生成する
+- `pipelines.train.train_pilotnet`
+  - `front RGB + speed -> steer` の `PilotNet風` モデルを学習する
+- `pipelines.evaluate.evaluate_pilotnet_loop`
+  - learned steer を fixed loop で closed-loop 評価する
 
 ## 出力先
 
@@ -112,6 +130,17 @@ PYTHONPATH="" uv run python -m pipelines.collect.render_episode_video \
 - success: `route_completion_ratio >= 0.99`, `collision_count == 0`, `max_stationary_seconds < 10`, `distance_to_goal_m <= 10`
 
 2026-03-21 の確認では、`30 km/h`、`320x180` の fixed-loop run が `508.75 s` で成功しています。
+
+## Camera E2E
+
+camera 画像からの learned steer 実験も 1 本回しています。結果は [docs/TOWN01_CAMERA_E2E_RESULTS.md](docs/TOWN01_CAMERA_E2E_RESULTS.md) にまとめました。
+
+要点:
+
+- `front RGB + speed -> steer` の `PilotNet風` モデルは学習済み
+- closed-loop では `600 s` ノーコリジョンまでは走れた
+- ただし fixed loop の `route_completion_ratio` は `0.1547`
+- 解釈としては junction で route intent が足りず、次は `command` を入力に入れる段階
 
 ## リポジトリ構成
 
