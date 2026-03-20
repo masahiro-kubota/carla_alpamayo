@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=None,
     )
+    parser.add_argument(
+        "--manifest-path",
+        action="append",
+        default=None,
+    )
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -47,6 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-height", type=int, default=66)
     parser.add_argument("--crop-top-ratio", type=float, default=0.35)
     parser.add_argument("--speed-norm-mps", type=float, default=10.0)
+    parser.add_argument("--target-steer-field", default="steer")
+    parser.add_argument("--fallback-target-steer-field", default="steer")
+    parser.add_argument("--include-command", action="append", default=None)
     parser.add_argument(
         "--command-conditioning",
         choices=("none", "embedding"),
@@ -60,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
+    parser.add_argument("--init-checkpoint", default=None)
     return parser
 
 
@@ -94,31 +103,58 @@ def build_command_weight_map(frames: list, enabled: bool) -> dict[str, float]:
     return weights
 
 
-def load_frames(manifest_glob: str) -> tuple[list[Path], list]:
-    manifest_paths = sorted(PROJECT_ROOT.glob(manifest_glob))
-    if not manifest_paths:
-        raise FileNotFoundError(f"No manifests matched: {manifest_glob}")
-    frames = load_episode_records(manifest_paths)
-    if not frames:
-        raise RuntimeError("No usable frames were found in the selected manifests.")
-    return manifest_paths, frames
-
-
-def load_frames_from_globs(manifest_globs: list[str]) -> tuple[list[Path], list]:
-    manifest_paths: list[Path] = []
+def resolve_manifest_paths(
+    *,
+    manifest_globs: list[str],
+    manifest_paths: list[str],
+) -> list[Path]:
+    resolved_paths: list[Path] = []
     seen_paths: set[Path] = set()
+    for manifest_path in manifest_paths:
+        path = Path(manifest_path)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        path = path.resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Manifest path does not exist: {manifest_path}")
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        resolved_paths.append(path)
+    manifest_paths: list[Path] = []
     for manifest_glob in manifest_globs:
         for path in sorted(PROJECT_ROOT.glob(manifest_glob)):
-            if path in seen_paths:
+            resolved_path = path.resolve()
+            if resolved_path in seen_paths:
                 continue
-            seen_paths.add(path)
-            manifest_paths.append(path)
-    if not manifest_paths:
-        raise FileNotFoundError(f"No manifests matched: {manifest_globs}")
-    frames = load_episode_records(manifest_paths)
+            seen_paths.add(resolved_path)
+            resolved_paths.append(resolved_path)
+    return resolved_paths
+
+
+def load_frames_from_inputs(
+    *,
+    manifest_globs: list[str],
+    manifest_paths: list[str],
+    target_steer_field: str,
+    fallback_target_steer_field: str | None,
+    include_commands: set[str] | None,
+) -> tuple[list[Path], list]:
+    resolved_manifest_paths = resolve_manifest_paths(
+        manifest_globs=manifest_globs,
+        manifest_paths=manifest_paths,
+    )
+    if not resolved_manifest_paths:
+        raise FileNotFoundError(f"No manifests matched: globs={manifest_globs}, paths={manifest_paths}")
+    frames = load_episode_records(
+        resolved_manifest_paths,
+        target_steer_field=target_steer_field,
+        fallback_target_steer_field=fallback_target_steer_field,
+        include_commands=include_commands,
+    )
     if not frames:
         raise RuntimeError("No usable frames were found in the selected manifests.")
-    return manifest_paths, frames
+    return resolved_manifest_paths, frames
 
 
 def split_frames_by_episode(
@@ -143,6 +179,15 @@ def split_frames_by_episode(
 
 def weighted_mse(prediction: torch.Tensor, target: torch.Tensor, sample_weight: torch.Tensor) -> torch.Tensor:
     return (((prediction - target) ** 2) * sample_weight).mean()
+
+
+def load_initial_checkpoint(model: PilotNet, checkpoint_path: str | None, device: torch.device) -> dict | None:
+    if not checkpoint_path:
+        return None
+    resolved_path = Path(checkpoint_path).resolve()
+    checkpoint = torch.load(resolved_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    return checkpoint
 
 
 def evaluate_epoch(
@@ -190,7 +235,17 @@ def main() -> None:
     output_dir = build_output_dir(args.output_dir, default_prefix=default_prefix)
     device = select_device(args.device)
     manifest_globs = args.manifest_glob or ["data/manifests/episodes/town01_pilotnet_loop_*.jsonl"]
-    manifest_paths, frames = load_frames_from_globs(manifest_globs)
+    manifest_paths_arg = args.manifest_path or []
+    include_commands = None
+    if args.include_command:
+        include_commands = {normalize_command(command_name) for command_name in args.include_command}
+    manifest_paths, frames = load_frames_from_inputs(
+        manifest_globs=manifest_globs,
+        manifest_paths=manifest_paths_arg,
+        target_steer_field=args.target_steer_field,
+        fallback_target_steer_field=args.fallback_target_steer_field,
+        include_commands=include_commands,
+    )
     if args.split_mode == "episode":
         train_frames, val_frames = split_frames_by_episode(frames, train_ratio=args.train_ratio, seed=args.seed)
     else:
@@ -243,6 +298,7 @@ def main() -> None:
     else:
         model = PilotNet(image_height=args.image_height, image_width=args.image_width).to(device)
         model_name = "pilotnet"
+    init_checkpoint = load_initial_checkpoint(model, args.init_checkpoint, device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=args.learning_rate,
@@ -256,11 +312,14 @@ def main() -> None:
 
     run_config = {
         "manifest_globs": manifest_globs,
+        "manifest_paths_arg": manifest_paths_arg,
         "manifest_paths": [str(path.relative_to(PROJECT_ROOT)) for path in manifest_paths],
         "train_episode_ids": sorted({frame.episode_id for frame in train_frames}),
         "val_episode_ids": sorted({frame.episode_id for frame in val_frames}),
         "route_ids": sorted({frame.route_id for frame in frames}),
         "command_counts": dict(sorted(Counter(frame.command for frame in frames).items())),
+        "train_command_counts": dict(sorted(Counter(frame.command for frame in train_frames).items())),
+        "val_command_counts": dict(sorted(Counter(frame.command for frame in val_frames).items())),
         "frame_count": len(frames),
         "train_frame_count": len(train_frames),
         "val_frame_count": len(val_frames),
@@ -274,12 +333,17 @@ def main() -> None:
         "image_height": args.image_height,
         "crop_top_ratio": args.crop_top_ratio,
         "speed_norm_mps": args.speed_norm_mps,
+        "target_steer_field": args.target_steer_field,
+        "fallback_target_steer_field": args.fallback_target_steer_field,
+        "include_commands": sorted(include_commands) if include_commands else None,
         "command_conditioning": args.command_conditioning,
         "command_embedding_dim": args.command_embedding_dim,
         "command_weight_map": command_weight_map,
         "rebalance_commands": args.rebalance_commands,
         "train_ratio": args.train_ratio,
         "split_mode": args.split_mode,
+        "init_checkpoint_path": args.init_checkpoint,
+        "init_checkpoint_model_name": init_checkpoint.get("model_name") if init_checkpoint else None,
     }
     with (output_dir / "config.json").open("w", encoding="utf-8") as handle:
         json.dump(run_config, handle, indent=2)
@@ -353,6 +417,7 @@ def main() -> None:
                     "train_run_config": run_config,
                     "best_epoch": epoch,
                     "best_val_loss": best_val_loss,
+                    "init_checkpoint_path": args.init_checkpoint,
                 },
                 best_checkpoint_path,
             )
@@ -384,6 +449,12 @@ def main() -> None:
         "frame_count": len(frames),
         "train_frame_count": len(train_frames),
         "val_frame_count": len(val_frames),
+        "command_counts": run_config["command_counts"],
+        "train_command_counts": run_config["train_command_counts"],
+        "val_command_counts": run_config["val_command_counts"],
+        "target_steer_field": args.target_steer_field,
+        "include_commands": run_config["include_commands"],
+        "init_checkpoint_path": args.init_checkpoint,
     }
     with (output_dir / "summary.json").open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)

@@ -21,10 +21,26 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class EpisodeFrame:
     image_path: Path
     speed_mps: float
-    steer: float
+    target_steer: float
     episode_id: str
     route_id: str
     command: str
+
+
+def resolve_target_steer(
+    raw: dict[str, Any],
+    *,
+    target_steer_field: str,
+    fallback_target_steer_field: str | None,
+) -> float | None:
+    candidate_fields = [target_steer_field]
+    if fallback_target_steer_field and fallback_target_steer_field != target_steer_field:
+        candidate_fields.append(fallback_target_steer_field)
+    for field_name in candidate_fields:
+        value = raw.get(field_name)
+        if value is not None:
+            return float(value)
+    return None
 
 
 def load_episode_records(
@@ -32,6 +48,9 @@ def load_episode_records(
     *,
     include_failed_episodes: bool = True,
     max_abs_steer: float = 1.0,
+    target_steer_field: str = "steer",
+    fallback_target_steer_field: str | None = "steer",
+    include_commands: set[str] | None = None,
 ) -> list[EpisodeFrame]:
     frames: list[EpisodeFrame] = []
     for manifest_path in manifest_paths:
@@ -42,16 +61,25 @@ def load_episode_records(
                     continue
                 if not include_failed_episodes and not raw["success"]:
                     continue
-                steer = float(raw["steer"])
+                command_name = normalize_command(str(raw["command"]))
+                if include_commands is not None and command_name not in include_commands:
+                    continue
+                steer = resolve_target_steer(
+                    raw,
+                    target_steer_field=target_steer_field,
+                    fallback_target_steer_field=fallback_target_steer_field,
+                )
+                if steer is None:
+                    continue
                 steer = max(-max_abs_steer, min(max_abs_steer, steer))
                 frames.append(
                     EpisodeFrame(
                         image_path=PROJECT_ROOT / raw["front_rgb_path"],
                         speed_mps=float(raw["speed"]),
-                        steer=steer,
+                        target_steer=steer,
                         episode_id=str(raw["episode_id"]),
                         route_id=str(raw["route_id"]),
-                        command=str(raw["command"]),
+                        command=command_name,
                     )
                 )
     return frames
@@ -103,10 +131,10 @@ class PilotNetDataset(Dataset[dict[str, Any]]):
                 crop_top_ratio=self.crop_top_ratio,
             )
         speed_tensor = torch.tensor([frame.speed_mps / self.speed_norm_mps], dtype=torch.float32)
-        steer_tensor = torch.tensor([frame.steer], dtype=torch.float32)
-        command_name = normalize_command(frame.command)
+        steer_tensor = torch.tensor([frame.target_steer], dtype=torch.float32)
+        command_name = frame.command
         command_weight = self.command_weight_map.get(command_name, 1.0)
-        sample_weight = torch.tensor([(1.0 + 4.0 * abs(frame.steer)) * command_weight], dtype=torch.float32)
+        sample_weight = torch.tensor([(1.0 + 4.0 * abs(frame.target_steer)) * command_weight], dtype=torch.float32)
         return {
             "image": image_tensor,
             "speed": speed_tensor,
