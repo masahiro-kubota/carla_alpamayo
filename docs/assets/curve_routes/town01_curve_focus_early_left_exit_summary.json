@@ -1,0 +1,40 @@
+{
+  "name": "town01_curve_focus_early_left_exit",
+  "town": "Town01",
+  "description": "Approach, LEFT branch, and strong lanefollow exit curve around the loop's early west-side left-turn failure hotspot.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    222,
+    166
+  ],
+  "anchors": [
+    {
+      "spawn_index": 222,
+      "x": 338.98,
+      "y": 249.43,
+      "yaw_deg": -90.0
+    },
+    {
+      "spawn_index": 166,
+      "x": 283.02,
+      "y": 195.57,
+      "yaw_deg": 180.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 222,
+      "end_spawn_index": 166,
+      "waypoint_count": 52,
+      "length_m": 103.03
+    }
+  ],
+  "total_waypoint_count": 52,
+  "total_length_m": 103.03,
+  "road_option_counts": {
+    "LANEFOLLOW": 42,
+    "LEFT": 10
+  },
+  "plot_path": "docs/assets/curve_routes/town01_curve_focus_early_left_exit.png"
+}

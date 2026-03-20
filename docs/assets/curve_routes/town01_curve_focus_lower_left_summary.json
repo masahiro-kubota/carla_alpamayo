@@ -1,0 +1,39 @@
+{
+  "name": "town01_curve_focus_lower_left",
+  "town": "Town01",
+  "description": "Lower-left perimeter curve with pure lanefollow supervision and sustained positive steering.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    214,
+    205
+  ],
+  "anchors": [
+    {
+      "spawn_index": 214,
+      "x": 1.56,
+      "y": 48.7,
+      "yaw_deg": -90.0
+    },
+    {
+      "spawn_index": 205,
+      "x": 62.13,
+      "y": 2.02,
+      "yaw_deg": -0.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 214,
+      "end_spawn_index": 205,
+      "waypoint_count": 54,
+      "length_m": 101.69
+    }
+  ],
+  "total_waypoint_count": 54,
+  "total_length_m": 101.69,
+  "road_option_counts": {
+    "LANEFOLLOW": 54
+  },
+  "plot_path": "docs/assets/curve_routes/town01_curve_focus_lower_left.png"
+}

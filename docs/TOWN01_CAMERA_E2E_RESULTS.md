@@ -124,6 +124,43 @@ best summary:
 - split mode: `episode`
 - command rebalancing: `disabled`
 
+### Baseline E: Camera + Speed + Command + Target-Point
+
+train output:
+
+- `outputs/train/pilotnet_cmd_tp_20260321_073929/`
+
+best checkpoint:
+
+- `outputs/train/pilotnet_cmd_tp_20260321_073929/best.pt`
+
+best summary:
+
+- best epoch: `4`
+- best val loss: `0.006691`
+- device: `cuda`
+- split mode: `episode`
+- route conditioning: `target-point`
+
+### Baseline F: Target-Point + High-Curvature Curve Pack
+
+train output:
+
+- `outputs/train/pilotnet_cmd_tp_20260321_075034/`
+
+best checkpoint:
+
+- `outputs/train/pilotnet_cmd_tp_20260321_075034/best.pt`
+
+best summary:
+
+- best epoch: `4`
+- best val loss: `0.004999`
+- device: `cuda`
+- split mode: `episode`
+- route conditioning: `target-point`
+- command counts: `lanefollow = 52229`, `left = 3263`, `right = 1652`, `straight = 2909`
+
 ## Closed-Loop Experiment
 
 ### Experiment A: Camera + Speed
@@ -195,9 +232,44 @@ evaluation output:
 - `route_completion_ratio = 0.0797`
 - `failure_reason = collision`
 
+### Experiment E: Target-Point Conditioned Model
+
+evaluation output:
+
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_074214/summary.json`
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_074214/front_rgb.mp4`
+
+結果:
+
+- `policy_type = learned_lateral_policy`
+- `model_name = pilotnet_commanded`
+- `elapsed_seconds = 99.6`
+- `collision_count = 1`
+- `lane_invasion_count = 5`
+- `route_completion_ratio = 0.1903`
+- `failure_reason = collision`
+
+### Experiment F: Target-Point + Curve Pack
+
+evaluation output:
+
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_075722/summary.json`
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_075722/front_rgb.mp4`
+
+結果:
+
+- `policy_type = learned_lateral_policy`
+- `model_name = pilotnet_commanded`
+- `elapsed_seconds = 508.15`
+- `collision_count = 0`
+- `lane_invasion_count = 45`
+- `route_completion_ratio = 0.9991`
+- `distance_to_goal_m = 9.99`
+- `success = true`
+
 ## Interpretation
 
-この時点では、**追加収集なしでも、`right/straight` を増やしたあとでも fixed loop 完走には届いていない**。
+最終的には、**`front RGB + speed + command + target-point -> steer` と high-curvature `lanefollow` 追加収集で fixed loop 完走まで到達した**。
 
 観察:
 
@@ -209,15 +281,24 @@ evaluation output:
 - つまり、このデータ量と分布では `command` を入れるだけでは十分ではない
 - `right/straight` を増やしたあとでも closed-loop は `0.0788-0.0797` に張り付いた
 - `rebalance_commands` を切っても結果はほぼ同じで、重み付けだけが原因ではない
+- `command` を離散 one-hot で持つだけでは足りず、continuous な local route target が必要だった
+- それでも最初の target-point 版は `0.1903` 止まりで、交差点後の高曲率 `lanefollow` 分布が不足していた
+- high-curvature curve pack により clean expert の `lanefollow` 強操舵が増え、`|steer| >= 0.5` は `90 -> 203`, `|steer| >= 0.7` は `19 -> 36` まで増えた
+- learned policy は `frame 10163`, `508.15 s` で success criteria に到達していたので、evaluator は success criteria と同じ条件で early stop するように直した
+- その結果、`Town01` 固定 loop を lateral-only E2E で完走できた
 
 一番自然な解釈:
 
 - camera-only baseline の失敗要因はやはり junction の route intent 不足だった
-- ただし `right` と `straight` を増やしただけでは足りず、`left` の不足か、単発 frame-based architecture 自体の限界が残っている
-- `split_mode = episode` と `rebalance off` でも fixed-loop completion は改善しない
-- open-loop の val loss は下がっても、closed-loop の改善を保証しない
+- `right` と `straight` を増やしただけでは足りず、交差点を抜けた後も曲がり続ける `lanefollow` 例が必要だった
+- `split_mode = episode` や command rebalancing より、route intent 表現と不足分布の追加収集のほうが効いた
+- open-loop の val loss は参考値にすぎず、最終判断は closed-loop success で置くべきだった
 
 ## Next
+
+- `Town03` など別 map で同じ recipe が通るかを確認する
+- temporal context なしの single-frame lateral-only でどこまで一般化するか切り分ける
+- その後に `throttle/brake` を learned policy 側へ広げるか判断する
 
 - `front RGB + speed + command -> steer` は維持するが、次は model だけをいじらない
 - まず evaluator で collision 位置と最初の failure 区間を可視化する
