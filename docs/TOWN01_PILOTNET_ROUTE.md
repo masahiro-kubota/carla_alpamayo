@@ -7,6 +7,8 @@
 - まずは `Town01` の外周に近い大きめの loop を 1 周完走できることを目標にする
 - 交差点の自由意思決定はまだ入れず、route は固定する
 - まずは clockwise で回し、学習データの steering 符号バランスを取るために後で counter-clockwise も追加する
+- mainline の入力は `front RGB + speed`、必要なら `+ command` までに制限する
+- planner 由来の連続 guidance 入力、たとえば `target-point` は mainline では使わない
 
 ## Success Criteria
 
@@ -41,6 +43,7 @@
 - この verified baseline はまだ camera-to-steer の learned E2E policy ではない
 - `steer/throttle/brake` は `BasicAgent.run_step()` が返す expert control
 - front camera は後段の `PilotNet風 + steer-only` 学習用に観測と教師信号をそろえている段階
+- mainline で許可する learned policy 入力は `front RGB + speed (+ optional command)` のみ
 
 検証済みの baseline 実行条件:
 

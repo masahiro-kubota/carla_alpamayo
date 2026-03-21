@@ -149,6 +149,12 @@ Town01 の最初の閉ループ基準はさらに絞る:
 - high-level command
 - ego state
 
+mainline 制約:
+
+- planner 由来の連続 route guidance は入れない
+- たとえば `target-point` のような oracle 的な局所経路ベクトルは本筋では使わない
+- まずは `front RGB + speed`、必要なら `+ command` までで戦う
+
 出力:
 
 - steer

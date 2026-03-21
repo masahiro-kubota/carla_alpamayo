@@ -14,6 +14,8 @@
 
 - これは full control の E2E ではなく、**lateral-only E2E**
 - `steer` だけを learned policy に置き換え、`throttle/brake` は planner 側を使う
+- このファイルには参考実験として `target-point` 条件付きの結果も残す
+- ただし mainline の accepted policy は `front RGB + speed (+ command)` までとし、`target-point` は採用しない
 
 ## Data Collection
 
@@ -126,6 +128,8 @@ best summary:
 
 ### Baseline E: Camera + Speed + Command + Target-Point
 
+参考実験。mainline には不採用。
+
 train output:
 
 - `outputs/train/pilotnet_cmd_tp_20260321_073929/`
@@ -143,6 +147,8 @@ best summary:
 - route conditioning: `target-point`
 
 ### Baseline F: Target-Point + High-Curvature Curve Pack
+
+参考実験。mainline には不採用。
 
 train output:
 
@@ -234,6 +240,8 @@ evaluation output:
 
 ### Experiment E: Target-Point Conditioned Model
 
+参考実験。mainline には不採用。
+
 evaluation output:
 
 - `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_074214/summary.json`
@@ -250,6 +258,8 @@ evaluation output:
 - `failure_reason = collision`
 
 ### Experiment F: Target-Point + Curve Pack
+
+参考実験。mainline には不採用。
 
 evaluation output:
 
@@ -269,7 +279,7 @@ evaluation output:
 
 ## Interpretation
 
-最終的には、**`front RGB + speed + command + target-point -> steer` と high-curvature `lanefollow` 追加収集で fixed loop 完走まで到達した**。
+参考実験では、**`front RGB + speed + command + target-point -> steer` と high-curvature `lanefollow` 追加収集で fixed loop 完走まで到達した**。
 
 観察:
 
@@ -285,7 +295,12 @@ evaluation output:
 - それでも最初の target-point 版は `0.1903` 止まりで、交差点後の高曲率 `lanefollow` 分布が不足していた
 - high-curvature curve pack により clean expert の `lanefollow` 強操舵が増え、`|steer| >= 0.5` は `90 -> 203`, `|steer| >= 0.7` は `19 -> 36` まで増えた
 - learned policy は `frame 10163`, `508.15 s` で success criteria に到達していたので、evaluator は success criteria と同じ条件で early stop するように直した
-- その結果、`Town01` 固定 loop を lateral-only E2E で完走できた
+- その結果、参考実験としては `Town01` 固定 loop を lateral-only E2E で完走できた
+
+mainline 判定:
+
+- `target-point` を使わない accepted setting では、まだ fixed loop 完走には到達していない
+- 以後の本筋は `front RGB + speed (+ command)` のまま改善を続ける
 
 一番自然な解釈:
 
