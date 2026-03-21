@@ -101,6 +101,8 @@ def select_device(explicit_device: str | None) -> torch.device:
 def build_output_dir(explicit_output_dir: str | None, default_prefix: str) -> Path:
     if explicit_output_dir:
         output_dir = Path(explicit_output_dir)
+        if not output_dir.is_absolute():
+            output_dir = PROJECT_ROOT / output_dir
     else:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_dir = PROJECT_ROOT / "outputs" / "train" / f"{default_prefix}_{timestamp}"

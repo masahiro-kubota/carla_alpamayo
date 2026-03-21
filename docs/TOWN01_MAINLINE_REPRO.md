@@ -165,6 +165,12 @@ cd /home/masa/carla_alpamayo
 - GPU 学習なので、loss や final checkpoint は小さく揺れる可能性があります
 - まずは closed-loop 評価で `route_completion_ratio >= 0.99` と `collision_count = 0` を確認してください
 
+2026-03-22 の exact replay run:
+
+- train summary: `outputs/train/pilotnet_branch_fs3_repro_20260322_001100/summary.json`
+- best checkpoint: `outputs/train/pilotnet_branch_fs3_repro_20260322_001100/best.pt`
+- train result: accepted run と同じ `frame_count = 161742`, `best_val_loss = 0.005968`, `best_epoch = 1`
+
 ## 4. Evaluate A Freshly Trained Checkpoint
 
 学習後にできた run directory を評価します。
@@ -201,7 +207,7 @@ correction windows を再生成したい場合:
 
 ## 6. Verification Status
 
-2026-03-21 時点で確認したもの:
+2026-03-21 から 2026-03-22 に確認したもの:
 
 - `bash -n scripts/run_train_town01_mainline.sh`
 - `bash -n scripts/run_train_town01_mainline_exact.sh`
@@ -212,6 +218,14 @@ correction windows を再生成したい場合:
   - summary: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/summary.json`
   - video: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/front_rgb.mp4`
   - result: `route_completion_ratio = 0.9991`, `collision_count = 0`, `elapsed_seconds = 508.0`, `success = true`
+- exact replay training の成功
+  - summary: `outputs/train/pilotnet_branch_fs3_repro_20260322_001100/summary.json`
+  - checkpoint: `outputs/train/pilotnet_branch_fs3_repro_20260322_001100/best.pt`
+  - result: `frame_count = 161742`, `best_val_loss = 0.005968`, `best_epoch = 1`
+- freshly trained checkpoint の closed-loop 再評価
+  - summary: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260322_001508/summary.json`
+  - video: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260322_001508/front_rgb.mp4`
+  - result: `route_completion_ratio = 0.9991`, `collision_count = 0`, `elapsed_seconds = 508.05`, `success = true`
 
 もしこの status が古くなったら、まず `## 1. Fastest Check` をやり直して、結果をここに追記してください。
 
