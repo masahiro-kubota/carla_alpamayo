@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_40_right_j222_train",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    107,
+    140
+  ],
+  "description": "Town01 right movement train route for junction 222 (107 -> 140)."
+}

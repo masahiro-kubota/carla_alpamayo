@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_42_right_j255_eval",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    28,
+    228
+  ],
+  "description": "Town01 right movement eval route for junction 255 (28 -> 228)."
+}

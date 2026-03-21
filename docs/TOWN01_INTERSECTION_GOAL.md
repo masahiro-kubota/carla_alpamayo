@@ -114,6 +114,14 @@ Town01 内で planner が生成する新規 route に対しても、junction dec
 5. coverage が足りない movement を追加収集する
 6. その後に Level 2 の unseen multi-junction route suite に進む
 
+2026-03-22 の現状:
+
+- inventory 化できた unique movement は `72`
+- `LEFT / RIGHT / STRAIGHT` は各 `24`
+- そのうち `48` movement は train / eval の両 route を即座に用意できる
+
+詳細は [TOWN01_MOVEMENT_COVERAGE.md](./TOWN01_MOVEMENT_COVERAGE.md) を参照。
+
 ## Relationship To The Existing Loop Baseline
 
 - [TOWN01_PILOTNET_ROUTE.md](./TOWN01_PILOTNET_ROUTE.md) は baseline の再現対象として残す

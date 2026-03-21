@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_29_right_j87_eval",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    91,
+    68
+  ],
+  "description": "Town01 right movement eval route for junction 87 (91 -> 68)."
+}

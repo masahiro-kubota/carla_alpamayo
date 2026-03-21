@@ -165,6 +165,8 @@ cd /media/masa/ssd_data/carla_alpamayo
 2026-03-21 の確認では、`30 km/h`、`320x180` の fixed-loop run が `508.75 s` で成功しています。
 
 fixed loop は baseline として維持しますが、次の main goal は [docs/TOWN01_INTERSECTION_GOAL.md](docs/TOWN01_INTERSECTION_GOAL.md) に切り替えています。つまり、今後の Town01 mainline は「特定 loop を通す」ではなく、「Town01 の任意交差点で valid movement を command 付きで通せるか」を基準に見ます。
+movement inventory と生成済み route suite は [docs/TOWN01_MOVEMENT_COVERAGE.md](docs/TOWN01_MOVEMENT_COVERAGE.md) にまとめています。
+eval route suite を checkpoint に流すときは `./scripts/run_evaluate_town01_movement_suite.sh` を使います。
 
 ## Camera E2E
 

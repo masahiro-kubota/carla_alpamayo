@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_71_straight_j332_train",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    10,
+    61
+  ],
+  "description": "Town01 straight movement train route for junction 332 (10 -> 61)."
+}

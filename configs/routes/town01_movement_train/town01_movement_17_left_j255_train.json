@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_17_left_j255_train",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    46,
+    44
+  ],
+  "description": "Town01 left movement train route for junction 255 (46 -> 44)."
+}
