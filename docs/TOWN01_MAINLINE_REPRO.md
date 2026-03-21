@@ -28,6 +28,7 @@ accepted checkpoint の training summary:
 - duration: `~134.8 min @ 20 Hz`
 - target steer: `expert_steer`, fallback `steer`
 - split mode: `episode`
+- exact replay config: `outputs/train/pilotnet_branch_fs3_20260321_231852/config.json`
 
 clean expert episodes の主な出どころ:
 
@@ -140,7 +141,31 @@ accepted training run の例:
 - frame count: `161742`
 - best val loss: `0.005968`
 
-## 3. Evaluate A Freshly Trained Checkpoint
+## 3. Exact Replay Of The Accepted Training Set
+
+accepted run 当時の manifest 一覧をそのまま使って replay したいときは、こちらを使います。
+
+```bash
+cd /home/masa/carla_alpamayo
+./scripts/run_train_town01_mainline_exact.sh
+```
+
+この script は `outputs/train/pilotnet_branch_fs3_20260321_231852/config.json` を読み、
+
+- exact manifest list
+- accepted hyperparameter
+- accepted init checkpoint
+- accepted seed
+
+をそのまま `train_pilotnet` に渡します。`glob` に依存しないので、workspace に manifest が増えた後でも accepted run 当時の学習集合を replay できます。
+
+再現性の注意:
+
+- 同じ repo revision と同じ manifest 群であれば、episode split は seed `7` で再現されます
+- GPU 学習なので、loss や final checkpoint は小さく揺れる可能性があります
+- まずは closed-loop 評価で `route_completion_ratio >= 0.99` と `collision_count = 0` を確認してください
+
+## 4. Evaluate A Freshly Trained Checkpoint
 
 学習後にできた run directory を評価します。
 
@@ -149,7 +174,7 @@ cd /home/masa/carla_alpamayo
 ./scripts/run_evaluate_town01_mainline.sh outputs/train/<train_run>/best.pt
 ```
 
-## 4. If You Need To Rebuild The Added Data
+## 5. If You Need To Rebuild The Added Data
 
 今回の mainline success に直結した追加データは `upper-band` route です。
 
@@ -165,6 +190,30 @@ cd /home/masa/carla_alpamayo
 ./scripts/run_collect_town01_route.sh configs/routes/town01_right_focus_upper_band_mid.json --seed 700 --no-record-video
 ./scripts/run_collect_town01_route.sh configs/routes/town01_right_focus_upper_band_long.json --seed 900 --no-record-video
 ```
+
+correction windows を再生成したい場合:
+
+- source rollout は learned-policy の evaluation manifest
+- その manifest には predicted `steer` と planner expert の `expert_steer` が両方入っている
+- accepted run では failure 直前の短い window を人手で切り出して `data/manifests/corrections/*.jsonl` に保存した
+
+つまり、このリポジトリで今すぐ再現可能なのは `stored correction windows を含めた accepted run の replay` です。correction window の完全自動再生成 pipeline はまだありません。
+
+## 6. Verification Status
+
+2026-03-21 時点で確認したもの:
+
+- `bash -n scripts/run_train_town01_mainline.sh`
+- `bash -n scripts/run_train_town01_mainline_exact.sh`
+- `bash -n scripts/run_evaluate_town01_mainline.sh`
+- `./scripts/run_train_town01_mainline.sh --help`
+- `./scripts/run_train_town01_mainline_exact.sh --help`
+- accepted checkpoint の closed-loop 再評価
+  - summary: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/summary.json`
+  - video: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/front_rgb.mp4`
+  - result: `route_completion_ratio = 0.9991`, `collision_count = 0`, `elapsed_seconds = 508.0`, `success = true`
+
+もしこの status が古くなったら、まず `## 1. Fastest Check` をやり直して、結果をここに追記してください。
 
 ## Notes
 

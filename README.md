@@ -168,6 +168,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 camera 画像からの learned steer 実験も 1 本回しています。結果は [docs/TOWN01_CAMERA_E2E_RESULTS.md](docs/TOWN01_CAMERA_E2E_RESULTS.md) にまとめました。
 再現手順と、学習に使った data recipe / correction loop の整理は [docs/TOWN01_MAINLINE_REPRO.md](docs/TOWN01_MAINLINE_REPRO.md) にまとめています。
+accepted run 当時の manifest 一覧をそのまま replay したいときは `./scripts/run_train_town01_mainline_exact.sh` を使います。
 
 要点:
 
