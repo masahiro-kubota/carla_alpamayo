@@ -112,6 +112,14 @@ Town01 の最初の閉ループ基準はさらに絞る:
 
 詳細は `docs/TOWN01_PILOTNET_ROUTE.md` に固定する。
 
+この fixed-loop は baseline として残すが、Town01 の次の本命目標はさらに上に置く:
+
+- `Town01` の任意交差点で
+- incoming approach から到達可能な任意方向 `LEFT / RIGHT / STRAIGHT`
+- を `front RGB + speed + command -> steer` で通せること
+
+つまり、Town01 では「特定 loop を 1 周できる」ことを終点にはしない。次の判定軸は **junction movement coverage と unseen route composition** です。詳細は `docs/TOWN01_INTERSECTION_GOAL.md` に固定する。
+
 ## 難しいシナリオ集をどう作るか
 
 難しいケースは自然発生を待つのではなく、**scenario family を定義して量産する**。

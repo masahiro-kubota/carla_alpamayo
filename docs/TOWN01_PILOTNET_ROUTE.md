@@ -10,6 +10,8 @@
 - mainline の入力は `front RGB + speed`、必要なら `+ command` までに制限する
 - planner 由来の連続 guidance 入力、たとえば `target-point` は mainline では使わない
 
+この document はあくまで **baseline loop** の定義です。Town01 の main goal 自体は、現在は fixed loop 完走ではなく [TOWN01_INTERSECTION_GOAL.md](./TOWN01_INTERSECTION_GOAL.md) の「任意交差点で valid movement を通す」に移っています。
+
 ## Success Criteria
 
 最初のベースライン成功条件は「fixed-loop route を planner 付き closed-loop で 1 周完走し、その expert 走行を学習データとして再現対象にできること」。

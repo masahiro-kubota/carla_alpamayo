@@ -164,6 +164,8 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 2026-03-21 の確認では、`30 km/h`、`320x180` の fixed-loop run が `508.75 s` で成功しています。
 
+fixed loop は baseline として維持しますが、次の main goal は [docs/TOWN01_INTERSECTION_GOAL.md](docs/TOWN01_INTERSECTION_GOAL.md) に切り替えています。つまり、今後の Town01 mainline は「特定 loop を通す」ではなく、「Town01 の任意交差点で valid movement を command 付きで通せるか」を基準に見ます。
+
 ## Camera E2E
 
 camera 画像からの learned steer 実験も 1 本回しています。結果は [docs/TOWN01_CAMERA_E2E_RESULTS.md](docs/TOWN01_CAMERA_E2E_RESULTS.md) にまとめました。
