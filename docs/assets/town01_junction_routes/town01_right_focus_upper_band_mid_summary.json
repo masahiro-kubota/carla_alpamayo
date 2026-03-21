@@ -1,0 +1,41 @@
+{
+  "name": "town01_right_focus_upper_band_mid",
+  "town": "Town01",
+  "description": "Mid-length upper-band approach into the northeast RIGHT turn with more pre-turn context than right_focus_ne.",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    95,
+    105
+  ],
+  "anchors": [
+    {
+      "spawn_index": 95,
+      "x": 170.55,
+      "y": 59.9,
+      "yaw_deg": 0.0
+    },
+    {
+      "spawn_index": 105,
+      "x": 334.22,
+      "y": 145.67,
+      "yaw_deg": 90.0
+    }
+  ],
+  "segment_summaries": [
+    {
+      "start_spawn_index": 95,
+      "end_spawn_index": 105,
+      "waypoint_count": 126,
+      "length_m": 245.18
+    }
+  ],
+  "total_waypoint_count": 126,
+  "total_length_m": 245.18,
+  "road_option_counts": {
+    "LANEFOLLOW": 104,
+    "RIGHT": 10,
+    "STRAIGHT": 12
+  },
+  "plot_path": "docs/assets/town01_junction_routes/town01_right_focus_upper_band_mid.png"
+}

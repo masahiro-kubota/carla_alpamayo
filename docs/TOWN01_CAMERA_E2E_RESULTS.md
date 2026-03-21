@@ -17,6 +17,13 @@
 - このファイルには参考実験として `target-point` 条件付きの結果も残す
 - ただし mainline の accepted policy は `front RGB + speed (+ command)` までとし、`target-point` は採用しない
 
+2026-03-21 の accepted mainline:
+
+- input: `front RGB[t-2:t] + speed + command`
+- model: command-branched `PilotNet風`
+- route conditioning: `none`
+- accepted checkpoint: `outputs/train/pilotnet_branch_fs3_20260321_231852/best.pt`
+
 ## Data Collection
 
 使った manifest:
@@ -46,6 +53,26 @@
 - `left = 600`
 - `straight = 2113`
 - `right = 1225`
+
+### Upper-Band Expansion
+
+bottom-right の correction 後、accepted best `outputs/train/pilotnet_branch_fs3_20260321_210500/best.pt` は full loop で `route_completion_ratio = 0.4623` まで伸びましたが、後半の upper-band approach から northeast right turn に入る文脈で失敗していました。
+
+そこで以下を追加しました。
+
+- `town01_right_focus_upper_band_mid` (`95 -> 105`) を `20 episodes`
+- `town01_right_focus_upper_band_long` (`60 -> 105`) を `20 episodes`
+- learned-policy failure から切った correction windows
+  - `data/manifests/corrections/town01_eval_210816_nw_right_window.jsonl`
+  - `data/manifests/corrections/town01_eval_230633_upper_band_mid_window.jsonl`
+  - `data/manifests/corrections/town01_eval_230644_upper_band_long_window.jsonl`
+
+追加後の command counts:
+
+- `lanefollow = 136514`
+- `left = 6042`
+- `straight = 12138`
+- `right = 7048`
 
 ## Training
 
@@ -167,6 +194,27 @@ best summary:
 - route conditioning: `target-point`
 - command counts: `lanefollow = 52229`, `left = 3263`, `right = 1652`, `straight = 2909`
 
+### Baseline G: Mainline Command Branch + Frame Stack 3 + Upper-Band Expansion
+
+train output:
+
+- `outputs/train/pilotnet_branch_fs3_20260321_231852/`
+
+best checkpoint:
+
+- `outputs/train/pilotnet_branch_fs3_20260321_231852/best.pt`
+
+best summary:
+
+- best epoch: `1`
+- best val loss: `0.005968`
+- device: `cuda`
+- split mode: `episode`
+- frame stack: `3`
+- command conditioning: `branch`
+- route conditioning: `none`
+- frame count: `161742` (`~134.8 min @ 20 Hz`)
+
 ## Closed-Loop Experiment
 
 ### Experiment A: Camera + Speed
@@ -237,6 +285,48 @@ evaluation output:
 - `lane_invasion_count = 7`
 - `route_completion_ratio = 0.0797`
 - `failure_reason = collision`
+
+### Experiment E: Branched FS3 Best Before Upper-Band Expansion
+
+evaluation output:
+
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_210816/summary.json`
+
+結果:
+
+- `elapsed_seconds = 231.75`
+- `collision_count = 1`
+- `route_completion_ratio = 0.4623`
+- `failure_reason = collision`
+
+isolated hotspot:
+
+- `outputs/evaluate/town01_right_focus_upper_band_mid_pilotnet_eval_20260321_230633/summary.json`
+  - `route_completion_ratio = 0.6825`
+  - `collision_count = 1`
+- `outputs/evaluate/town01_right_focus_upper_band_long_pilotnet_eval_20260321_230644/summary.json`
+  - `route_completion_ratio = 0.7419`
+  - `collision_count = 1`
+
+### Experiment F: Mainline Success Without Target-Point
+
+evaluation output:
+
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_232707/summary.json`
+- `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_232707/front_rgb.mp4`
+
+結果:
+
+- `policy_type = learned_lateral_policy`
+- `model_name = pilotnet_branched`
+- `frame_stack = 3`
+- `route_conditioning = none`
+- `elapsed_seconds = 507.95`
+- `collision_count = 0`
+- `lane_invasion_count = 66`
+- `route_completion_ratio = 0.9991`
+- `distance_to_goal_m = 9.96`
+- `success = true`
 
 ### Experiment E: Target-Point Conditioned Model
 

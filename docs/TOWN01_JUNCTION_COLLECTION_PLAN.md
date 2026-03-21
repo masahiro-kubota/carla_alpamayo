@@ -113,6 +113,42 @@ export CARLA_WEATHER=ClearNoon
 
 収集自体は計画どおり成功です。ただし、この追加収集のあとに回した command-conditioned 再学習では fixed-loop completion は改善しませんでした。詳細は [TOWN01_CAMERA_E2E_RESULTS.md](TOWN01_CAMERA_E2E_RESULTS.md) にまとめています。
 
+## Upper-Band Recovery Expansion
+
+full loop の後半 failure を切り出し直した結果、`right_focus_ne` 単体ではなく、その手前の upper-band eastbound approach を含む文脈が不足していました。そこで 2 本の recovery route を追加しました。
+
+| Route | Anchors | Length | Road options | Purpose |
+| --- | --- | ---: | --- | --- |
+| `town01_right_focus_upper_band_mid` | `95 -> 105` | `245.18 m` | `LANEFOLLOW 104`, `RIGHT 10`, `STRAIGHT 12` | full-loop failure の直前から RIGHT turn までを再現する主力 route |
+| `town01_right_focus_upper_band_long` | `60 -> 105` | `300.96 m` | `LANEFOLLOW 121`, `RIGHT 10`, `STRAIGHT 24` | より長い pre-turn context を含めて drift を補正する route |
+
+2026-03-21 にこの pack を追加実行しました。
+
+- executed episodes: `40 / 40`
+- success episodes: `40 / 40`
+- added command frames:
+  - `lanefollow = 22497`
+  - `right = 1412`
+  - `straight = 3332`
+- updated total command counts:
+  - `lanefollow = 136514`
+  - `left = 6042`
+  - `right = 7048`
+  - `straight = 12138`
+
+この expansion の前は、accepted best `outputs/train/pilotnet_branch_fs3_20260321_210500/best.pt` が
+
+- `town01_right_focus_upper_band_mid`: `route_completion_ratio = 0.6825`, `collision`
+- `town01_right_focus_upper_band_long`: `route_completion_ratio = 0.7419`, `collision`
+
+で落ちていました。追加収集と correction windows を使った fine-tune 後は、
+
+- `town01_right_focus_upper_band_mid_pilotnet_eval_20260321_232239`: `success = true`
+- `town01_right_focus_upper_band_long_pilotnet_eval_20260321_232253`: `success = true`
+- `town01_pilotnet_loop_pilotnet_eval_20260321_232707`: `success = true`, `route_completion_ratio = 0.9991`, `collision_count = 0`
+
+まで到達しています。
+
 ## Route Plots
 
 ### Right-Focused
@@ -121,6 +157,8 @@ export CARLA_WEATHER=ClearNoon
 - [town01_right_focus_se.png](assets/town01_junction_routes/town01_right_focus_se.png)
 - [town01_right_focus_ne.png](assets/town01_junction_routes/town01_right_focus_ne.png)
 - [town01_right_focus_nw.png](assets/town01_junction_routes/town01_right_focus_nw.png)
+- [town01_right_focus_upper_band_mid.png](assets/town01_junction_routes/town01_right_focus_upper_band_mid.png)
+- [town01_right_focus_upper_band_long.png](assets/town01_junction_routes/town01_right_focus_upper_band_long.png)
 
 ### Straight-Focused
 
