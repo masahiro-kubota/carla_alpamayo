@@ -167,6 +167,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 ## Camera E2E
 
 camera 画像からの learned steer 実験も 1 本回しています。結果は [docs/TOWN01_CAMERA_E2E_RESULTS.md](docs/TOWN01_CAMERA_E2E_RESULTS.md) にまとめました。
+再現手順と、学習に使った data recipe / correction loop の整理は [docs/TOWN01_MAINLINE_REPRO.md](docs/TOWN01_MAINLINE_REPRO.md) にまとめています。
 
 要点:
 

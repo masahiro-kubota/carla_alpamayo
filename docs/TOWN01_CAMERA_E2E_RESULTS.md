@@ -40,6 +40,12 @@
 - うち full lap success expert: `town01_pilotnet_loop_20260321_030547`
 - CCW expert は `65.6 s` で collision。turn 例としてだけ使う
 
+correction loop について:
+
+- full DAgger ではない
+- learned-policy rollout 中の `expert_steer` を記録し、failure 直前の短い window を切り出して再学習に足した
+- 実態としては `DAgger-like` な offline correction replay
+
 ### Junction Pack Expansion
 
 追加収集:
