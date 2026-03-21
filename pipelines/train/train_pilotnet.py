@@ -199,12 +199,31 @@ def weighted_mse(prediction: torch.Tensor, target: torch.Tensor, sample_weight: 
     return (((prediction - target) ** 2) * sample_weight).mean()
 
 
+def adapt_state_dict_for_model(model: PilotNet, checkpoint_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    model_state_dict = model.state_dict()
+    adapted_state_dict = dict(checkpoint_state_dict)
+
+    conv1_key = "conv.0.weight"
+    if conv1_key in checkpoint_state_dict and conv1_key in model_state_dict:
+        checkpoint_conv1 = checkpoint_state_dict[conv1_key]
+        model_conv1 = model_state_dict[conv1_key]
+        if checkpoint_conv1.shape != model_conv1.shape:
+            same_kernel = checkpoint_conv1.shape[0] == model_conv1.shape[0] and checkpoint_conv1.shape[2:] == model_conv1.shape[2:]
+            if same_kernel and model_conv1.shape[1] % checkpoint_conv1.shape[1] == 0:
+                repeat_factor = model_conv1.shape[1] // checkpoint_conv1.shape[1]
+                inflated_conv1 = checkpoint_conv1.repeat(1, repeat_factor, 1, 1) / repeat_factor
+                if inflated_conv1.shape == model_conv1.shape:
+                    adapted_state_dict[conv1_key] = inflated_conv1
+    return adapted_state_dict
+
+
 def load_initial_checkpoint(model: PilotNet, checkpoint_path: str | None, device: torch.device) -> dict | None:
     if not checkpoint_path:
         return None
     resolved_path = Path(checkpoint_path).resolve()
     checkpoint = torch.load(resolved_path, map_location=device)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    adapted_state_dict = adapt_state_dict_for_model(model, checkpoint["model_state_dict"])
+    model.load_state_dict(adapted_state_dict)
     return checkpoint
 
 
