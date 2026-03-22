@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_all_right_j306_246_235",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    246,
+    235
+  ],
+  "description": "Town01 all-movement route for RIGHT junction 306 (246 -> 235, selected via recommended_eval)."
+}

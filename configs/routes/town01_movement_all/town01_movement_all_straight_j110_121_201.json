@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_all_straight_j110_121_201",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    121,
+    201
+  ],
+  "description": "Town01 all-movement route for STRAIGHT junction 110 (121 -> 201, selected via recommended_eval)."
+}

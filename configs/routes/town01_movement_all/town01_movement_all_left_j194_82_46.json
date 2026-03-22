@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_all_left_j194_82_46",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    82,
+    46
+  ],
+  "description": "Town01 all-movement route for LEFT junction 194 (82 -> 46, selected via recommended_eval)."
+}
