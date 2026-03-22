@@ -23,6 +23,7 @@ from libs.ml import (
     PilotNet,
     PilotNetDataset,
     attach_route_target_points,
+    command_to_index,
     command_vocab_size,
     load_episode_records,
     normalize_command,
@@ -88,6 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
     parser.add_argument("--init-checkpoint", default=None)
+    parser.add_argument("--train-command-head-only", action="append", default=None)
     return parser
 
 
@@ -229,6 +231,35 @@ def load_initial_checkpoint(model: PilotNet, checkpoint_path: str | None, device
     adapted_state_dict = adapt_state_dict_for_model(model, checkpoint["model_state_dict"])
     model.load_state_dict(adapted_state_dict)
     return checkpoint
+
+
+def configure_trainable_parameters(model: PilotNet, train_command_head_only: list[str] | None) -> list[str] | None:
+    if not train_command_head_only:
+        return None
+    if not model.command_branching or model.command_heads is None:
+        raise ValueError("--train-command-head-only requires --command-conditioning branch.")
+
+    normalized_commands = [normalize_command(command_name) for command_name in train_command_head_only]
+    trainable_commands: list[str] = []
+    trainable_indices: list[int] = []
+    for command_name in normalized_commands:
+        if command_name == "void":
+            raise ValueError("--train-command-head-only does not support the void command.")
+        command_index = command_to_index(command_name)
+        if command_index in trainable_indices:
+            continue
+        trainable_indices.append(command_index)
+        trainable_commands.append(command_name)
+
+    if not trainable_indices:
+        raise ValueError("--train-command-head-only did not resolve to any command heads.")
+
+    for parameter in model.parameters():
+        parameter.requires_grad = False
+    for command_index in trainable_indices:
+        for parameter in model.command_heads[command_index].parameters():
+            parameter.requires_grad = True
+    return trainable_commands
 
 
 def evaluate_epoch(
@@ -383,8 +414,12 @@ def main() -> None:
         ).to(device)
         model_name = "pilotnet"
     init_checkpoint = load_initial_checkpoint(model, args.init_checkpoint, device)
+    trainable_command_heads = configure_trainable_parameters(model, args.train_command_head_only)
+    trainable_parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    if not trainable_parameters:
+        raise RuntimeError("No trainable parameters were selected.")
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        trainable_parameters,
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
     )
@@ -429,6 +464,7 @@ def main() -> None:
         "include_commands": sorted(include_commands) if include_commands else None,
         "command_conditioning": args.command_conditioning,
         "command_embedding_dim": args.command_embedding_dim,
+        "train_command_head_only": trainable_command_heads,
         "command_weight_map": command_weight_map,
         "rebalance_commands": args.rebalance_commands,
         "train_ratio": args.train_ratio,
