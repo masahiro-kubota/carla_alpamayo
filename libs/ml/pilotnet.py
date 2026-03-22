@@ -10,6 +10,9 @@ class PilotNet(nn.Module):
         image_channels: int = 3,
         image_height: int = 66,
         image_width: int = 200,
+        frame_stack: int = 1,
+        temporal_fusion: str = "flatten",
+        temporal_hidden_dim: int = 256,
         speed_feature_dim: int = 16,
         route_feature_dim: int = 16,
         route_point_dim: int = 0,
@@ -20,13 +23,24 @@ class PilotNet(nn.Module):
         super().__init__()
         self.image_height = image_height
         self.image_width = image_width
+        self.frame_stack = frame_stack
+        self.temporal_fusion = temporal_fusion
+        self.temporal_hidden_dim = temporal_hidden_dim
         self.route_point_dim = route_point_dim
         self.command_vocab_size = command_vocab_size
         self.command_embedding_dim = command_embedding_dim
         self.command_branching = command_branching
+        if frame_stack < 1:
+            raise ValueError("frame_stack must be >= 1.")
+        if temporal_fusion not in {"flatten", "gru"}:
+            raise ValueError(f"Unsupported temporal_fusion: {temporal_fusion}")
+        if image_channels % frame_stack != 0:
+            raise ValueError("image_channels must be divisible by frame_stack.")
+        self.frame_image_channels = image_channels // frame_stack
+        conv_image_channels = image_channels if temporal_fusion == "flatten" else self.frame_image_channels
 
         self.conv = nn.Sequential(
-            nn.Conv2d(image_channels, 24, kernel_size=5, stride=2),
+            nn.Conv2d(conv_image_channels, 24, kernel_size=5, stride=2),
             nn.ELU(),
             nn.Conv2d(24, 36, kernel_size=5, stride=2),
             nn.ELU(),
@@ -39,8 +53,28 @@ class PilotNet(nn.Module):
         )
 
         with torch.no_grad():
-            dummy = torch.zeros(1, image_channels, image_height, image_width)
+            dummy = torch.zeros(1, conv_image_channels, image_height, image_width)
             flattened_dim = int(self.conv(dummy).flatten(1).shape[1])
+        self.flattened_dim = flattened_dim
+
+        if temporal_fusion == "gru":
+            self.temporal_input = nn.Sequential(
+                nn.Linear(flattened_dim, temporal_hidden_dim),
+                nn.ELU(),
+            )
+            self.temporal_gru = nn.GRU(
+                input_size=temporal_hidden_dim,
+                hidden_size=temporal_hidden_dim,
+                batch_first=True,
+            )
+            self.temporal_output = nn.Sequential(
+                nn.Linear(temporal_hidden_dim, flattened_dim),
+                nn.ELU(),
+            )
+        else:
+            self.temporal_input = None
+            self.temporal_gru = None
+            self.temporal_output = None
 
         self.speed_mlp = nn.Sequential(
             nn.Linear(1, speed_feature_dim),
@@ -102,6 +136,32 @@ class PilotNet(nn.Module):
                 nn.Linear(10, 1),
             )
 
+    def encode_image_features(self, image: torch.Tensor) -> torch.Tensor:
+        if self.temporal_fusion == "flatten":
+            return self.conv(image).flatten(1)
+
+        batch_size = image.shape[0]
+        expected_channels = self.frame_image_channels * self.frame_stack
+        if image.shape[1] != expected_channels:
+            raise ValueError(
+                f"Expected {expected_channels} input channels for frame_stack={self.frame_stack}, "
+                f"but received {image.shape[1]}."
+            )
+        frame_tensor = image.reshape(
+            batch_size,
+            self.frame_stack,
+            self.frame_image_channels,
+            self.image_height,
+            self.image_width,
+        )
+        frame_features = self.conv(
+            frame_tensor.reshape(batch_size * self.frame_stack, self.frame_image_channels, self.image_height, self.image_width)
+        ).flatten(1)
+        frame_features = frame_features.reshape(batch_size, self.frame_stack, self.flattened_dim)
+        temporal_inputs = self.temporal_input(frame_features)
+        _, hidden = self.temporal_gru(temporal_inputs)
+        return self.temporal_output(hidden[-1])
+
     def forward(
         self,
         image: torch.Tensor,
@@ -109,7 +169,7 @@ class PilotNet(nn.Module):
         command_index: torch.Tensor | None = None,
         route_point: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        image_features = self.conv(image).flatten(1)
+        image_features = self.encode_image_features(image)
         speed_features = self.speed_mlp(speed)
         features = [image_features, speed_features]
         if self.route_mlp is not None:

@@ -50,6 +50,13 @@ def load_route_paths(route_dir: Path, route_glob: str, max_routes: int | None) -
     return route_paths
 
 
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def run_single_route(
     *,
     checkpoint_path: Path,
@@ -92,8 +99,8 @@ def build_aggregate(
     route_count: int,
 ) -> dict[str, Any]:
     return {
-        "checkpoint_path": str(checkpoint_path.relative_to(PROJECT_ROOT)),
-        "route_dir": str(route_dir.relative_to(PROJECT_ROOT)),
+        "checkpoint_path": display_path(checkpoint_path),
+        "route_dir": display_path(route_dir),
         "route_glob": args.route_glob,
         "route_count": route_count,
         "success_count": success_count,
@@ -127,7 +134,7 @@ def main() -> None:
         success_count += int(bool(summary["success"]))
         results.append(
             {
-                "route_config_path": str(route_path.relative_to(PROJECT_ROOT)),
+                "route_config_path": display_path(route_path),
                 "route_name": summary["route_name"],
                 "success": summary["success"],
                 "route_completion_ratio": summary["route_completion_ratio"],

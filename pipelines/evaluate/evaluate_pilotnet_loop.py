@@ -46,10 +46,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate a learned PilotNet steer policy on the Town01 fixed loop.")
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--lanefollow-checkpoint", default=None)
-    parser.add_argument("--left-checkpoint", default=None)
-    parser.add_argument("--right-checkpoint", default=None)
-    parser.add_argument("--straight-checkpoint", default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
@@ -132,6 +128,9 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[PilotNet, d
         image_channels=int(model_config.get("image_channels", 3)),
         image_height=int(model_config["image_height"]),
         image_width=int(model_config["image_width"]),
+        frame_stack=int(model_config.get("frame_stack", max(1, int(model_config.get("image_channels", 3)) // 3))),
+        temporal_fusion=str(model_config.get("temporal_fusion", "flatten")),
+        temporal_hidden_dim=int(model_config.get("temporal_hidden_dim", 256)),
         route_point_dim=int(model_config.get("route_point_dim", 0)),
         command_vocab_size=int(model_config.get("command_vocab_size", 0)),
         command_embedding_dim=int(model_config.get("command_embedding_dim", 0)),
@@ -140,37 +139,6 @@ def load_model(checkpoint_path: Path, device: torch.device) -> tuple[PilotNet, d
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
     return model, checkpoint
-
-
-def load_checkpoint_bundle(
-    default_checkpoint_path: Path,
-    device: torch.device,
-    *,
-    lanefollow_checkpoint_path: str | None,
-    left_checkpoint_path: str | None,
-    right_checkpoint_path: str | None,
-    straight_checkpoint_path: str | None,
-) -> dict[str, tuple[PilotNet, dict]]:
-    bundle: dict[str, tuple[PilotNet, dict]] = {"default": load_model(default_checkpoint_path, device)}
-    overrides = {
-        "lanefollow": lanefollow_checkpoint_path,
-        "left": left_checkpoint_path,
-        "right": right_checkpoint_path,
-        "straight": straight_checkpoint_path,
-    }
-    for command_name, override_path in overrides.items():
-        if override_path is None:
-            continue
-        resolved_path = Path(override_path).resolve()
-        if resolved_path == default_checkpoint_path:
-            bundle[command_name] = bundle["default"]
-        else:
-            bundle[command_name] = load_model(resolved_path, device)
-    return bundle
-
-
-def select_model_bundle(command: str, bundle: dict[str, tuple[PilotNet, dict]]) -> tuple[PilotNet, dict]:
-    return bundle.get(command, bundle["default"])
 
 
 def predict_steer(
@@ -247,19 +215,8 @@ def main() -> None:
 
     device = select_device(args.device)
     checkpoint_path = Path(args.checkpoint).resolve()
-    model_bundle = load_checkpoint_bundle(
-        checkpoint_path,
-        device,
-        lanefollow_checkpoint_path=args.lanefollow_checkpoint,
-        left_checkpoint_path=args.left_checkpoint,
-        right_checkpoint_path=args.right_checkpoint,
-        straight_checkpoint_path=args.straight_checkpoint,
-    )
-    model, checkpoint = model_bundle["default"]
-    max_frame_stack = max(
-        int(bundle_checkpoint["model_config"].get("frame_stack", max(1, int(bundle_checkpoint["model_config"].get("image_channels", 3)) // 3)))
-        for _bundle_model, bundle_checkpoint in model_bundle.values()
-    )
+    model, checkpoint = load_model(checkpoint_path, device)
+    max_frame_stack = int(checkpoint["model_config"].get("frame_stack", max(1, int(checkpoint["model_config"].get("image_channels", 3)) // 3)))
 
     random_seed = random.Random(args.seed)
     route_config_path = Path(args.route_config).resolve()
@@ -357,25 +314,24 @@ def main() -> None:
             rgb_history.append(carla_image_to_rgb_array(current_image))
             current_speed = speed_mps(vehicle)
             command = road_option_name(agent.get_local_planner().target_road_option)
-            selected_model, selected_checkpoint = select_model_bundle(command, model_bundle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
             route_point = None
-            if int(selected_checkpoint["model_config"].get("route_point_dim", 0)) > 0:
+            if int(checkpoint["model_config"].get("route_point_dim", 0)) > 0:
                 route_point, route_index_cursor = compute_local_target_point(
                     route_geometry,
                     vehicle_x=vehicle_location.x,
                     vehicle_y=vehicle_location.y,
                     vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                    lookahead_m=float(selected_checkpoint["model_config"].get("route_lookahead_m", 8.0)),
+                    lookahead_m=float(checkpoint["model_config"].get("route_lookahead_m", 8.0)),
                     target_normalization_m=float(
-                        selected_checkpoint["model_config"].get("route_target_normalization_m", 20.0)
+                        checkpoint["model_config"].get("route_target_normalization_m", 20.0)
                     ),
                     previous_route_index=route_index_cursor,
                 )
             predicted_steer_raw = predict_steer(
-                selected_model,
-                selected_checkpoint,
+                model,
+                checkpoint,
                 list(rgb_history),
                 current_speed,
                 command,
@@ -518,12 +474,6 @@ def main() -> None:
         "e2e_scope": "front_rgb_plus_speed_to_steer",
         "model_checkpoint_path": relative_to_project(checkpoint_path),
         "model_name": checkpoint.get("model_name"),
-        "model_checkpoint_overrides": {
-            "lanefollow": args.lanefollow_checkpoint,
-            "left": args.left_checkpoint,
-            "right": args.right_checkpoint,
-            "straight": args.straight_checkpoint,
-        },
         "steer_smoothing": args.steer_smoothing,
         "max_steer_delta": args.max_steer_delta,
         "route_name": route_config.name,

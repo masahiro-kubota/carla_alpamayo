@@ -62,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-height", type=int, default=66)
     parser.add_argument("--crop-top-ratio", type=float, default=0.35)
     parser.add_argument("--frame-stack", type=int, default=1)
+    parser.add_argument(
+        "--temporal-fusion",
+        choices=("flatten", "gru"),
+        default="flatten",
+    )
+    parser.add_argument("--temporal-hidden-dim", type=int, default=256)
     parser.add_argument("--speed-norm-mps", type=float, default=10.0)
     parser.add_argument("--target-steer-field", default="steer")
     parser.add_argument("--fallback-target-steer-field", default="steer")
@@ -206,20 +212,35 @@ def weighted_mse(prediction: torch.Tensor, target: torch.Tensor, sample_weight: 
 
 def adapt_state_dict_for_model(model: PilotNet, checkpoint_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     model_state_dict = model.state_dict()
-    adapted_state_dict = dict(checkpoint_state_dict)
+    adapted_state_dict: dict[str, torch.Tensor] = {}
 
     conv1_key = "conv.0.weight"
-    if conv1_key in checkpoint_state_dict and conv1_key in model_state_dict:
-        checkpoint_conv1 = checkpoint_state_dict[conv1_key]
-        model_conv1 = model_state_dict[conv1_key]
-        if checkpoint_conv1.shape != model_conv1.shape:
-            same_kernel = checkpoint_conv1.shape[0] == model_conv1.shape[0] and checkpoint_conv1.shape[2:] == model_conv1.shape[2:]
+    for key, checkpoint_value in checkpoint_state_dict.items():
+        if key not in model_state_dict:
+            continue
+        model_value = model_state_dict[key]
+        candidate_value = checkpoint_value
+        if key == conv1_key and checkpoint_value.shape != model_value.shape:
+            same_kernel = (
+                checkpoint_value.shape[0] == model_value.shape[0]
+                and checkpoint_value.shape[2:] == model_value.shape[2:]
+            )
             if same_kernel:
-                repeat_factor = math.ceil(model_conv1.shape[1] / checkpoint_conv1.shape[1])
-                inflated_conv1 = checkpoint_conv1.repeat(1, repeat_factor, 1, 1)[:, : model_conv1.shape[1], :, :]
-                inflated_conv1 = inflated_conv1 * (checkpoint_conv1.shape[1] / model_conv1.shape[1])
-                if inflated_conv1.shape == model_conv1.shape:
-                    adapted_state_dict[conv1_key] = inflated_conv1
+                if checkpoint_value.shape[1] < model_value.shape[1]:
+                    repeat_factor = math.ceil(model_value.shape[1] / checkpoint_value.shape[1])
+                    candidate_value = checkpoint_value.repeat(1, repeat_factor, 1, 1)[:, : model_value.shape[1], :, :]
+                    candidate_value = candidate_value * (checkpoint_value.shape[1] / model_value.shape[1])
+                elif checkpoint_value.shape[1] > model_value.shape[1] and checkpoint_value.shape[1] % model_value.shape[1] == 0:
+                    reduce_factor = checkpoint_value.shape[1] // model_value.shape[1]
+                    candidate_value = checkpoint_value.reshape(
+                        checkpoint_value.shape[0],
+                        model_value.shape[1],
+                        reduce_factor,
+                        checkpoint_value.shape[2],
+                        checkpoint_value.shape[3],
+                    ).mean(dim=2)
+        if candidate_value.shape == model_value.shape:
+            adapted_state_dict[key] = candidate_value
     return adapted_state_dict
 
 
@@ -229,7 +250,7 @@ def load_initial_checkpoint(model: PilotNet, checkpoint_path: str | None, device
     resolved_path = Path(checkpoint_path).resolve()
     checkpoint = torch.load(resolved_path, map_location=device)
     adapted_state_dict = adapt_state_dict_for_model(model, checkpoint["model_state_dict"])
-    model.load_state_dict(adapted_state_dict)
+    model.load_state_dict(adapted_state_dict, strict=False)
     return checkpoint
 
 
@@ -313,6 +334,8 @@ def main() -> None:
         prefix_parts.append("tp")
     if args.frame_stack > 1:
         prefix_parts.append(f"fs{args.frame_stack}")
+    if args.temporal_fusion != "flatten":
+        prefix_parts.append(args.temporal_fusion)
     default_prefix = "_".join(prefix_parts)
     output_dir = build_output_dir(args.output_dir, default_prefix=default_prefix)
     device = select_device(args.device)
@@ -390,6 +413,9 @@ def main() -> None:
             image_channels=image_channels,
             image_height=args.image_height,
             image_width=args.image_width,
+            frame_stack=args.frame_stack,
+            temporal_fusion=args.temporal_fusion,
+            temporal_hidden_dim=args.temporal_hidden_dim,
             route_point_dim=2 if args.route_conditioning == "target-point" else 0,
             command_vocab_size=command_vocab_size(),
             command_embedding_dim=args.command_embedding_dim,
@@ -400,6 +426,9 @@ def main() -> None:
             image_channels=image_channels,
             image_height=args.image_height,
             image_width=args.image_width,
+            frame_stack=args.frame_stack,
+            temporal_fusion=args.temporal_fusion,
+            temporal_hidden_dim=args.temporal_hidden_dim,
             route_point_dim=2 if args.route_conditioning == "target-point" else 0,
             command_vocab_size=command_vocab_size(),
             command_branching=True,
@@ -410,6 +439,9 @@ def main() -> None:
             image_channels=image_channels,
             image_height=args.image_height,
             image_width=args.image_width,
+            frame_stack=args.frame_stack,
+            temporal_fusion=args.temporal_fusion,
+            temporal_hidden_dim=args.temporal_hidden_dim,
             route_point_dim=2 if args.route_conditioning == "target-point" else 0,
         ).to(device)
         model_name = "pilotnet"
@@ -452,6 +484,8 @@ def main() -> None:
         "image_height": args.image_height,
         "crop_top_ratio": args.crop_top_ratio,
         "frame_stack": args.frame_stack,
+        "temporal_fusion": args.temporal_fusion,
+        "temporal_hidden_dim": args.temporal_hidden_dim,
         "image_channels": image_channels,
         "speed_norm_mps": args.speed_norm_mps,
         "route_conditioning": args.route_conditioning,
@@ -498,6 +532,15 @@ def main() -> None:
                 mse = ((prediction - target) ** 2).mean()
                 mae = (prediction - target).abs().mean()
 
+            if not loss.requires_grad:
+                batch_size = image.shape[0]
+                train_loss_sum += float(loss.item()) * batch_size
+                train_mse_sum += float(mse.item()) * batch_size
+                train_mae_sum += float(mae.item()) * batch_size
+                count += batch_size
+                progress.set_postfix(loss=f"{loss.item():.4f}", mae=f"{mae.item():.4f}")
+                continue
+
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -539,6 +582,8 @@ def main() -> None:
                         "image_height": args.image_height,
                         "crop_top_ratio": args.crop_top_ratio,
                         "frame_stack": args.frame_stack,
+                        "temporal_fusion": args.temporal_fusion,
+                        "temporal_hidden_dim": args.temporal_hidden_dim,
                         "speed_norm_mps": args.speed_norm_mps,
                         "route_conditioning": args.route_conditioning,
                         "route_point_dim": 2 if args.route_conditioning == "target-point" else 0,
