@@ -174,6 +174,110 @@ model 側に temporal fusion を追加。
 - Town01 arbitrary intersection goal は未達
 - ceiling はいまのところ `61 / 72`
 
+## Reflection
+
+今回の進め方には、はっきりした反省点がある。
+
+### 1. Goal に対して data design が後手だった
+
+最終目標は `Town01` の arbitrary intersection coverage だったが、初期の data collection は fixed-loop 完走を主眼にしたものだった。
+
+そのため、
+
+- まず loop を通すための route family を追加し
+- 次に壊れた箇所を局所的に補修し
+- さらに別の failure に応じて route を増築する
+
+という進め方になった。
+
+これは fixed-loop を解くには有効だったが、`72 movement` 全体を最初から均等に被覆する設計ではなかった。
+
+### 2. 総量ではなく coverage を先に揃えるべきだった
+
+振り返ると問題は「データ量不足」だけではなく、「データ分布が局所 route family に偏っていたこと」だった。
+
+best run の学習データは約 `3.95 時間` あるが、その内訳はかなり不均質だった。
+
+- `movement_short_routes`: 約 `99.8 分`
+- `left_focus`: 約 `38.5 分`
+- `right_focus_upper_band`: 約 `22.7 分`
+- `right_focus_other`: 約 `17.7 分`
+- `fixed loop` 系: 約 `31.4 分`
+- correction replay: 約 `2.5 分` 相当
+
+つまり「最初から Town01 全交差点を coverage-first で広く集めた」のではなく、「失敗した family を順次厚くした」構成になっていた。
+
+### 3. targeted correction 自体は間違いではないが、順番が悪かった
+
+hard failure replay や correction replay は、imitation learning / DAgger 系では普通の手段であり、それ自体は不適切ではない。
+
+ただし今回は、
+
+- inventory / movement coverage の基盤が十分でない段階で
+- targeted replay を強く回した
+
+ため、局所改善はしても broad suite の天井が伸びにくかった。
+
+本来の順番は、
+
+1. Town01 の movement inventory を先に固定する
+2. 各 `LEFT / RIGHT / STRAIGHT` を広く clean expert で集める
+3. その baseline を学習する
+4. その後で hard failures に対して correction を足す
+
+だった。
+
+### 4. route family の増築で experiment management が悪化した
+
+`right_focus_*`, `left_focus_*`, `upper_band_*`, `curve_focus_*`, `movement_*`, correction windows という形で collection family が増え続けた結果、
+
+- どの family が mainline か分かりにくくなった
+- best model の data recipe が複雑になった
+- reproduction のために守るべき correction manifest を消してしまった
+
+という運用上の問題も生んだ。
+
+これは単なる整理不足ではなく、`goal` と `data recipe` の関係が文書化されないまま experiment を積み増したことが原因だった。
+
+### 5. 小手先の tuning に時間を使いすぎた
+
+途中で試した
+
+- command hold
+- head-only tuning
+- per-command checkpoint 差し替え
+- 局所 route 向けの特殊 fine-tune
+
+の多くは、最終 goal に対して本質的ではなかった。
+
+この時間を、
+
+- movement coverage の初期収集
+- eval suite 全体の systematic collection
+- route family ごとの train/eval 分離
+
+に使うべきだった。
+
+## What Should Have Been Done Instead
+
+今回の goal に対して、最初からやり直すなら次の順で進めるべきだった。
+
+1. `Town01` の全 valid movement を inventory 化する
+2. 各 movement に対して train / held-out eval route を先に固定する
+3. 各 movement を最低本数ずつ clean expert で収集する
+4. first baseline を広い coverage で 1 回学習する
+5. suite 全体を評価し、残った hard failures にだけ targeted correction を足す
+
+要するに、
+
+- fixed-loop のための recipe を育ててから arbitrary intersection に拡張する
+
+のではなく、
+
+- arbitrary intersection の評価設計を先に作り、その coverage に沿ってデータを集める
+
+べきだった。
+
 ## What Helped
 
 - hard failure route を明示的に切り出すこと
