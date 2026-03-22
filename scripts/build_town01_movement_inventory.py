@@ -384,7 +384,10 @@ def main() -> None:
                 "candidate_count": len(candidates),
                 "recommended_train": asdict(train_candidate) if train_candidate is not None else None,
                 "recommended_eval": asdict(eval_candidate) if eval_candidate is not None else None,
-                "candidates": [asdict(candidate) for candidate in sorted(candidates, key=lambda item: (item.total_length_m, item.start_spawn_index, item.end_spawn_index))[:8]],
+                "candidates": [
+                    asdict(candidate)
+                    for candidate in sorted(candidates, key=lambda item: (item.total_length_m, item.start_spawn_index, item.end_spawn_index))
+                ],
             }
         )
 

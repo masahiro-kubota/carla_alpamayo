@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-speed-kmh", type=float, default=30.0)
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--max-seconds", type=float, default=300.0)
     return parser
 
 
@@ -73,10 +74,41 @@ def run_single_route(
         args.weather,
         "--seed",
         str(args.seed),
+        "--max-seconds",
+        str(args.max_seconds),
         "--record-video" if args.record_video else "--no-record-video",
     ]
     completed = subprocess.run(command, capture_output=True, text=True, check=True)
     return json.loads(completed.stdout)
+
+
+def build_aggregate(
+    *,
+    checkpoint_path: Path,
+    route_dir: Path,
+    args: argparse.Namespace,
+    results: list[dict[str, Any]],
+    success_count: int,
+    route_count: int,
+) -> dict[str, Any]:
+    return {
+        "checkpoint_path": str(checkpoint_path.relative_to(PROJECT_ROOT)),
+        "route_dir": str(route_dir.relative_to(PROJECT_ROOT)),
+        "route_glob": args.route_glob,
+        "route_count": route_count,
+        "success_count": success_count,
+        "success_rate": success_count / route_count if route_count else 0.0,
+        "record_video": args.record_video,
+        "max_seconds": args.max_seconds,
+        "results": results,
+    }
+
+
+def write_aggregate(output_path: Path, aggregate: dict[str, Any]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        json.dump(aggregate, handle, indent=2)
+        handle.write("\n")
 
 
 def main() -> None:
@@ -87,6 +119,7 @@ def main() -> None:
     if not route_paths:
         raise SystemExit(f"No route configs matched: {route_dir} / {args.route_glob}")
 
+    output_path = build_output_path(args.summary_output)
     results: list[dict[str, Any]] = []
     success_count = 0
     for route_path in route_paths:
@@ -102,25 +135,29 @@ def main() -> None:
                 "elapsed_seconds": summary["elapsed_seconds"],
                 "distance_to_goal_m": summary["distance_to_goal_m"],
                 "summary_path": str((PROJECT_ROOT / summary["front_rgb_dir"]).parent / "summary.json"),
+                "manifest_path": summary["manifest_path"],
                 "video_path": summary["video_path"],
             }
         )
+        aggregate = build_aggregate(
+            checkpoint_path=checkpoint_path,
+            route_dir=route_dir,
+            args=args,
+            results=results,
+            success_count=success_count,
+            route_count=len(route_paths),
+        )
+        write_aggregate(output_path, aggregate)
 
-    output_path = build_output_path(args.summary_output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    aggregate = {
-        "checkpoint_path": str(checkpoint_path.relative_to(PROJECT_ROOT)),
-        "route_dir": str(route_dir.relative_to(PROJECT_ROOT)),
-        "route_glob": args.route_glob,
-        "route_count": len(route_paths),
-        "success_count": success_count,
-        "success_rate": success_count / len(route_paths),
-        "record_video": args.record_video,
-        "results": results,
-    }
-    with output_path.open("w", encoding="utf-8") as handle:
-        json.dump(aggregate, handle, indent=2)
-        handle.write("\n")
+    aggregate = build_aggregate(
+        checkpoint_path=checkpoint_path,
+        route_dir=route_dir,
+        args=args,
+        results=results,
+        success_count=success_count,
+        route_count=len(route_paths),
+    )
+    write_aggregate(output_path, aggregate)
     print(json.dumps({"summary_output": str(output_path.relative_to(PROJECT_ROOT)), **{k: aggregate[k] for k in ("route_count", "success_count", "success_rate")}}, indent=2))
 
 

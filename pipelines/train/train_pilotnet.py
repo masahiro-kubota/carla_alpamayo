@@ -4,6 +4,7 @@ import argparse
 from collections import Counter
 from datetime import datetime
 import json
+import math
 from pathlib import Path
 import random
 from math import sqrt
@@ -211,9 +212,10 @@ def adapt_state_dict_for_model(model: PilotNet, checkpoint_state_dict: dict[str,
         model_conv1 = model_state_dict[conv1_key]
         if checkpoint_conv1.shape != model_conv1.shape:
             same_kernel = checkpoint_conv1.shape[0] == model_conv1.shape[0] and checkpoint_conv1.shape[2:] == model_conv1.shape[2:]
-            if same_kernel and model_conv1.shape[1] % checkpoint_conv1.shape[1] == 0:
-                repeat_factor = model_conv1.shape[1] // checkpoint_conv1.shape[1]
-                inflated_conv1 = checkpoint_conv1.repeat(1, repeat_factor, 1, 1) / repeat_factor
+            if same_kernel:
+                repeat_factor = math.ceil(model_conv1.shape[1] / checkpoint_conv1.shape[1])
+                inflated_conv1 = checkpoint_conv1.repeat(1, repeat_factor, 1, 1)[:, : model_conv1.shape[1], :, :]
+                inflated_conv1 = inflated_conv1 * (checkpoint_conv1.shape[1] / model_conv1.shape[1])
                 if inflated_conv1.shape == model_conv1.shape:
                     adapted_state_dict[conv1_key] = inflated_conv1
     return adapted_state_dict

@@ -1,0 +1,11 @@
+{
+  "name": "town01_movement_33_right_j143_eval_longsupport",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [
+    92,
+    35
+  ],
+  "description": "Long-context support route for town01_movement_33_right_j143_eval (92 -> 35, approach 106.29 m, exit 150.0 m)."
+}
