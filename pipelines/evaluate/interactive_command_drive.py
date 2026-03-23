@@ -117,7 +117,7 @@ class SpeedController:
 
 
 class FrontCameraPreview:
-    def __init__(self, *, width: int, height: int) -> None:
+    def __init__(self, *, source_width: int, source_height: int, display_scale: float) -> None:
         self.root = tk.Tk()
         self.root.title("CARLA Front Camera")
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -133,16 +133,18 @@ class FrontCameraPreview:
         )
         self.status_label.pack(fill="x")
         self._photo_image: ImageTk.PhotoImage | None = None
-        self.width = width
-        self.height = height
+        self.source_width = source_width
+        self.source_height = source_height
+        self.display_width = max(1, int(round(source_width * display_scale)))
+        self.display_height = max(1, int(round(source_height * display_scale)))
         self.root.update()
 
     def update(self, rgb_array: np.ndarray, status_text: str) -> None:
         if self.closed:
             return
         image = Image.fromarray(rgb_array)
-        if image.size != (self.width, self.height):
-            image = image.resize((self.width, self.height))
+        if image.size != (self.display_width, self.display_height):
+            image = image.resize((self.display_width, self.display_height))
         self._photo_image = ImageTk.PhotoImage(image=image)
         self.image_label.configure(image=self._photo_image)
         self.status_label.configure(text=status_text)
@@ -177,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    parser.add_argument("--preview-scale", type=float, default=2.0)
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
@@ -299,7 +302,11 @@ def main() -> None:
             if not os.environ.get("DISPLAY"):
                 print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
             else:
-                preview = FrontCameraPreview(width=args.camera_width, height=args.camera_height)
+                preview = FrontCameraPreview(
+                    source_width=args.camera_width,
+                    source_height=args.camera_height,
+                    display_scale=args.preview_scale,
+                )
 
         print_instructions()
         with RawKeyboardInput() as keyboard:

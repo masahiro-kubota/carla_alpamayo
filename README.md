@@ -112,7 +112,7 @@ export DISPLAY=:1
 ./scripts/run_interactive_town01_command_drive.sh
 ```
 
-既定では `outputs/train/pilotnet_branch_fs3_movementall20_hardx3_corr1_20260322_1920/best.pt` を使います。操作は terminal 上で `w=lanefollow`, `a=left`, `s=straight`, `d=right`, `q=quit` です。command は切り替えるまで保持されます。`DISPLAY` があると front camera の live preview window も出ます。
+既定では `outputs/train/pilotnet_branch_fs3_movementall20_hardx3_corr1_20260322_1920/best.pt` を使います。操作は terminal 上で `w=lanefollow`, `a=left`, `s=straight`, `d=right`, `q=quit` です。command は切り替えるまで保持されます。`DISPLAY` があると front camera の live preview window も出ます。既定の preview は `2x` 拡大で、さらに大きくしたいときは `--preview-scale 3` のように指定できます。
 
 重要:
 
