@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 import math
+import os
 import queue
 import select
 import sys
@@ -11,6 +12,8 @@ import tty
 from pathlib import Path
 
 import numpy as np
+from PIL import Image, ImageTk
+import tkinter as tk
 
 try:
     import carla
@@ -113,6 +116,46 @@ class SpeedController:
         return 0.0, brake
 
 
+class FrontCameraPreview:
+    def __init__(self, *, width: int, height: int) -> None:
+        self.root = tk.Tk()
+        self.root.title("CARLA Front Camera")
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.closed = False
+        self.image_label = tk.Label(self.root)
+        self.image_label.pack()
+        self.status_label = tk.Label(
+            self.root,
+            text="",
+            anchor="w",
+            justify="left",
+            font=("TkFixedFont", 11),
+        )
+        self.status_label.pack(fill="x")
+        self._photo_image: ImageTk.PhotoImage | None = None
+        self.width = width
+        self.height = height
+        self.root.update()
+
+    def update(self, rgb_array: np.ndarray, status_text: str) -> None:
+        if self.closed:
+            return
+        image = Image.fromarray(rgb_array)
+        if image.size != (self.width, self.height):
+            image = image.resize((self.width, self.height))
+        self._photo_image = ImageTk.PhotoImage(image=image)
+        self.image_label.configure(image=self._photo_image)
+        self.status_label.configure(text=status_text)
+        self.root.update_idletasks()
+        self.root.update()
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.root.destroy()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Drive a learned steering policy with manual W/A/S/D command input on Town01."
@@ -129,6 +172,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--camera-width", type=int, default=320)
     parser.add_argument("--camera-height", type=int, default=180)
     parser.add_argument("--camera-fov", type=int, default=90)
+    parser.add_argument(
+        "--show-front-camera",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
@@ -202,6 +250,7 @@ def main() -> None:
     current_command = "lanefollow"
     previous_applied_steer: float | None = None
     rgb_history: deque[np.ndarray] = deque(maxlen=max_frame_stack)
+    preview: FrontCameraPreview | None = None
 
     client = carla.Client(args.host, args.port)
     client.set_timeout(30.0)
@@ -245,6 +294,12 @@ def main() -> None:
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
         spectator = world.get_spectator()
+
+        if args.show_front_camera:
+            if not os.environ.get("DISPLAY"):
+                print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
+            else:
+                preview = FrontCameraPreview(width=args.camera_width, height=args.camera_height)
 
         print_instructions()
         with RawKeyboardInput() as keyboard:
@@ -295,23 +350,30 @@ def main() -> None:
                 collision, lane_invasion = frame_events.consume_frame_flags()
                 frame_index += 1
                 elapsed_seconds = frame_index * args.fixed_delta_seconds
-                status = (
-                    f"\rcmd={current_command:<10} speed={current_speed * 3.6:5.1f} km/h "
+                status_core = (
+                    f"cmd={current_command:<10} speed={current_speed * 3.6:5.1f} km/h "
                     f"steer={predicted_steer:+.3f} throttle={throttle:.2f} brake={brake:.2f} "
                     f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
                 )
+                status = f"\r{status_core}"
                 if collision:
                     status += "  [collision]"
                 elif lane_invasion:
                     status += "  [lane]"
                 sys.stdout.write(status)
                 sys.stdout.flush()
+                if preview is not None and not preview.closed:
+                    preview.update(rgb_history[-1], status_core)
+                elif preview is not None and preview.closed:
+                    raise KeyboardInterrupt
 
                 world_frame = world.tick()
                 current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
     except KeyboardInterrupt:
         pass
     finally:
+        if preview is not None:
+            preview.close()
         world.apply_settings(original_settings)
         destroy_actors(reversed(actors))
         if frame_index:
