@@ -104,6 +104,15 @@ cd /media/masa/ssd_data/carla_alpamayo
 ./scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt
 ```
 
+8. 学習済み steer policy を手動 command で動かす
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+./scripts/run_interactive_town01_command_drive.sh
+```
+
+既定では `outputs/train/pilotnet_branch_fs3_movementall20_hardx3_corr1_20260322_1920/best.pt` を使います。操作は terminal 上で `w=lanefollow`, `a=left`, `s=straight`, `d=right`, `q=quit` です。command は切り替えるまで保持されます。
+
 重要:
 
 - `collect_*` 系は expert データ収集であり、camera-to-steer の E2E 推論ではありません
