@@ -11,9 +11,7 @@ try:
 except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
-from ad_stack.agents import ExpertBasicAgent, ExpertBasicAgentConfig
-from ad_stack.runtime.observation_builder import ObservationBuilder
-from ad_stack.world_model import EgoState, RouteState
+from ad_stack import EgoState, ExpertBasicAgent, ExpertBasicAgentConfig, ObservationBuilder, RouteState
 from libs.project import PROJECT_ROOT
 from libs.carla_utils import (
     DEFAULT_ROUTE_CONFIG_PATH,

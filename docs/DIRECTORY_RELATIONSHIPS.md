@@ -48,6 +48,7 @@ flowchart LR
   end
 
   subgraph ad_stack["ad_stack"]
+    PublicFacade["__init__.py<br/>public facade"]
     ObservationBuilder["ObservationBuilder"]
     SceneState["SceneState"]
     EgoState["EgoState"]
@@ -62,6 +63,18 @@ flowchart LR
   subgraph learning["learning"]
     PilotNetInferenceRuntime["PilotNetInferenceRuntime"]
   end
+
+  CollectRouteLoop -->|import| PublicFacade
+  EvaluatePilotNetLoop -->|import| PublicFacade
+  InteractiveCommandDrive -->|import| PublicFacade
+
+  PublicFacade -->|export| ObservationBuilder
+  PublicFacade -->|export| EgoState
+  PublicFacade -->|export| RouteState
+  PublicFacade -->|export| ExpertBasicAgent
+  PublicFacade -->|export| LearnedLateralAgent
+  PublicFacade -->|export| PilotNetScenePolicy
+  PublicFacade -->|export| InferenceBridge
 
   CollectRouteLoop -->|build SceneState| ObservationBuilder
   CollectRouteLoop -->|call expert| ExpertBasicAgent
@@ -91,10 +104,11 @@ flowchart LR
 
 この図の読み方:
 
+- 外側の runner は `ad_stack.__init__` だけを import する
 - `collect_route_loop` は `ObservationBuilder` と `ExpertBasicAgent` を使う
 - `evaluate_pilotnet_loop` は `ExpertBasicAgent` と `LearnedLateralAgent` を組み合わせる
-- `interactive_command_drive` は agent interface ではなく `ad_stack.inference` を使う
-- `evaluation` から `learning` への direct import は持たせず、`ad_stack` を境界にしている
+- `interactive_command_drive` は agent interface ではなく facade 経由の `InferenceBridge` を使う
+- `evaluation` / `data_collection` から `learning` への direct import は持たせない
 
 ## 3. Interface Boundary
 

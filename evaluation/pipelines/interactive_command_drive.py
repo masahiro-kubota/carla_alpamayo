@@ -20,7 +20,7 @@ try:
 except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
-from ad_stack.inference import load_pilotnet_runtime, select_device
+from ad_stack import load_pilotnet_runtime, select_device
 from libs.project import PROJECT_ROOT
 from libs.carla_utils import (
     FrameEventTracker,
