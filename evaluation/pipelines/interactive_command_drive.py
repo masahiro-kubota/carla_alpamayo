@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import math
+import json
 import os
 from pathlib import Path
-import queue
 import select
 import sys
 import termios
@@ -14,26 +13,10 @@ import numpy as np
 from PIL import Image, ImageTk
 import tkinter as tk
 
-try:
-    import carla
-except ModuleNotFoundError:
-    carla = None  # type: ignore[assignment]
+from ad_stack import InteractiveScenarioSpec, PolicySpec, RunRequest, RuntimeSpec, run
 
-from ad_stack import create_interactive_pilotnet_controller, to_carla_control
-from libs.project import PROJECT_ROOT
-from libs.carla_utils import (
-    FrameEventTracker,
-    attach_sensor,
-    destroy_actors,
-    require_blueprint,
-    setup_world,
-    speed_mps,
-    wait_for_image,
-)
-from evaluation.pipelines.common import carla_image_to_rgb_array, resolve_weather
-DEFAULT_CHECKPOINT_PATH = (
-    PROJECT_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
 DEFAULT_TOWN = "Town01"
 DEFAULT_SPAWN_INDEX = 70
 COMMAND_KEY_BINDINGS = {
@@ -150,27 +133,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--spectator-height-m", type=float, default=3.0)
     return parser
 
-def update_spectator(
-    spectator: "carla.Actor",
-    vehicle_transform: "carla.Transform",
-    *,
-    follow_distance_m: float,
-    height_m: float,
-) -> None:
-    yaw_rad = math.radians(vehicle_transform.rotation.yaw)
-    vehicle_location = vehicle_transform.location
-    spectator_location = carla.Location(
-        x=vehicle_location.x - (follow_distance_m * math.cos(yaw_rad)),
-        y=vehicle_location.y - (follow_distance_m * math.sin(yaw_rad)),
-        z=vehicle_location.z + height_m,
-    )
-    spectator_rotation = carla.Rotation(
-        pitch=-15.0,
-        yaw=vehicle_transform.rotation.yaw,
-        roll=0.0,
-    )
-    spectator.set_transform(carla.Transform(spectator_location, spectator_rotation))
-
 
 def print_instructions() -> None:
     print("Interactive command drive")
@@ -184,148 +146,88 @@ def print_instructions() -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
-    if carla is None:
-        raise SystemExit(
-            "The 'carla' Python package is not installed. "
-            "Run 'uv sync' after confirming the CARLA wheel path in pyproject.toml."
-        )
-
     checkpoint_path = Path(args.checkpoint).resolve()
     if not checkpoint_path.exists():
         raise SystemExit(f"Checkpoint not found: {checkpoint_path}")
 
-    controller = create_interactive_pilotnet_controller(
-        checkpoint_path=checkpoint_path,
-        device=args.device,
-        target_speed_kmh=args.target_speed_kmh,
-    )
-    frame_events = FrameEventTracker()
-    current_command = "lanefollow"
     preview: FrontCameraPreview | None = None
-
-    client = carla.Client(args.host, args.port)
-    client.set_timeout(30.0)
-    world, original_settings = setup_world(client, args.town, args.fixed_delta_seconds)
-    world.set_weather(resolve_weather(carla, args.weather))
-
-    image_queue: queue.Queue[carla.Image] = queue.Queue()
-    actors: list[carla.Actor] = []
-    frame_index = 0
-    elapsed_seconds = 0.0
+    preview_enabled = args.show_front_camera
+    if preview_enabled and not os.environ.get("DISPLAY"):
+        print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
+        preview_enabled = False
 
     try:
-        spawn_points = world.get_map().get_spawn_points()
-        if args.spawn_index < 0 or args.spawn_index >= len(spawn_points):
-            raise SystemExit(f"--spawn-index must be within [0, {len(spawn_points) - 1}]")
-
-        vehicle_blueprint = require_blueprint(world, args.vehicle_filter)
-        vehicle_blueprint.set_attribute("role_name", "hero")
-        vehicle = world.try_spawn_actor(vehicle_blueprint, spawn_points[args.spawn_index])
-        if vehicle is None:
-            raise RuntimeError(f"Failed to spawn ego vehicle at spawn index {args.spawn_index}.")
-        actors.append(vehicle)
-
-        camera_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
-        camera_blueprint.set_attribute("image_size_x", str(args.camera_width))
-        camera_blueprint.set_attribute("image_size_y", str(args.camera_height))
-        camera_blueprint.set_attribute("fov", str(args.camera_fov))
-        camera_transform = carla.Transform(carla.Location(x=1.5, z=2.4))
-        camera = world.spawn_actor(camera_blueprint, camera_transform, attach_to=vehicle)
-        actors.append(camera)
-        camera.listen(image_queue.put)
-
-        collision_sensor = attach_sensor(world, "sensor.other.collision", carla.Transform(), vehicle)
-        actors.append(collision_sensor)
-        collision_sensor.listen(lambda _event: frame_events.mark_collision())
-
-        lane_sensor = attach_sensor(world, "sensor.other.lane_invasion", carla.Transform(), vehicle)
-        actors.append(lane_sensor)
-        lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
-
-        world_frame = world.tick()
-        current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
-        spectator = world.get_spectator()
-
-        if args.show_front_camera:
-            if not os.environ.get("DISPLAY"):
-                print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
-            else:
-                preview = FrontCameraPreview(
-                    source_width=args.camera_width,
-                    source_height=args.camera_height,
-                    display_scale=args.preview_scale,
-                )
+        if preview_enabled:
+            preview = FrontCameraPreview(
+                source_width=args.camera_width,
+                source_height=args.camera_height,
+                display_scale=args.preview_scale,
+            )
 
         print_instructions()
         with RawKeyboardInput() as keyboard:
-            while elapsed_seconds < args.max_seconds:
+            def command_provider(current_command: str) -> tuple[str, bool]:
                 for key in keyboard.read_keys():
                     normalized_key = key.lower()
                     if normalized_key in COMMAND_KEY_BINDINGS:
                         current_command = COMMAND_KEY_BINDINGS[normalized_key]
                     elif normalized_key == "q":
-                        raise KeyboardInterrupt
+                        return current_command, True
+                return current_command, False
 
-                current_rgb = carla_image_to_rgb_array(current_image)
-                current_speed = speed_mps(vehicle)
-                step_result = controller.run_step(
-                    current_rgb=current_rgb,
-                    speed_mps=current_speed,
-                    command=current_command,
-                    steering_smoothing=args.steer_smoothing,
-                    max_steer_delta=args.max_steer_delta,
-                )
-                predicted_steer = (
-                    step_result.applied_steer
-                    if step_result.applied_steer is not None
-                    else step_result.decision.command.steer
-                )
-                control = to_carla_control(carla, step_result.decision.command)
-                throttle = control.throttle
-                brake = control.brake
-                vehicle.apply_control(control)
-                update_spectator(
-                    spectator,
-                    vehicle.get_transform(),
-                    follow_distance_m=args.spectator_follow_distance_m,
-                    height_m=args.spectator_height_m,
-                )
-
-                collision, lane_invasion = frame_events.consume_frame_flags()
-                frame_index += 1
-                elapsed_seconds = frame_index * args.fixed_delta_seconds
-                status_core = (
-                    f"cmd={current_command:<10} speed={current_speed * 3.6:5.1f} km/h "
-                    f"steer={predicted_steer:+.3f} throttle={throttle:.2f} brake={brake:.2f} "
-                    f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
-                )
-                status = f"\r{status_core}"
-                if collision:
-                    status += "  [collision]"
-                elif lane_invasion:
-                    status += "  [lane]"
-                sys.stdout.write(status)
+            def status_sink(status_text: str) -> None:
+                sys.stdout.write(f"\r{status_text}")
                 sys.stdout.flush()
-                if preview is not None and not preview.closed:
-                    preview.update(current_rgb, status_core)
-                elif preview is not None and preview.closed:
-                    raise KeyboardInterrupt
 
-                world_frame = world.tick()
-                current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
-    except KeyboardInterrupt:
-        pass
+            def preview_sink(rgb_array: np.ndarray, status_text: str) -> bool | None:
+                if preview is not None and not preview.closed:
+                    preview.update(rgb_array, status_text)
+                    return True
+                if preview is not None and preview.closed:
+                    return False
+                return True
+
+            result = run(
+                RunRequest(
+                    mode="interactive",
+                    scenario=InteractiveScenarioSpec(
+                        town=args.town,
+                        spawn_index=args.spawn_index,
+                        weather=args.weather,
+                        max_seconds=args.max_seconds,
+                        spectator_follow_distance_m=args.spectator_follow_distance_m,
+                        spectator_height_m=args.spectator_height_m,
+                    ),
+                    runtime=RuntimeSpec(
+                        host=args.host,
+                        port=args.port,
+                        vehicle_filter=args.vehicle_filter,
+                        fixed_delta_seconds=args.fixed_delta_seconds,
+                        sensor_timeout=args.sensor_timeout,
+                        camera_width=args.camera_width,
+                        camera_height=args.camera_height,
+                        camera_fov=args.camera_fov,
+                        target_speed_kmh=args.target_speed_kmh,
+                        seed=args.seed,
+                    ),
+                    policy=PolicySpec(
+                        kind="interactive",
+                        checkpoint_path=checkpoint_path,
+                        device=args.device,
+                        steer_smoothing=args.steer_smoothing,
+                        max_steer_delta=args.max_steer_delta,
+                        initial_command="lanefollow",
+                        command_provider=command_provider,
+                        status_sink=status_sink,
+                        preview_sink=preview_sink if preview_enabled else None,
+                    ),
+                )
+            )
     finally:
         if preview is not None:
             preview.close()
-        world.apply_settings(original_settings)
-        destroy_actors(reversed(actors))
-        if frame_index:
-            print(
-                "\n"
-                f"ended seconds={elapsed_seconds:.1f} collisions={frame_events.collision_count} "
-                f"lane_invasions={frame_events.lane_invasion_count}"
-            )
+    print()
+    print(json.dumps(result.summary, indent=2))
 
 
 if __name__ == "__main__":

@@ -1,23 +1,23 @@
-"""Public facade for the online AD stack."""
+"""Public single-entrypoint facade for the online AD stack."""
 
-from ad_stack.api import (
-    ControlDecision,
-    StackDescription,
-    StackStepResult,
-    VehicleCommand,
-    create_expert_collector_stack,
-    create_interactive_pilotnet_controller,
-    create_pilotnet_eval_stack,
-    to_carla_control,
+from ad_stack.run import (
+    ArtifactSpec,
+    InteractiveScenarioSpec,
+    PolicySpec,
+    RouteLoopScenarioSpec,
+    RunRequest,
+    RunResult,
+    RuntimeSpec,
+    run,
 )
 
 __all__ = [
-    "ControlDecision",
-    "StackDescription",
-    "StackStepResult",
-    "VehicleCommand",
-    "create_expert_collector_stack",
-    "create_interactive_pilotnet_controller",
-    "create_pilotnet_eval_stack",
-    "to_carla_control",
+    "ArtifactSpec",
+    "InteractiveScenarioSpec",
+    "PolicySpec",
+    "RouteLoopScenarioSpec",
+    "RunRequest",
+    "RunResult",
+    "RuntimeSpec",
+    "run",
 ]
