@@ -1,0 +1,6 @@
+{
+  "name": "slow_lead_profile_v1",
+  "default_target_speed_kmh": 12.0,
+  "speed_jitter_kmh": 0.0,
+  "enable_autopilot": true
+}

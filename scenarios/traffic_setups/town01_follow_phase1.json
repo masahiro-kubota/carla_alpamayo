@@ -1,0 +1,16 @@
+{
+  "name": "town01_follow_phase1",
+  "town": "Town01",
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "slow_lead_profile_v1",
+      "spawn_index": 213,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "expert_overrides": {
+    "allow_overtake": false
+  },
+  "description": "Phase 1 slow-lead following scenario on the first northbound segment."
+}

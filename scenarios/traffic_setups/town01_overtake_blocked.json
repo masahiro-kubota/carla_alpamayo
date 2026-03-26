@@ -1,0 +1,21 @@
+{
+  "name": "town01_overtake_blocked",
+  "town": "Town01",
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "slow_lead_profile_v1",
+      "spawn_index": 213,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "oncoming_profile_v1",
+      "spawn_index": 212,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "expert_overrides": {
+    "allow_overtake": true
+  },
+  "description": "Slow lead vehicle with a close oncoming blocker in the adjacent lane to force overtake rejection."
+}

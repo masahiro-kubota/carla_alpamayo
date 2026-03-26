@@ -1,0 +1,16 @@
+{
+  "name": "town01_signal_phase1",
+  "town": "Town01",
+  "npc_vehicles": [],
+  "traffic_light_overrides": [
+    {
+      "actor_id": 57,
+      "state": "red",
+      "freeze": true
+    }
+  ],
+  "expert_overrides": {
+    "allow_overtake": false
+  },
+  "description": "Phase 1 red-light stop scenario on the early eastbound leg of town01_pilotnet_loop."
+}
