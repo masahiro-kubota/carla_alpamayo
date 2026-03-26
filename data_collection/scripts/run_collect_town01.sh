@@ -11,12 +11,13 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-PYTHONPATH="" uv run python -m data_collection.pipelines.collect.minimal_collect \
-  --town "${CARLA_TOWN:-Town01}" \
+PYTHONPATH="" uv run python -m data_collection.pipelines.collect.collect_route_loop \
   --host "${CARLA_HOST:-127.0.0.1}" \
   --port "${CARLA_PORT:-2000}" \
-  --traffic-manager-port "${CARLA_TM_PORT:-8000}" \
-  --frames "${CARLA_FRAMES:-400}" \
-  --image-width "${CARLA_IMAGE_WIDTH:-640}" \
-  --image-height "${CARLA_IMAGE_HEIGHT:-360}" \
+  --route-config "${CARLA_ROUTE_CONFIG:-data_collection/configs/routes/town01_pilotnet_loop.json}" \
+  --image-width "${CARLA_IMAGE_WIDTH:-320}" \
+  --image-height "${CARLA_IMAGE_HEIGHT:-180}" \
+  --target-speed-kmh "${CARLA_TARGET_SPEED_KMH:-30}" \
+  --weather "${CARLA_WEATHER:-ClearNoon}" \
+  --max-seconds "${CARLA_MAX_SECONDS:-600}" \
   "$@"

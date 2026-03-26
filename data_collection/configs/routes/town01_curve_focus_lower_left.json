@@ -1,8 +1,0 @@
-{
-  "name": "town01_curve_focus_lower_left",
-  "town": "Town01",
-  "closed_loop": false,
-  "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [214, 205],
-  "description": "Lower-left perimeter curve with pure lanefollow supervision and sustained positive steering."
-}

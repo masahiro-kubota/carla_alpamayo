@@ -1,8 +1,0 @@
-{
-  "name": "town01_pilotnet_loop_ccw",
-  "town": "Town01",
-  "closed_loop": true,
-  "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [70, 181, 64, 67],
-  "description": "Counter-clockwise perimeter loop around Town01 using the same four anchor points."
-}

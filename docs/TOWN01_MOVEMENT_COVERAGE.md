@@ -1,5 +1,7 @@
 # Town01 Movement Coverage
 
+注記: この document は historical note です。ここで扱う movement route config 群と inventory builder は current minimal repo の `data_collection/` には残していません。
+
 `Town01` の next goal は [TOWN01_INTERSECTION_GOAL.md](./TOWN01_INTERSECTION_GOAL.md) のとおり、「任意交差点で valid movement を通せること」です。この document は、そのための **movement inventory と route suite の現状**をまとめたものです。
 
 ## What Was Generated
@@ -81,12 +83,13 @@ generated route suite:
 - train configs: [`data_collection/configs/routes/town01_movement_train/`](/media/masa/ssd_data/carla_alpamayo/data_collection/configs/routes/town01_movement_train)
 - eval configs: [`data_collection/configs/routes/town01_movement_eval/`](/media/masa/ssd_data/carla_alpamayo/data_collection/configs/routes/town01_movement_eval)
 
-suite runner:
+single-route evaluation example:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./evaluation/scripts/run_evaluate_town01_movement_suite.sh \
-  --checkpoint outputs/train/pilotnet_best/best.pt
+PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop \
+  --checkpoint outputs/train/pilotnet_best/best.pt \
+  --route-config data_collection/configs/routes/town01_movement_eval/town01_movement_02_left_j26_eval.json
 ```
 
 ## Interpretation
@@ -119,9 +122,9 @@ Town01 の mainline goal に対して最初に目指すのは、
 
 です。
 
-## Smoke Validation
+## Historical Suite Validation
 
-2026-03-22 に suite runner の smoke を 3 本確認した。
+2026-03-22 には、今は削除した suite runner で smoke を 3 本確認していた。
 
 - `LEFT`: `town01_movement_02_left_j26_eval`
   - aggregate summary: `outputs/evaluate_suites/town01_movement_smoke_left.json`

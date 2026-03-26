@@ -11,8 +11,8 @@
 
 ```mermaid
 flowchart LR
-  data_collection["data_collection<br/>collection entrypoints"] -->|collect_route_loop builds SceneState / calls agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
-  evaluation["evaluation<br/>evaluation entrypoints"] -->|evaluate_pilotnet_loop / scenario runner call agents| ad_stack
+  data_collection["data_collection<br/>expert collection entrypoints"] -->|collect_route_loop builds SceneState / calls agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
+  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|evaluate_pilotnet_loop calls agents| ad_stack
   evaluation -.interactive_command_drive calls runtime directly.-> learning["learning<br/>train / inference runtime"]
 
   ad_stack -->|call learned inference runtime| learning
@@ -25,9 +25,8 @@ flowchart LR
 
 現状のポイント:
 
-- `data_collection/` 全体が `ad_stack` 依存ではない
+- `data_collection/` は route-based expert collector だけを持つ
   - `collect_route_loop` は `ad_stack.agents.ExpertBasicAgent` を使う
-  - `minimal_collect` は `Traffic Manager` の autopilot を直接使う
 - `evaluation/` 全体が `ad_stack` 依存ではない
   - `evaluate_pilotnet_loop` は `ad_stack.agents.LearnedLateralAgent` を使う
   - `interactive_command_drive` は `ad_stack` を通さず `learning` runtime を直接呼ぶ
@@ -39,9 +38,8 @@ flowchart LR
 
 - `data_collection/`
   - `CARLA` world を進める
-  - route-based collector では sensor と ego 状態から `SceneState` を組み立てる
-  - route-based collector では `ad_stack` の expert agent を呼ぶ
-  - minimal collector では `Traffic Manager` autopilot を直接使う
+  - sensor と ego 状態から `SceneState` を組み立てる
+  - `ad_stack` の expert agent を呼ぶ
   - `EpisodeRecord` と画像を保存する
 - `learning/`
   - dataset, model, train code を持つ
@@ -51,7 +49,7 @@ flowchart LR
   - `BasicAgent` adapter と learned lateral agent adapter を持つ
   - 必要に応じて `learning/` の inference runtime を呼ぶ
 - `evaluation/`
-  - closed-loop evaluator と suite runner では `ad_stack` を呼ぶ
+  - closed-loop evaluator では `ad_stack` を呼ぶ
   - interactive drive では `learning` runtime を直接呼ぶ
 - `libs/`
   - route config, `CARLA` PythonAPI 接続補助, project root 解決, schema を持つ
@@ -68,15 +66,13 @@ flowchart LR
 
 実際の流れ:
 
-- これは `collect_route_loop` に当てはまる
 - `data_collection/` が `ObservationBuilder` で `SceneState` を作る
 - `ExpertBasicAgent.step(scene_state)` を呼ぶ
 - 返ってきた `VehicleCommand` を `carla.VehicleControl` に変換して適用する
-- `minimal_collect` はこの経路を通らない
 
 ### `evaluation/` -> `ad_stack/`
 
-- これは `evaluate_pilotnet_loop` と generic runner に当てはまる
+- これは `evaluate_pilotnet_loop` に当てはまる
 - `evaluation/pipelines/` の closed-loop evaluator が `SceneState` を作る
 - `LearnedLateralAgent.step(scene_state)` を呼ぶ
 - longitudinal は `ExpertBasicAgent`、lateral は learned policy で合成する

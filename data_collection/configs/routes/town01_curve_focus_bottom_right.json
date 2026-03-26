@@ -1,8 +1,0 @@
-{
-  "name": "town01_curve_focus_bottom_right",
-  "town": "Town01",
-  "closed_loop": false,
-  "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [118, 183],
-  "description": "Bottom-right clockwise perimeter curve with pure lanefollow supervision and sustained positive steering."
-}

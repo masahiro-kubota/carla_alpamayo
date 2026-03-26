@@ -1,8 +1,0 @@
-{
-  "name": "town01_right_focus_bottom",
-  "town": "Town01",
-  "closed_loop": false,
-  "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [205, 110],
-  "description": "Bottom-edge approach plus RIGHT turn into the southeast vertical corridor."
-}

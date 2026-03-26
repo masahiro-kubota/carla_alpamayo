@@ -1,5 +1,7 @@
 # Town01 High-Curvature Lanefollow Collection Plan
 
+Note: this is a historical note. The auxiliary route configs and batch scripts described here are not kept in the current minimal `data_collection/` layout.
+
 ## Why this pack exists
 
 The current `front RGB + speed + command + target-point -> steer` policy still fails because `command` switches back to `lanefollow` before some of the hardest exit curves are over. In the clean expert set, `lanefollow` with `|steer| >= 0.7` is almost absent, so the model has very little supervision for "keep curving after the junction decision is already made."

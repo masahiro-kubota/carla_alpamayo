@@ -98,19 +98,14 @@ road option counts:
 
 ## 使い方
 
-plot の再生成:
-
-```bash
-cd /media/masa/ssd_data/carla_alpamayo
-PYTHONPATH="" uv run python ./data_collection/scripts/plot_route.py
-```
-
 fixed-loop expert 収集:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./data_collection/scripts/run_collect_town01_loop.sh
+./data_collection/scripts/run_collect_town01.sh
 ```
+
+custom route を使う場合は `./data_collection/scripts/run_collect_town01.sh --route-config path/to/route.json` を使います。
 
 出力:
 
@@ -123,5 +118,4 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 - この route は `Town01` の四隅に近い spawn point を anchor にしている
 - 実際の経路は `GlobalRoutePlanner` で anchor 間を接続している
-- 逆回り route は anchor 順を逆順にすればよい
-- steering の左右バランスを取るため、学習データ収集では reverse route も使う前提にする
+- 学習データ収集の baseline は、この loop route を expert collector で繰り返し回すことに置いている

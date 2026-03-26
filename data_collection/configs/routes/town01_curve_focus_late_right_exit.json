@@ -1,8 +1,0 @@
-{
-  "name": "town01_curve_focus_late_right_exit",
-  "town": "Town01",
-  "closed_loop": false,
-  "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [170, 54],
-  "description": "Approach, RIGHT branch, and strong lanefollow exit curve near the loop's late northwest failure hotspot."
-}

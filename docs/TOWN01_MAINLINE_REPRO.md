@@ -33,12 +33,14 @@ accepted checkpoint の training summary:
 clean expert episodes の主な出どころ:
 
 - fixed loop expert: `town01_pilotnet_loop_*`
-- counter-clockwise 補助 expert: `town01_pilotnet_loop_ccw_*`
-- junction / turn 補強: `town01_right_focus_*`, `town01_straight_focus_*`, `town01_left_focus_*`
-- high-curvature `lanefollow` 補強: `town01_curve_focus_*`
-- full loop 後半 failure を潰す upper-band 補強:
-  - `data_collection/configs/routes/town01_right_focus_upper_band_mid.json`
-  - `data_collection/configs/routes/town01_right_focus_upper_band_long.json`
+- 追加の junction / curve 補強 route 群
+- full loop 後半 failure を潰す upper-band 補強 route 群
+
+補足:
+
+- accepted run 当時は固定 loop 以外の補助 route も使っていた
+- それらの route config と batch script は、現在の最小構成 repo には残していない
+- 正確な historical manifest 一覧は `outputs/train/pilotnet_branch_fs3_20260321_231852/config.json` を参照する
 
 accepted mainline に入っている correction windows:
 
@@ -95,7 +97,9 @@ export DISPLAY=:1
 
 ```bash
 cd /home/masa/carla_alpamayo
-./evaluation/scripts/run_evaluate_town01_mainline.sh
+PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop \
+  --checkpoint outputs/train/pilotnet_best/best.pt \
+  --route-config data_collection/configs/routes/town01_pilotnet_loop.json
 ```
 
 期待値:
@@ -167,25 +171,20 @@ accepted run 当時の manifest 一覧をそのまま使った exact replay wrap
 
 ```bash
 cd /home/masa/carla_alpamayo
-./evaluation/scripts/run_evaluate_town01_mainline.sh outputs/train/<train_run>/best.pt
+PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop \
+  --checkpoint outputs/train/<train_run>/best.pt \
+  --route-config data_collection/configs/routes/town01_pilotnet_loop.json
 ```
 
 ## 5. If You Need To Rebuild The Added Data
 
-今回の mainline success に直結した追加データは `upper-band` route です。
+今回の mainline success に直結した追加データは `upper-band` route でした。
 
-- route config: `data_collection/configs/routes/town01_right_focus_upper_band_mid.json`
-- route config: `data_collection/configs/routes/town01_right_focus_upper_band_long.json`
-- plot: `docs/assets/town01_junction_routes/town01_right_focus_upper_band_mid.png`
-- plot: `docs/assets/town01_junction_routes/town01_right_focus_upper_band_long.png`
+ただし、現在の最小構成 repo では、それらの補助 route config は保持していません。必要な場合は:
 
-1 本ずつ取り直す例:
-
-```bash
-cd /home/masa/carla_alpamayo
-./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_right_focus_upper_band_mid.json --seed 700 --no-record-video
-./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_right_focus_upper_band_long.json --seed 900 --no-record-video
-```
+1. `git log -- data_collection/configs/routes` で historical route config を辿る
+2. `outputs/train/pilotnet_branch_fs3_20260321_231852/config.json` の manifest 一覧と突き合わせる
+3. route config を戻した上で `./data_collection/scripts/run_collect_town01.sh --route-config ...` で再収集する
 
 correction windows を再生成したい場合:
 
@@ -199,7 +198,7 @@ correction windows を再生成したい場合:
 
 2026-03-21 から 2026-03-22 に確認したもの:
 
-- `bash -n evaluation/scripts/run_evaluate_town01_mainline.sh`
+- `PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop --help`
 - accepted checkpoint の closed-loop 再評価
   - summary: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/summary.json`
   - video: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/front_rgb.mp4`

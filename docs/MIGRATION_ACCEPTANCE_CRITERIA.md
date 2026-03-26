@@ -14,9 +14,7 @@
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-PYTHONPATH="" uv run python -m data_collection.pipelines.collect.minimal_collect --help
 PYTHONPATH="" uv run python -m data_collection.pipelines.collect.collect_route_loop --help
-PYTHONPATH="" uv run python -m data_collection.pipelines.collect.render_episode_video --help
 PYTHONPATH="" uv run python -m learning.pipelines.train.train_pilotnet --help
 PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop --help
 PYTHONPATH="" uv run python -m evaluation.pipelines.interactive_command_drive --help
@@ -35,9 +33,7 @@ PYTHONPATH="" uv run python -m compileall libs learning evaluation data_collecti
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./data_collection/scripts/run_collect_town01.sh --frames 20
-./data_collection/scripts/run_collect_town01_route.sh \
-  data_collection/configs/routes/town01_pilotnet_loop.json \
+./data_collection/scripts/run_collect_town01.sh \
   --max-seconds 15 \
   --no-record-video
 ```
@@ -46,8 +42,8 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 - `data/manifests/episodes/<episode_id>.jsonl` が生成される
 - `outputs/collect/<episode_id>/front_rgb/*.png` が生成される
-- route 収集では `outputs/collect/<episode_id>/summary.json` が生成される
-- route 収集 summary の `route_config_path` が `data_collection/configs/routes/...` を指す
+- `outputs/collect/<episode_id>/summary.json` が生成される
+- summary の `route_config_path` が `data_collection/configs/routes/...` を指す
 
 ## 3. 学習の smoke 条件
 
@@ -74,7 +70,8 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./evaluation/scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt \
+PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop \
+  --checkpoint outputs/train/<train_run>/best.pt \
   --route-config data_collection/configs/routes/town01_pilotnet_loop.json \
   --max-seconds 15 \
   --no-record-video
@@ -87,24 +84,6 @@ cd /media/masa/ssd_data/carla_alpamayo
 - summary の `route_config_path` が `data_collection/configs/routes/...` を指す
 - summary の `model_checkpoint_path` が期待した checkpoint を指す
 
-## 5. 追加で見ておく bridging 条件
-
-学習と収集の境界で壊れやすい箇所として、次を通すこと:
-
-```bash
-cd /media/masa/ssd_data/carla_alpamayo
-./evaluation/scripts/run_evaluate_town01_movement_suite.sh \
-  --checkpoint outputs/train/<train_run>/best.pt \
-  --route-dir data_collection/configs/routes/town01_movement_eval \
-  --max-routes 1 \
-  --no-record-video
-```
-
-判定:
-
-- evaluation 側 script から data_collection 側 route config を参照できる
-- 生成される summary artifact の path が repo root 基準で正しい
-
 ## 最終判定
 
 次をすべて満たせば移行完了:
@@ -113,4 +92,3 @@ cd /media/masa/ssd_data/carla_alpamayo
 2. データ収集 smoke が通る
 3. 学習 smoke が通る
 4. 評価 smoke が通る
-5. bridging 条件を最低 1 本通す

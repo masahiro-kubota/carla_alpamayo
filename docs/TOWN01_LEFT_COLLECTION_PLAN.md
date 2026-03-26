@@ -1,5 +1,7 @@
 # Town01 Left Collection Plan
 
+注記: この document は historical note です。ここで扱う補助 route config と batch script は current minimal repo の `data_collection/` には残していません。
+
 `Town01` fixed loop を完走させるために、2026-03-21 時点で不足している `LEFT` supervision を増やす計画です。  
 直前までの expert-only command 分布は `left = 600`, `straight = 2113`, `right = 1224`, `lanefollow ≈ 24098` で、左折だけが明確に不足しています。
 
@@ -47,7 +49,7 @@ cd /home/masa/carla_alpamayo
 
 ```bash
 cd /home/masa/carla_alpamayo
-./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_left_focus_south.json
+./data_collection/scripts/run_collect_town01.sh --route-config data_collection/configs/routes/town01_left_focus_south.json
 ```
 
 ## Smoke Validation

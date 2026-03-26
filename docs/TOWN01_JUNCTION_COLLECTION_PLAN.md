@@ -1,5 +1,7 @@
 # Town01 Junction Collection Plan
 
+注記: この document は historical note です。ここで扱う補助 route config と batch script は current minimal repo の `data_collection/` には残していません。
+
 `Town01` の fixed loop 失敗要因を埋めるための追加収集計画です。狙いは、`front RGB + speed + command -> steer` の junction signal を増やし、まず closed-loop `route_completion_ratio` を `0.1547` より明確に押し上げることです。
 
 ## Why
@@ -68,7 +70,7 @@
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_right_focus_se.json
+./data_collection/scripts/run_collect_town01.sh --route-config data_collection/configs/routes/town01_right_focus_se.json
 ```
 
 環境変数で同じ収集条件を固定できます。
@@ -79,7 +81,7 @@ export CARLA_IMAGE_WIDTH=320
 export CARLA_IMAGE_HEIGHT=180
 export CARLA_TARGET_SPEED_KMH=30
 export CARLA_WEATHER=ClearNoon
-./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_straight_focus_west.json
+./data_collection/scripts/run_collect_town01.sh --route-config data_collection/configs/routes/town01_straight_focus_west.json
 ```
 
 ## Smoke Validation
