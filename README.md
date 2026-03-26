@@ -10,6 +10,8 @@
 を回すための最小リポジトリです。
 
 現在の実行アーキテクチャは [docs/DIRECTORY_RELATIONSHIPS.md](docs/DIRECTORY_RELATIONSHIPS.md) にまとめています。`simulation/` は薄い CLI wrapper で、実行本体は `ad_stack.run(request)` に集約しています。
+信号遵守と overtaking を含む将来の privileged expert policy 要件は [docs/EXPERT_POLICY_REQUIREMENTS.md](docs/EXPERT_POLICY_REQUIREMENTS.md) にまとめています。
+具体的な内部設計は [docs/EXPERT_POLICY_DESIGN.md](docs/EXPERT_POLICY_DESIGN.md) にまとめています。
 
 ## 前提
 
