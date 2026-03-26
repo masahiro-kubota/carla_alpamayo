@@ -190,19 +190,21 @@ mainline 制約:
 
 最初は **1 リポジトリでよい**。分けるのは困ってから。
 
-候補構成:
+推奨構成:
 
 ```text
 carla_alpamayo/
   README.md
+  pyproject.toml
+  uv.lock
+  data/
+    manifests/
   data_collection/
     configs/
     pipelines/
     scripts/
   docs/
     PERSONAL_PROJECT_PLAN.md
-  apps/
-    search-ui/
   learning/
     libs/
     pipelines/
@@ -212,18 +214,11 @@ carla_alpamayo/
     carla_utils/
     project.py
     utils/
-  pipelines/
-    curate/
-    index/
-  data/
-    sample/
-    manifests/
   outputs/
     collect/
-    curate/
-    index/
-    train/
     evaluate/
+    evaluate_suites/
+    train/
 ```
 
 原則:
@@ -251,13 +246,12 @@ carla_alpamayo/
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
 
-mkdir -p docs apps/search-ui \
+mkdir -p docs \
   data_collection/{configs,pipelines/collect,scripts} \
   learning/{libs/ml,pipelines/{train,evaluate},scripts} \
-  pipelines/{curate,index} \
   libs/{schemas,carla_utils,utils} \
-  data/{sample,manifests} \
-  outputs/{collect,curate,index,train,evaluate}
+  data/manifests/{episodes,clips,corrections} \
+  outputs/{collect,train,evaluate,evaluate_suites}
 ```
 
 Git 管理を始めるなら:

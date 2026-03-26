@@ -17,20 +17,17 @@ data/manifests/clips/*.json
 outputs/*
 !outputs/.gitkeep
 !outputs/collect/
-!outputs/curate/
-!outputs/index/
 !outputs/train/
 !outputs/evaluate/
+!outputs/evaluate_suites/
 outputs/collect/*
 !outputs/collect/.gitkeep
-outputs/curate/*
-!outputs/curate/.gitkeep
-outputs/index/*
-!outputs/index/.gitkeep
 outputs/train/*
 !outputs/train/.gitkeep
 outputs/evaluate/*
 !outputs/evaluate/.gitkeep
+outputs/evaluate_suites/*
+!outputs/evaluate_suites/.gitkeep
 
 # Logs
 *.log

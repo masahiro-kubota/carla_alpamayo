@@ -20,6 +20,8 @@
 今回の環境では、本体は容量都合で `/media/masa/ssd_data/sim/carla-0.9.16` に置き、`/home/masa/sim/carla-0.9.16` は symlink にしています。
 Python ライブラリは `uv` で管理します。lockfile は `uv.lock`、仮想環境は `uv sync` が作る `.venv` を使います。
 
+レイアウト再編後の受け入れ条件と smoke test 手順は [docs/MIGRATION_ACCEPTANCE_CRITERIA.md](docs/MIGRATION_ACCEPTANCE_CRITERIA.md) にまとめています。
+
 ## クイックスタート
 
 1. 依存を同期する
@@ -148,6 +150,9 @@ export DISPLAY=:1
 - 画像: `outputs/collect/<episode_id>/front_rgb/*.png`
 - fixed-loop summary: `outputs/collect/<episode_id>/summary.json`
 - fixed-loop video: `outputs/collect/<episode_id>/front_rgb.mp4`
+- train artifacts: `outputs/train/<run_id>/{config.json,summary.json,best.pt}`
+- evaluate artifacts: `outputs/evaluate/<episode_id>/{summary.json,manifest.jsonl}`
+- evaluate suite summary: `outputs/evaluate_suites/<suite_name>.json`
 
 2026-03-21 の確認結果:
 
@@ -223,12 +228,17 @@ accepted run 当時の manifest 一覧をそのまま replay したいときは 
 ```text
 carla_alpamayo/
   README.md
+  pyproject.toml
+  uv.lock
+  data/
+    manifests/
+      corrections/
+      episodes/
   data_collection/
     configs/
     pipelines/
     scripts/
   docs/
-    PERSONAL_PROJECT_PLAN.md
   learning/
     libs/
     pipelines/
@@ -238,10 +248,9 @@ carla_alpamayo/
     project.py
     schemas/
     utils/
-  pipelines/
-    curate/
-    index/
-  data/
-    manifests/
   outputs/
+    collect/
+    evaluate/
+    evaluate_suites/
+    train/
 ```
