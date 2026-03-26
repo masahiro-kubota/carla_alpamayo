@@ -7,11 +7,11 @@ from math import hypot
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from libs.project import PROJECT_ROOT
+
 from .python_api import ensure_carla_agents_on_path
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ROUTE_CONFIG_PATH = PROJECT_ROOT / "configs" / "routes" / "town01_pilotnet_loop.json"
+DEFAULT_ROUTE_CONFIG_PATH = PROJECT_ROOT / "data_collection" / "configs" / "routes" / "town01_pilotnet_loop.json"
 
 if TYPE_CHECKING:
     import carla

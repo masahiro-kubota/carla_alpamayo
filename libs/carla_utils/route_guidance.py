@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import cos, radians, sin
-from pathlib import Path
 from typing import Iterable
 
-from .routes import PlannedRoute, build_planned_route, load_route_config
+from libs.project import PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from .routes import PlannedRoute, build_planned_route, load_route_config
 
 
 @dataclass(slots=True)
@@ -20,7 +19,7 @@ class RouteGeometry:
 
 
 def route_config_path_for_route_id(route_id: str) -> Path:
-    return PROJECT_ROOT / "configs" / "routes" / f"{route_id}.json"
+    return PROJECT_ROOT / "data_collection" / "configs" / "routes" / f"{route_id}.json"
 
 
 def route_geometry_from_planned_route(planned_route: PlannedRoute) -> RouteGeometry:

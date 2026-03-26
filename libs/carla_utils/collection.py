@@ -3,13 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import math
-from pathlib import Path
 import queue
 import random
 from typing import TYPE_CHECKING, Iterable
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from libs.project import PROJECT_ROOT, relative_to_project
 
 if TYPE_CHECKING:
     import carla
@@ -88,10 +86,6 @@ def wait_for_image(
 def speed_mps(vehicle: "carla.Vehicle") -> float:
     velocity = vehicle.get_velocity()
     return math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
-
-
-def relative_to_project(path: Path) -> str:
-    return str(path.relative_to(PROJECT_ROOT))
 
 
 def attach_sensor(
