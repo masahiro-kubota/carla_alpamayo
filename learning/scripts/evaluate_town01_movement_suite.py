@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import json
 from pathlib import Path
 import subprocess
 import sys
 from typing import Any
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from libs.project import build_versioned_run_id, ensure_clean_git_worktree_for_evaluation, relative_to_project
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,14 +35,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_output_path(explicit_path: str | None) -> Path:
+def build_output_path(explicit_path: str | None, *, git_commit_id: str) -> Path:
     if explicit_path:
         output_path = Path(explicit_path)
         if not output_path.is_absolute():
             output_path = PROJECT_ROOT / output_path
         return output_path
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return PROJECT_ROOT / "outputs" / "evaluate_suites" / f"town01_movement_eval_{timestamp}.json"
+    run_id = build_versioned_run_id("town01_movement_eval", commit_id=git_commit_id)
+    return PROJECT_ROOT / "outputs" / "evaluate_suites" / f"{run_id}.json"
 
 
 def load_route_paths(route_dir: Path, route_glob: str, max_routes: int | None) -> list[Path]:
@@ -52,7 +54,7 @@ def load_route_paths(route_dir: Path, route_glob: str, max_routes: int | None) -
 
 def display_path(path: Path) -> str:
     try:
-        return str(path.relative_to(PROJECT_ROOT))
+        return relative_to_project(path)
     except ValueError:
         return str(path)
 
@@ -94,11 +96,13 @@ def build_aggregate(
     checkpoint_path: Path,
     route_dir: Path,
     args: argparse.Namespace,
+    git_commit_id: str,
     results: list[dict[str, Any]],
     success_count: int,
     route_count: int,
 ) -> dict[str, Any]:
     return {
+        "git_commit_id": git_commit_id,
         "checkpoint_path": display_path(checkpoint_path),
         "route_dir": display_path(route_dir),
         "route_glob": args.route_glob,
@@ -120,13 +124,14 @@ def write_aggregate(output_path: Path, aggregate: dict[str, Any]) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    git_commit_id = ensure_clean_git_worktree_for_evaluation()
     checkpoint_path = Path(args.checkpoint).resolve()
     route_dir = Path(args.route_dir).resolve()
     route_paths = load_route_paths(route_dir, args.route_glob, args.max_routes)
     if not route_paths:
         raise SystemExit(f"No route configs matched: {route_dir} / {args.route_glob}")
 
-    output_path = build_output_path(args.summary_output)
+    output_path = build_output_path(args.summary_output, git_commit_id=git_commit_id)
     results: list[dict[str, Any]] = []
     success_count = 0
     for route_path in route_paths:
@@ -150,6 +155,7 @@ def main() -> None:
             checkpoint_path=checkpoint_path,
             route_dir=route_dir,
             args=args,
+            git_commit_id=git_commit_id,
             results=results,
             success_count=success_count,
             route_count=len(route_paths),
@@ -160,6 +166,7 @@ def main() -> None:
         checkpoint_path=checkpoint_path,
         route_dir=route_dir,
         args=args,
+        git_commit_id=git_commit_id,
         results=results,
         success_count=success_count,
         route_count=len(route_paths),

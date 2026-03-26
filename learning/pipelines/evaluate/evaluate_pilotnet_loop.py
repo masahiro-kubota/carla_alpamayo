@@ -26,7 +26,6 @@ from libs.carla_utils import (
     DEFAULT_ROUTE_CONFIG_PATH,
     FrameEventTracker,
     attach_sensor,
-    build_episode_id,
     build_planned_route,
     compute_local_target_point,
     destroy_actors,
@@ -38,7 +37,7 @@ from libs.carla_utils import (
     speed_mps,
     wait_for_image,
 )
-from libs.project import PROJECT_ROOT
+from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree_for_evaluation
 from libs.schemas import EpisodeRecord, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 from learning.libs.ml import load_pilotnet_runtime, select_device
@@ -152,6 +151,7 @@ def main() -> None:
             "Run 'uv sync' after confirming the CARLA wheel path in pyproject.toml."
         )
 
+    git_commit_id = ensure_clean_git_worktree_for_evaluation()
     device = select_device(args.device)
     checkpoint_path = Path(args.checkpoint).resolve()
     runtime = load_pilotnet_runtime(checkpoint_path, device)
@@ -167,7 +167,7 @@ def main() -> None:
     world, original_settings = setup_world(client, route_config.town, args.fixed_delta_seconds)
     world.set_weather(resolve_weather(carla, args.weather))
 
-    episode_id = build_episode_id(f"{route_config.name}_pilotnet_eval")
+    episode_id = build_versioned_run_id(f"{route_config.name}_pilotnet_eval", commit_id=git_commit_id)
     episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
     image_dir = episode_dir / "front_rgb"
     manifest_path = PROJECT_ROOT / "outputs" / "evaluate" / episode_id / "manifest.jsonl"
@@ -433,6 +433,7 @@ def main() -> None:
         "e2e_scope": "front_rgb_plus_speed_to_steer",
         "model_checkpoint_path": relative_to_project(checkpoint_path),
         "model_name": runtime.checkpoint.get("model_name"),
+        "git_commit_id": git_commit_id,
         "steer_smoothing": args.steer_smoothing,
         "max_steer_delta": args.max_steer_delta,
         "route_name": route_config.name,

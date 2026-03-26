@@ -107,6 +107,8 @@ cd /media/masa/ssd_data/carla_alpamayo
 ./learning/scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt
 ```
 
+評価は `git diff` が空の clean worktree でのみ実行できます。出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` の形で、実行時刻と commit id を含む一意なディレクトリ名になります。
+
 8. 学習済み steer policy を手動 command で動かす
 
 ```bash
