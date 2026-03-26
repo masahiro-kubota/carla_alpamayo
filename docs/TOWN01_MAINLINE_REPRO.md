@@ -74,7 +74,7 @@ full DAgger ではない理由:
 3. failure 直前の短い window を `data/manifests/corrections/*.jsonl` として切り出す
 4. clean expert episodes とその correction windows をまとめて再学習する
 
-`expert_steer` は、learned-policy 評価中も `BasicAgent` を動かしているので、その lateral output をラベルとして保存しています。コード上は [learning/pipelines/evaluate/evaluate_pilotnet_loop.py](../learning/pipelines/evaluate/evaluate_pilotnet_loop.py) の `EpisodeRecord(... expert_steer=longitudinal_control.steer, ...)` です。schema 側は [libs/schemas/episode_schema.py](../libs/schemas/episode_schema.py) に `expert_steer` field があります。
+`expert_steer` は、learned-policy 評価中も `BasicAgent` を動かしているので、その lateral output をラベルとして保存しています。コード上は [evaluation/pipelines/evaluate_pilotnet_loop.py](../evaluation/pipelines/evaluate_pilotnet_loop.py) の `EpisodeRecord(... expert_steer=longitudinal_control.steer, ...)` です。schema 側は [libs/schemas/episode_schema.py](../libs/schemas/episode_schema.py) に `expert_steer` field があります。
 
 つまり、表現としては `DAgger-like`, ただし実装としては `offline correction replay` と呼ぶのが正確です。
 
@@ -95,7 +95,7 @@ export DISPLAY=:1
 
 ```bash
 cd /home/masa/carla_alpamayo
-./learning/scripts/run_evaluate_town01_mainline.sh
+./evaluation/scripts/run_evaluate_town01_mainline.sh
 ```
 
 期待値:
@@ -177,7 +177,7 @@ cd /home/masa/carla_alpamayo
 
 ```bash
 cd /home/masa/carla_alpamayo
-./learning/scripts/run_evaluate_town01_mainline.sh outputs/train/<train_run>/best.pt
+./evaluation/scripts/run_evaluate_town01_mainline.sh outputs/train/<train_run>/best.pt
 ```
 
 ## 5. If You Need To Rebuild The Added Data
@@ -211,7 +211,7 @@ correction windows を再生成したい場合:
 
 - `bash -n learning/scripts/run_train_town01_mainline.sh`
 - `bash -n learning/scripts/run_train_town01_mainline_exact.sh`
-- `bash -n learning/scripts/run_evaluate_town01_mainline.sh`
+- `bash -n evaluation/scripts/run_evaluate_town01_mainline.sh`
 - `./learning/scripts/run_train_town01_mainline.sh --help`
 - `./learning/scripts/run_train_town01_mainline_exact.sh --help`
 - accepted checkpoint の closed-loop 再評価

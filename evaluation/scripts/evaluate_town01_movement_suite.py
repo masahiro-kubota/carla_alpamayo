@@ -68,7 +68,7 @@ def run_single_route(
     command = [
         sys.executable,
         "-m",
-        "learning.pipelines.evaluate.evaluate_pilotnet_loop",
+        "evaluation.pipelines.evaluate_pilotnet_loop",
         "--checkpoint",
         str(checkpoint_path),
         "--route-config",

@@ -30,10 +30,10 @@ from libs.carla_utils import (
     speed_mps,
     wait_for_image,
 )
+from evaluation.pipelines.common import carla_image_to_rgb_array, resolve_weather, smooth_steer
 from learning.libs.ml import load_pilotnet_runtime, select_device
-from learning.pipelines.evaluate.evaluate_pilotnet_loop import resolve_weather, smooth_steer
 DEFAULT_CHECKPOINT_PATH = (
-    PROJECT_ROOT / "outputs" / "train" / "pilotnet_branch_fs3_movementall20_hardx3_corr1_20260322_1920" / "best.pt"
+    PROJECT_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
 )
 DEFAULT_TOWN = "Town01"
 DEFAULT_SPAWN_INDEX = 70
@@ -181,13 +181,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--spectator-follow-distance-m", type=float, default=7.0)
     parser.add_argument("--spectator-height-m", type=float, default=3.0)
     return parser
-
-
-def carla_image_to_rgb_array(image: "carla.Image") -> np.ndarray:
-    array = np.frombuffer(image.raw_data, dtype=np.uint8)
-    array = array.reshape((image.height, image.width, 4))
-    return array[:, :, :3][:, :, ::-1].copy()
-
 
 def update_spectator(
     spectator: "carla.Actor",

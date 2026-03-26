@@ -100,24 +100,35 @@ PILOTNET_COMMAND_CONDITIONING=embedding ./learning/scripts/run_train_pilotnet.sh
 
 episode 単位 split を使うときは `PILOTNET_SPLIT_MODE=episode` を付けます。複数 dataset を混ぜるときは `--manifest-glob` を複数回渡せます。
 
-7. 学習済み steer policy を fixed loop で評価する
+7. 学習済み steer policy を recorded eval data で offline 評価する
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./learning/scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt
+./learning/scripts/run_evaluate_pilotnet_dataset.sh \
+  --checkpoint outputs/train/<train_run>/best.pt \
+  --manifest-glob 'data/manifests/episodes/*.jsonl'
+```
+
+これは `CARLA` closed-loop ではなく、保存済み manifest に対して `MAE / RMSE` を見る offline 評価です。
+
+8. 学習済み steer policy を fixed loop で closed-loop 評価する
+
+```bash
+cd /media/masa/ssd_data/carla_alpamayo
+./evaluation/scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt
 ```
 
 評価は `git diff` が空の clean worktree でのみ実行できます。出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` の形で、実行時刻と commit id を含む一意なディレクトリ名になります。
 
-8. 学習済み steer policy を手動 command で動かす
+9. 学習済み steer policy を手動 command で動かす
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
 export DISPLAY=:1
-./learning/scripts/run_interactive_town01_command_drive.sh
+./evaluation/scripts/run_interactive_town01_command_drive.sh
 ```
 
-既定では `outputs/train/pilotnet_branch_fs3_movementall20_hardx3_corr1_20260322_1920/best.pt` を使います。操作は terminal 上で `w=lanefollow`, `a=left`, `s=straight`, `d=right`, `q=quit` です。command は切り替えるまで保持されます。`DISPLAY` があると front camera の live preview window も出ます。既定の preview は `2x` 拡大で、さらに大きくしたいときは `--preview-scale 3` のように指定できます。
+既定では `outputs/train/pilotnet_best/best.pt` を使います。操作は terminal 上で `w=lanefollow`, `a=left`, `s=straight`, `d=right`, `q=quit` です。command は切り替えるまで保持されます。`DISPLAY` があると front camera の live preview window も出ます。既定の preview は `2x` 拡大で、さらに大きくしたいときは `--preview-scale 3` のように指定できます。
 
 重要:
 
@@ -143,9 +154,13 @@ export DISPLAY=:1
   - 既存 episode の PNG 列から MP4 を再生成する
 - `learning.pipelines.train.train_pilotnet`
   - `front RGB + speed (+ command) -> steer` の `PilotNet風` モデルを学習する
-- `learning.pipelines.evaluate.evaluate_pilotnet_loop`
+- `learning.pipelines.evaluate.evaluate_pilotnet_dataset`
+  - saved manifest を使って offline に `MAE / RMSE` を評価する
+- `evaluation.pipelines.evaluate_pilotnet_loop`
   - learned steer を fixed loop で closed-loop 評価する
   - `command` 条件付き checkpoint もそのまま評価できる
+- `evaluation.pipelines.interactive_command_drive`
+  - learned steer を manual command と一緒に `CARLA` 上で試す
 
 ## 出力先
 
@@ -154,6 +169,7 @@ export DISPLAY=:1
 - fixed-loop summary: `outputs/collect/<episode_id>/summary.json`
 - fixed-loop video: `outputs/collect/<episode_id>/front_rgb.mp4`
 - train artifacts: `outputs/train/<run_id>/{config.json,summary.json,best.pt}`
+- offline eval summary: 任意の `--summary-output`
 - evaluate artifacts: `outputs/evaluate/<episode_id>/{summary.json,manifest.jsonl}`
 - evaluate suite summary: `outputs/evaluate_suites/<suite_name>.json`
 
@@ -184,7 +200,7 @@ export DISPLAY=:1
 
 fixed loop は baseline として維持しますが、次の main goal は [docs/TOWN01_INTERSECTION_GOAL.md](docs/TOWN01_INTERSECTION_GOAL.md) に切り替えています。つまり、今後の Town01 mainline は「特定 loop を通す」ではなく、「Town01 の任意交差点で valid movement を command 付きで通せるか」を基準に見ます。
 movement inventory と生成済み route suite は [docs/TOWN01_MOVEMENT_COVERAGE.md](docs/TOWN01_MOVEMENT_COVERAGE.md) にまとめています。
-eval route suite を checkpoint に流すときは `./learning/scripts/run_evaluate_town01_movement_suite.sh` を使います。
+eval route suite を checkpoint に流すときは `./evaluation/scripts/run_evaluate_town01_movement_suite.sh` を使います。
 
 ## Camera E2E
 
@@ -200,7 +216,7 @@ accepted run 当時の manifest 一覧をそのまま replay したいときは 
 - command-conditioned retry は `route_completion_ratio = 0.0797`, `41.5 s`, `collision`
 - `target-point` を足した route-conditioned 実験では完走できたが、これは mainline には採用しない
 - accepted mainline は `frame_stack=3` の `front RGB + speed + command -> steer`
-- accepted checkpoint は `outputs/train/pilotnet_branch_fs3_20260321_231852/best.pt`
+- 現在保持している baseline checkpoint は `outputs/train/pilotnet_best/best.pt`
 - fixed loop の成功 run は `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_232707/summary.json`
 - その run は `route_completion_ratio = 0.9991`, `collision_count = 0`, `elapsed_seconds = 507.95`, `video_path` あり
 
@@ -260,6 +276,8 @@ carla_alpamayo/
     pipelines/
     scripts/
   evaluation/
+    pipelines/
+    scripts/
     metrics/
     reports/
     runners/

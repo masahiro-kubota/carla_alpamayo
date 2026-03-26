@@ -19,6 +19,6 @@ fi
 CHECKPOINT="$1"
 shift
 
-PYTHONPATH="" uv run python -m learning.pipelines.evaluate.evaluate_pilotnet_loop \
+PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop \
   --checkpoint "${CHECKPOINT}" \
   "$@"

@@ -6,4 +6,4 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
 cd "${REPO_ROOT}"
 
-PYTHONPATH="" uv run python -m learning.pipelines.evaluate.interactive_command_drive "$@"
+PYTHONPATH="" uv run python ./evaluation/scripts/evaluate_town01_movement_suite.py "$@"

@@ -12,8 +12,8 @@
 ```mermaid
 flowchart LR
   data_collection["data_collection<br/>expert collection / replay"] -->|build SceneState / call agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
-  learning["learning<br/>train / inference runtime / closed-loop eval"] -->|closed-loop eval uses agents| ad_stack
-  evaluation["evaluation<br/>scenario runner / metrics scaffold"] -->|call agents| ad_stack
+  evaluation["evaluation<br/>closed-loop sim eval / interactive drive / suite runner"] -->|build SceneState / call agents| ad_stack
+  learning["learning<br/>train / offline eval / inference runtime"]
 
   ad_stack -->|call learned inference runtime| learning
 
@@ -26,10 +26,10 @@ flowchart LR
 現状のポイント:
 
 - `data_collection/` の fixed-route expert 収集は `ad_stack.agents.ExpertBasicAgent` を使う
-- `learning/` の closed-loop 評価は `ad_stack.agents.LearnedLateralAgent` を使う
+- `evaluation/` の closed-loop 評価は `ad_stack.agents.LearnedLateralAgent` を使う
 - `ad_stack/` は learned lateral policy の推論時に `learning/` の inference runtime を呼ぶ
-- `learning/` は offline train code と inference runtime を持つが、online な command 生成自体は `ad_stack/` 側で行う
-- `evaluation/` は generic な scenario runner の置き場だが、現状の main flow は主に `learning/pipelines/evaluate/` にある
+- `learning/` は offline train code, inference runtime, recorded-manifest 用 evaluator を持つ
+- `evaluation/` は `CARLA` closed-loop の main flow を持つ
 
 ## 2. 現在の責務分担
 
@@ -41,13 +41,13 @@ flowchart LR
 - `learning/`
   - dataset, model, train code を持つ
   - checkpoint load / preprocess / infer の runtime を持つ
-  - learned policy の closed-loop 評価入口を持つ
+  - recorded manifest に対する offline evaluator を持つ
 - `ad_stack/`
   - `SceneState -> ControlDecision` の interface を提供する
   - `BasicAgent` adapter と learned lateral agent adapter を持つ
   - 必要に応じて `learning/` の inference runtime を呼ぶ
 - `evaluation/`
-  - scenario runner, metrics, report の共通化用
+  - closed-loop evaluator, suite runner, interactive drive を持つ
 - `libs/`
   - route config, `CARLA` PythonAPI 接続補助, project root 解決, schema を持つ
 
@@ -67,9 +67,9 @@ flowchart LR
 - `ExpertBasicAgent.step(scene_state)` を呼ぶ
 - 返ってきた `VehicleCommand` を `carla.VehicleControl` に変換して適用する
 
-### `learning/` -> `ad_stack/`
+### `evaluation/` -> `ad_stack/`
 
-- `learning/pipelines/evaluate/` の closed-loop evaluator が `SceneState` を作る
+- `evaluation/pipelines/` の closed-loop evaluator が `SceneState` を作る
 - `LearnedLateralAgent.step(scene_state)` を呼ぶ
 - longitudinal は `ExpertBasicAgent`、lateral は learned policy で合成する
 
@@ -101,6 +101,7 @@ flowchart LR
 ### `learning` が提供するもの
 
 - model 定義
+- offline dataset evaluator
 - checkpoint load / preprocess / infer の runtime
 - `learning.libs.ml.PilotNetInferenceRuntime`
 

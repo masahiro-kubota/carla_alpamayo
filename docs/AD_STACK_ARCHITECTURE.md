@@ -14,11 +14,11 @@
 - `scenarios/`
   - route, NPC profile, 交通セットアップ, eval suite 定義
 - `evaluation/`
-  - scenario runner, metrics, suite summary
+  - closed-loop simulator evaluation, interactive drive, suite summary
 - `data_collection/`
   - expert や simulator を使った収集
 - `learning/`
-  - dataset, train, inference
+  - dataset, train, offline eval, inference
 - `libs/`
   - CARLA 接続や schema などの共通部品
 

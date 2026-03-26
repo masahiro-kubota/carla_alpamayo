@@ -18,9 +18,10 @@ PYTHONPATH="" uv run python -m data_collection.pipelines.collect.minimal_collect
 PYTHONPATH="" uv run python -m data_collection.pipelines.collect.collect_route_loop --help
 PYTHONPATH="" uv run python -m data_collection.pipelines.collect.render_episode_video --help
 PYTHONPATH="" uv run python -m learning.pipelines.train.train_pilotnet --help
-PYTHONPATH="" uv run python -m learning.pipelines.evaluate.evaluate_pilotnet_loop --help
-PYTHONPATH="" uv run python -m learning.pipelines.evaluate.interactive_command_drive --help
-PYTHONPATH="" uv run python -m compileall libs learning data_collection
+PYTHONPATH="" uv run python -m learning.pipelines.evaluate.evaluate_pilotnet_dataset --help
+PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop --help
+PYTHONPATH="" uv run python -m evaluation.pipelines.interactive_command_drive --help
+PYTHONPATH="" uv run python -m compileall libs learning evaluation data_collection
 ```
 
 判定:
@@ -74,7 +75,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./learning/scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt \
+./evaluation/scripts/run_evaluate_pilotnet_loop.sh outputs/train/<train_run>/best.pt \
   --route-config data_collection/configs/routes/town01_pilotnet_loop.json \
   --max-seconds 15 \
   --no-record-video
@@ -93,7 +94,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./learning/scripts/run_evaluate_town01_movement_suite.sh \
+./evaluation/scripts/run_evaluate_town01_movement_suite.sh \
   --checkpoint outputs/train/<train_run>/best.pt \
   --route-dir data_collection/configs/routes/town01_movement_eval \
   --max-routes 1 \
@@ -110,7 +111,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 判定:
 
-- learning 側 script から data_collection 側 route config を参照できる
+- evaluation 側 script から data_collection 側 route config を参照できる
 - 生成される summary / correction artifact の path が repo root 基準で正しい
 
 ## 最終判定

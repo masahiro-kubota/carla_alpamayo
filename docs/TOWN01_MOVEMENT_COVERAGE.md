@@ -85,8 +85,8 @@ suite runner:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./learning/scripts/run_evaluate_town01_movement_suite.sh \
-  --checkpoint outputs/train/pilotnet_branch_fs3_20260321_231852/best.pt
+./evaluation/scripts/run_evaluate_town01_movement_suite.sh \
+  --checkpoint outputs/train/pilotnet_best/best.pt
 ```
 
 ## Interpretation
