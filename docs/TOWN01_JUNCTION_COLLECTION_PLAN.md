@@ -68,7 +68,7 @@
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./scripts/run_collect_town01_route.sh configs/routes/town01_right_focus_se.json
+./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_right_focus_se.json
 ```
 
 環境変数で同じ収集条件を固定できます。
@@ -79,7 +79,7 @@ export CARLA_IMAGE_WIDTH=320
 export CARLA_IMAGE_HEIGHT=180
 export CARLA_TARGET_SPEED_KMH=30
 export CARLA_WEATHER=ClearNoon
-./scripts/run_collect_town01_route.sh configs/routes/town01_straight_focus_west.json
+./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_straight_focus_west.json
 ```
 
 ## Smoke Validation

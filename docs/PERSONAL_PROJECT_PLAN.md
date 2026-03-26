@@ -105,7 +105,7 @@
 Town01 の最初の閉ループ基準はさらに絞る:
 
 - map は `Town01`
-- route は固定ループ `configs/routes/town01_pilotnet_loop.json`
+- route は固定ループ `data_collection/configs/routes/town01_pilotnet_loop.json`
 - planner が route intent と longitudinal を持つ
 - 学習対象はまず `front RGB + speed -> steer`
 - `route_completion_ratio >= 0.99`, `collision == 0`, `max_stationary_seconds < 10`, `distance_to_goal_m <= 10` を満たしたら成功
@@ -195,22 +195,26 @@ mainline 制約:
 ```text
 carla_alpamayo/
   README.md
+  data_collection/
+    configs/
+    pipelines/
+    scripts/
   docs/
     PERSONAL_PROJECT_PLAN.md
-  configs/
   apps/
     search-ui/
-  pipelines/
-    collect/
-    curate/
-    index/
-    train/
-    evaluate/
+  learning/
+    libs/
+    pipelines/
+    scripts/
   libs/
     schemas/
     carla_utils/
+    project.py
     utils/
-  scripts/
+  pipelines/
+    curate/
+    index/
   data/
     sample/
     manifests/
@@ -237,9 +241,9 @@ carla_alpamayo/
 
 1. `~/sim/carla-0.9.16` に `CARLA` 本体を入れる
 2. `carla_alpamayo` にディレクトリ骨組みを作る
-3. `pipelines/collect/` に最小のデータ収集コードを置く
+3. `data_collection/pipelines/collect/` に最小のデータ収集コードを置く
 4. `libs/schemas/` にログ schema を置く
-5. `scripts/` に起動補助スクリプトを置く
+5. `data_collection/scripts/` と `learning/scripts/` に起動補助スクリプトを置く
 6. 最初の収集対象を `Town01` か `Town03` に固定する
 
 最初の骨組みを作るコマンド例:
@@ -247,10 +251,11 @@ carla_alpamayo/
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
 
-mkdir -p docs configs apps/search-ui \
-  pipelines/{collect,curate,index,train,evaluate} \
+mkdir -p docs apps/search-ui \
+  data_collection/{configs,pipelines/collect,scripts} \
+  learning/{libs/ml,pipelines/{train,evaluate},scripts} \
+  pipelines/{curate,index} \
   libs/{schemas,carla_utils,utils} \
-  scripts \
   data/{sample,manifests} \
   outputs/{collect,curate,index,train,evaluate}
 ```
@@ -281,7 +286,9 @@ source .venv/bin/activate
 
 - 企画メモは `docs/PERSONAL_PROJECT_PLAN.md`
 - ルートの `README.md` はセットアップと実行手順を書く場所
-- 実装は `pipelines/` と `libs/` に置く
+- 収集の実装は `data_collection/` に置く
+- 学習と評価の実装は `learning/` に置く
+- 共通ユーティリティは `libs/` に置く
 
 ## CARLA を選ぶ理由
 

@@ -19,8 +19,8 @@
     "RIGHT": 15,
     "STRAIGHT": 18
   },
-  "train_config_dir": "configs/routes/town01_movement_train",
-  "eval_config_dir": "configs/routes/town01_movement_eval",
+  "train_config_dir": "data_collection/configs/routes/town01_movement_train",
+  "eval_config_dir": "data_collection/configs/routes/town01_movement_eval",
   "movements": [
     {
       "movement_key": "LEFT|26|336.9|2.2|46|-1|16|-1",

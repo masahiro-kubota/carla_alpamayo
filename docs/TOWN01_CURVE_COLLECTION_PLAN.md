@@ -23,7 +23,7 @@ This pack targets those missing scenes directly. It does not simplify the evalua
 - Use the existing expert collector with `BasicAgent`.
 - Keep the same low-resolution setup: `320x180`, `30 km/h`, `ClearNoon`.
 - Collect repeated short runs instead of only one full loop, because the missing distribution is local and rare.
-- Default batch size: `5` repetitions per route via [run_collect_town01_curve_pack.sh](/home/masa/carla_alpamayo/scripts/run_collect_town01_curve_pack.sh).
+- Default batch size: `5` repetitions per route via [run_collect_town01_curve_pack.sh](/home/masa/carla_alpamayo/data_collection/scripts/run_collect_town01_curve_pack.sh).
 
 ## Success criterion for this pack
 

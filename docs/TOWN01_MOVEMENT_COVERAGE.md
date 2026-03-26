@@ -8,15 +8,15 @@ inventory build:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./scripts/run_build_town01_movement_inventory.sh
+./data_collection/scripts/run_build_town01_movement_inventory.sh
 ```
 
 この処理で生成されるもの:
 
 - inventory JSON: `docs/assets/town01_movement_inventory.json`
 - inventory plot: `docs/assets/town01_movement_inventory.png`
-- recommended train routes: `configs/routes/town01_movement_train/*.json`
-- recommended eval routes: `configs/routes/town01_movement_eval/*.json`
+- recommended train routes: `data_collection/configs/routes/town01_movement_train/*.json`
+- recommended eval routes: `data_collection/configs/routes/town01_movement_eval/*.json`
 
 ## Inventory Rule
 
@@ -78,14 +78,14 @@ coverage gaps:
 
 generated route suite:
 
-- train configs: [`configs/routes/town01_movement_train/`](/media/masa/ssd_data/carla_alpamayo/configs/routes/town01_movement_train)
-- eval configs: [`configs/routes/town01_movement_eval/`](/media/masa/ssd_data/carla_alpamayo/configs/routes/town01_movement_eval)
+- train configs: [`data_collection/configs/routes/town01_movement_train/`](/media/masa/ssd_data/carla_alpamayo/data_collection/configs/routes/town01_movement_train)
+- eval configs: [`data_collection/configs/routes/town01_movement_eval/`](/media/masa/ssd_data/carla_alpamayo/data_collection/configs/routes/town01_movement_eval)
 
 suite runner:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./scripts/run_evaluate_town01_movement_suite.sh \
+./learning/scripts/run_evaluate_town01_movement_suite.sh \
   --checkpoint outputs/train/pilotnet_branch_fs3_20260321_231852/best.pt
 ```
 

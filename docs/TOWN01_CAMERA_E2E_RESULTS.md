@@ -7,7 +7,7 @@
 - task: `front RGB + speed (+ optional command) -> steer`
 - route intent: planner が保持
 - longitudinal: `BasicAgent` / PID
-- route: `configs/routes/town01_pilotnet_loop.json`
+- route: `data_collection/configs/routes/town01_pilotnet_loop.json`
 - weather: `ClearNoon`
 
 重要:

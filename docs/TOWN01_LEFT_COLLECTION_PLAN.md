@@ -40,14 +40,14 @@
 
 ```bash
 cd /home/masa/carla_alpamayo
-./scripts/run_collect_town01_left_pack.sh
+./data_collection/scripts/run_collect_town01_left_pack.sh
 ```
 
 1 本ずつ回す場合:
 
 ```bash
 cd /home/masa/carla_alpamayo
-./scripts/run_collect_town01_route.sh configs/routes/town01_left_focus_south.json
+./data_collection/scripts/run_collect_town01_route.sh data_collection/configs/routes/town01_left_focus_south.json
 ```
 
 ## Smoke Validation

@@ -17,7 +17,7 @@
 最初のベースライン成功条件は「fixed-loop route を planner 付き closed-loop で 1 周完走し、その expert 走行を学習データとして再現対象にできること」。
 
 - map: `Town01`
-- route: `configs/routes/town01_pilotnet_loop.json`
+- route: `data_collection/configs/routes/town01_pilotnet_loop.json`
 - lateral model target: `front RGB + speed -> steer`
 - longitudinal control: planner / PID 側が担当
 - weather: `ClearNoon`
@@ -58,7 +58,7 @@
 
 ## Route File
 
-- `configs/routes/town01_pilotnet_loop.json`
+- `data_collection/configs/routes/town01_pilotnet_loop.json`
 
 ## Plot
 
@@ -102,14 +102,14 @@ plot の再生成:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-PYTHONPATH="" uv run python ./scripts/plot_route.py
+PYTHONPATH="" uv run python ./data_collection/scripts/plot_route.py
 ```
 
 fixed-loop expert 収集:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
-./scripts/run_collect_town01_loop.sh
+./data_collection/scripts/run_collect_town01_loop.sh
 ```
 
 出力:
