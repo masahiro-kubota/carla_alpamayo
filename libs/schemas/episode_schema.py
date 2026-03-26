@@ -32,6 +32,12 @@ class EpisodeRecord:
     expert_steer: float | None = None
     route_target_x: float | None = None
     route_target_y: float | None = None
+    planner_state: str | None = None
+    traffic_light_state: str | None = None
+    lead_vehicle_distance_m: float | None = None
+    overtake_state: str | None = None
+    target_lane_id: str | None = None
+    min_ttc: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

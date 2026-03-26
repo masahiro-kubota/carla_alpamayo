@@ -46,6 +46,41 @@ class RouteLoopScenarioSpec:
     max_stop_seconds: float = 10.0
     stationary_speed_threshold_mps: float = 0.5
     max_seconds: float = 600.0
+    traffic_setup_path: Path | None = None
+
+
+@dataclass(slots=True)
+class NPCProfileSpec:
+    name: str
+    default_target_speed_kmh: float = 20.0
+    speed_jitter_kmh: float = 0.0
+    enable_autopilot: bool = True
+
+
+@dataclass(slots=True)
+class NPCVehicleSpec:
+    spawn_index: int
+    npc_profile_id: str | None = None
+    target_speed_kmh: float | None = None
+    lane_behavior: str = "keep_lane"
+    vehicle_filter: str = "vehicle.*"
+
+
+@dataclass(slots=True)
+class TrafficLightOverrideSpec:
+    actor_id: int
+    state: str
+    freeze: bool = True
+
+
+@dataclass(slots=True)
+class TrafficSetupSpec:
+    name: str
+    town: str
+    npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
+    traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
+    expert_overrides: dict[str, Any] = field(default_factory=dict)
+    description: str = ""
 
 
 @dataclass(slots=True)
@@ -86,9 +121,9 @@ class PolicySpec:
     device: str | None = None
     steer_smoothing: float = 1.0
     max_steer_delta: float | None = None
-    ignore_traffic_lights: bool = True
+    ignore_traffic_lights: bool = False
     ignore_stop_signs: bool = True
-    ignore_vehicles: bool = True
+    ignore_vehicles: bool = False
     initial_command: str = "lanefollow"
     command_provider: InteractiveCommandProvider | None = None
     status_sink: InteractiveStatusSink | None = None
@@ -150,6 +185,59 @@ def _relative_or_none(path: Path | None) -> str | None:
     return relative_to_project(path)
 
 
+def _load_json(path: Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _load_npc_profile(profile_id: str) -> NPCProfileSpec:
+    profile_path = PROJECT_ROOT / "scenarios" / "npc_profiles" / f"{profile_id}.json"
+    raw = _load_json(profile_path)
+    return NPCProfileSpec(
+        name=str(raw["name"]),
+        default_target_speed_kmh=float(raw.get("default_target_speed_kmh", 20.0)),
+        speed_jitter_kmh=float(raw.get("speed_jitter_kmh", 0.0)),
+        enable_autopilot=bool(raw.get("enable_autopilot", True)),
+    )
+
+
+def _load_traffic_setup(path: Path) -> TrafficSetupSpec:
+    raw = _load_json(path)
+    return TrafficSetupSpec(
+        name=str(raw["name"]),
+        town=str(raw["town"]),
+        npc_vehicles=[
+            NPCVehicleSpec(
+                spawn_index=int(item["spawn_index"]),
+                npc_profile_id=str(item["npc_profile_id"]) if item.get("npc_profile_id") else None,
+                target_speed_kmh=float(item["target_speed_kmh"]) if item.get("target_speed_kmh") is not None else None,
+                lane_behavior=str(item.get("lane_behavior", "keep_lane")),
+                vehicle_filter=str(item.get("vehicle_filter", "vehicle.*")),
+            )
+            for item in raw.get("npc_vehicles", [])
+        ],
+        traffic_light_overrides=[
+            TrafficLightOverrideSpec(
+                actor_id=int(item["actor_id"]),
+                state=str(item["state"]),
+                freeze=bool(item.get("freeze", True)),
+            )
+            for item in raw.get("traffic_light_overrides", [])
+        ],
+        expert_overrides=dict(raw.get("expert_overrides", {})),
+        description=str(raw.get("description", "")),
+    )
+
+
+def _resolved_npc_speed_kmh(spec: NPCVehicleSpec, profile: NPCProfileSpec | None, rng: random.Random) -> float:
+    if spec.target_speed_kmh is not None:
+        return float(spec.target_speed_kmh)
+    if profile is None:
+        return 20.0
+    jitter = profile.speed_jitter_kmh
+    return max(0.0, profile.default_target_speed_kmh + rng.uniform(-jitter, jitter))
+
+
 def _update_spectator(
     carla_module: Any,
     spectator: Any,
@@ -175,10 +263,81 @@ def _update_spectator(
     spectator.set_transform(carla_module.Transform(spectator_location, spectator_rotation))
 
 
+def _apply_traffic_light_overrides(carla_module: Any, world: Any, overrides: list[TrafficLightOverrideSpec]) -> None:
+    if not overrides:
+        return
+    lights_by_id = {int(actor.id): actor for actor in world.get_actors().filter("*traffic_light*")}
+    state_map = {
+        "red": carla_module.TrafficLightState.Red,
+        "yellow": carla_module.TrafficLightState.Yellow,
+        "green": carla_module.TrafficLightState.Green,
+    }
+    for override in overrides:
+        traffic_light = lights_by_id.get(override.actor_id)
+        if traffic_light is None:
+            raise RuntimeError(f"Traffic light actor_id={override.actor_id} not found for override.")
+        state = state_map.get(override.state.lower())
+        if state is None:
+            raise ValueError(f"Unsupported traffic light override state: {override.state}")
+        traffic_light.set_state(state)
+        if override.freeze:
+            traffic_light.freeze(True)
+
+
+def _spawn_npc_vehicles(
+    *,
+    client: Any,
+    world: Any,
+    runtime: RuntimeSpec,
+    traffic_setup: TrafficSetupSpec | None,
+    rng: random.Random,
+    actors: list[Any],
+) -> list[dict[str, Any]]:
+    if traffic_setup is None or not traffic_setup.npc_vehicles:
+        return []
+
+    traffic_manager = client.get_trafficmanager(8000)
+    traffic_manager.set_synchronous_mode(True)
+    traffic_manager.set_global_distance_to_leading_vehicle(1.5)
+    spawn_points = world.get_map().get_spawn_points()
+    spawned: list[dict[str, Any]] = []
+    for npc_spec in traffic_setup.npc_vehicles:
+        if npc_spec.spawn_index < 0 or npc_spec.spawn_index >= len(spawn_points):
+            raise RuntimeError(f"NPC spawn_index out of range: {npc_spec.spawn_index}")
+        profile = _load_npc_profile(npc_spec.npc_profile_id) if npc_spec.npc_profile_id else None
+        desired_speed_kmh = _resolved_npc_speed_kmh(npc_spec, profile, rng)
+        blueprint = require_blueprint(world, npc_spec.vehicle_filter, rng=rng)
+        blueprint.set_attribute("role_name", "autopilot")
+        actor = world.try_spawn_actor(blueprint, spawn_points[npc_spec.spawn_index])
+        if actor is None:
+            raise RuntimeError(f"Failed to spawn NPC vehicle at spawn index {npc_spec.spawn_index}.")
+        actors.append(actor)
+
+        if profile is None or profile.enable_autopilot:
+            actor.set_autopilot(True, traffic_manager.get_port())
+            traffic_manager.auto_lane_change(actor, npc_spec.lane_behavior != "keep_lane")
+            traffic_manager.ignore_lights_percentage(actor, 0.0)
+            traffic_manager.ignore_vehicles_percentage(actor, 0.0)
+            speed_limit_kmh = max(1.0, float(actor.get_speed_limit()))
+            speed_diff_percent = max(-100.0, min(95.0, ((speed_limit_kmh - desired_speed_kmh) / speed_limit_kmh) * 100.0))
+            traffic_manager.vehicle_percentage_speed_difference(actor, speed_diff_percent)
+        spawned.append(
+            {
+                "actor_id": int(actor.id),
+                "spawn_index": npc_spec.spawn_index,
+                "target_speed_kmh": round(desired_speed_kmh, 2),
+                "lane_behavior": npc_spec.lane_behavior,
+                "npc_profile_id": npc_spec.npc_profile_id,
+            }
+        )
+    return spawned
+
+
 def _route_success_criteria(scenario: RouteLoopScenarioSpec) -> dict[str, float | int]:
     return {
         "route_completion_ratio_min": 0.99,
         "collision_count_max": 0,
+        "traffic_light_violation_count_max": 0,
         "max_stationary_seconds_max": scenario.max_stop_seconds,
         "goal_tolerance_m_max": scenario.goal_tolerance_m,
         "manual_interventions_max": 0,
@@ -212,19 +371,28 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
     if request.mode == "collect" and policy.kind != "expert":
         raise ValueError("Collect mode currently requires policy.kind='expert'.")
-    if request.mode == "evaluate" and policy.kind != "learned":
-        raise ValueError("Evaluate mode currently requires policy.kind='learned'.")
     if policy.kind == "learned" and policy.checkpoint_path is None:
         raise ValueError("Learned policy requires checkpoint_path.")
 
     random_seed = random.Random(runtime.seed)
     route_config_path = Path(scenario.route_config_path).resolve()
     route_config = load_route_config(route_config_path)
+    traffic_setup = (
+        _load_traffic_setup(Path(scenario.traffic_setup_path).resolve())
+        if scenario.traffic_setup_path is not None
+        else None
+    )
+    if traffic_setup is not None and traffic_setup.town != route_config.town:
+        raise ValueError(
+            f"traffic_setup town mismatch: route={route_config.town} traffic_setup={traffic_setup.town}"
+        )
+    allow_overtake = bool(traffic_setup.expert_overrides.get("allow_overtake", True)) if traffic_setup is not None else True
 
     git_commit_id: str | None = None
     if request.mode == "evaluate":
         git_commit_id = ensure_clean_git_worktree_for_evaluation()
-        episode_id = build_versioned_run_id(f"{route_config.name}_pilotnet_eval", commit_id=git_commit_id)
+        eval_suffix = "pilotnet_eval" if policy.kind == "learned" else "expert_eval"
+        episode_id = build_versioned_run_id(f"{route_config.name}_{eval_suffix}", commit_id=git_commit_id)
         episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
         manifest_path = episode_dir / "manifest.jsonl"
     else:
@@ -259,6 +427,18 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     distance_to_goal_m = 0.0
     video_path: Path | None = None
     video_error: str | None = None
+    traffic_light_stop_count = 0
+    traffic_light_resume_count = 0
+    traffic_light_violation_count = 0
+    car_follow_event_count = 0
+    overtake_attempt_count = 0
+    overtake_success_count = 0
+    overtake_abort_count = 0
+    unsafe_lane_change_reject_count = 0
+    min_ttc = float("inf")
+    min_lead_distance_m = float("inf")
+    _traffic_light_violation_active = False
+    npc_actors_summary: list[dict[str, Any]] = []
 
     planned_route = build_planned_route(world.get_map(), route_config)
     route_geometry = route_geometry_from_planned_route(planned_route)
@@ -290,6 +470,16 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         actors.append(lane_sensor)
         lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
 
+        _apply_traffic_light_overrides(carla, world, traffic_setup.traffic_light_overrides if traffic_setup is not None else [])
+        npc_actors_summary = _spawn_npc_vehicles(
+            client=client,
+            world=world,
+            runtime=runtime,
+            traffic_setup=traffic_setup,
+            rng=random_seed,
+            actors=actors,
+        )
+
         if policy.kind == "expert":
             stack = create_expert_collector_stack(
                 vehicle=vehicle,
@@ -303,6 +493,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ignore_vehicles=policy.ignore_vehicles,
                 sampling_resolution_m=route_config.sampling_resolution_m,
                 route_geometry=route_geometry,
+                allow_overtake=allow_overtake,
             )
             stack_description = stack.describe()
         else:
@@ -320,6 +511,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ignore_vehicles=policy.ignore_vehicles,
                 sampling_resolution_m=route_config.sampling_resolution_m,
                 route_geometry=route_geometry,
+                allow_overtake=allow_overtake,
             )
             stack_description = stack.describe()
 
@@ -370,6 +562,25 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             distance_to_goal_m = vehicle_location.distance(goal_location)
             route_point = step_result.route_point
             behavior = step_result.behavior or decision.behavior
+            planning_decision = step_result.expert_decision or decision
+            planning_debug = dict(planning_decision.debug or {})
+
+            traffic_light_stop_count += int(bool(planning_debug.get("event_traffic_light_stop")))
+            traffic_light_resume_count += int(bool(planning_debug.get("event_traffic_light_resume")))
+            car_follow_event_count += int(bool(planning_debug.get("event_car_follow_start")))
+            overtake_attempt_count += int(bool(planning_debug.get("event_overtake_attempt")))
+            overtake_success_count += int(bool(planning_debug.get("event_overtake_success")))
+            overtake_abort_count += int(bool(planning_debug.get("event_overtake_abort")))
+            unsafe_lane_change_reject_count += int(bool(planning_debug.get("event_unsafe_lane_change_reject")))
+            if bool(planning_debug.get("traffic_light_violation")) and not _traffic_light_violation_active:
+                traffic_light_violation_count += 1
+                _traffic_light_violation_active = True
+            elif not bool(planning_debug.get("traffic_light_violation")):
+                _traffic_light_violation_active = False
+            if planning_debug.get("min_ttc") is not None:
+                min_ttc = min(min_ttc, float(planning_debug["min_ttc"]))
+            if planning_debug.get("lead_vehicle_distance_m") is not None:
+                min_lead_distance_m = min(min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"]))
 
             record = EpisodeRecord(
                 episode_id=episode_id,
@@ -400,6 +611,12 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ),
                 route_target_x=route_point[0] if route_point is not None else None,
                 route_target_y=route_point[1] if route_point is not None else None,
+                planner_state=planning_decision.planner_state,
+                traffic_light_state=planning_debug.get("traffic_light_state"),
+                lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
+                overtake_state=planning_debug.get("overtake_state"),
+                target_lane_id=planning_debug.get("target_lane_id"),
+                min_ttc=planning_debug.get("min_ttc"),
             )
             append_jsonl(manifest_path, record)
 
@@ -435,17 +652,25 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             not failure_reason
             and max_completion_ratio >= success_criteria["route_completion_ratio_min"]
             and frame_events.collision_count <= success_criteria["collision_count_max"]
+            and traffic_light_violation_count <= success_criteria["traffic_light_violation_count_max"]
             and max_stationary_seconds < success_criteria["max_stationary_seconds_max"]
             and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
         )
         if not success and not failure_reason:
             if max_completion_ratio < success_criteria["route_completion_ratio_min"]:
                 failure_reason = "route_incomplete"
+            elif traffic_light_violation_count > success_criteria["traffic_light_violation_count_max"]:
+                failure_reason = "traffic_light_violation"
             elif distance_to_goal_m > success_criteria["goal_tolerance_m_max"]:
                 failure_reason = "goal_tolerance_exceeded"
             else:
                 failure_reason = "success_criteria_failed"
     finally:
+        if traffic_setup is not None:
+            for actor in world.get_actors().filter("*traffic_light*"):
+                if any(int(actor.id) == override.actor_id and override.freeze for override in traffic_setup.traffic_light_overrides):
+                    actor.freeze(False)
+        client.get_trafficmanager(8000).set_synchronous_mode(False)
         world.apply_settings(original_settings)
         destroy_actors(reversed(actors))
 
@@ -461,50 +686,79 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         except Exception as exc:  # pragma: no cover - depends on ffmpeg/runtime env
             video_error = str(exc)
 
+    base_summary = {
+        "episode_id": episode_id,
+        "route_name": route_config.name,
+        "route_config_path": relative_to_project(route_config_path),
+        "traffic_setup_path": _relative_or_none(Path(scenario.traffic_setup_path).resolve() if scenario.traffic_setup_path else None),
+        "traffic_setup_name": traffic_setup.name if traffic_setup is not None else None,
+        "npc_vehicle_count": len(npc_actors_summary),
+        "npc_vehicles": npc_actors_summary,
+        "town": route_config.town,
+        "weather": scenario.weather,
+        "frame_count": frame_index,
+        "elapsed_seconds": round(elapsed_seconds, 2),
+        "lap_time_seconds": round(elapsed_seconds, 2),
+        "target_speed_kmh": runtime.target_speed_kmh,
+        "average_speed_kmh": round(average_speed_mps * 3.6, 2),
+        "collision_count": frame_events.collision_count,
+        "lane_invasion_count": frame_events.lane_invasion_count,
+        "traffic_light_stop_count": traffic_light_stop_count,
+        "traffic_light_resume_count": traffic_light_resume_count,
+        "traffic_light_violation_count": traffic_light_violation_count,
+        "car_follow_event_count": car_follow_event_count,
+        "overtake_attempt_count": overtake_attempt_count,
+        "overtake_success_count": overtake_success_count,
+        "overtake_abort_count": overtake_abort_count,
+        "unsafe_lane_change_reject_count": unsafe_lane_change_reject_count,
+        "min_ttc": None if not min_ttc < float("inf") else round(min_ttc, 3),
+        "min_lead_distance_m": None if not min_lead_distance_m < float("inf") else round(min_lead_distance_m, 3),
+        "allow_overtake": allow_overtake,
+        "max_stationary_seconds": round(max_stationary_seconds, 2),
+        "route_completion_ratio": round(max_completion_ratio, 4),
+        "distance_to_goal_m": round(distance_to_goal_m, 2),
+        "goal_tolerance_m": scenario.goal_tolerance_m,
+        "manual_interventions": 0,
+        "success": success,
+        "failure_reason": failure_reason or None,
+        "success_criteria": success_criteria,
+        "segment_summaries": planned_route.segment_summaries,
+        "road_option_counts": planned_route.road_option_counts,
+        "front_rgb_dir": relative_to_project(image_dir),
+        "video_path": _relative_or_none(video_path),
+        "video_fps": round(video_fps, 3) if video_path is not None else None,
+        "video_crf": artifacts.video_crf if video_path is not None else None,
+        "video_error": video_error,
+        "manifest_path": relative_to_project(manifest_path),
+    }
+
     if request.mode == "collect":
         summary = {
-            "episode_id": episode_id,
+            **base_summary,
             "policy_type": "expert_demonstration",
             "control_source": "ad_stack.run(expert_collect)",
             "route_intent_source": "global_route_planner",
-            "lateral_control_source": "basic_agent_local_planner_pid_via_ad_stack",
+            "lateral_control_source": "carla_local_planner_pid_via_ad_stack_expert_route_policy",
             "is_camera_e2e_policy": False,
-            "route_name": route_config.name,
-            "route_config_path": relative_to_project(route_config_path),
-            "town": route_config.town,
-            "weather": scenario.weather,
-            "frame_count": frame_index,
-            "elapsed_seconds": round(elapsed_seconds, 2),
-            "lap_time_seconds": round(elapsed_seconds, 2),
-            "target_speed_kmh": runtime.target_speed_kmh,
-            "average_speed_kmh": round(average_speed_mps * 3.6, 2),
-            "collision_count": frame_events.collision_count,
-            "lane_invasion_count": frame_events.lane_invasion_count,
-            "max_stationary_seconds": round(max_stationary_seconds, 2),
-            "route_completion_ratio": round(max_completion_ratio, 4),
-            "distance_to_goal_m": round(distance_to_goal_m, 2),
-            "goal_tolerance_m": scenario.goal_tolerance_m,
-            "manual_interventions": 0,
-            "success": success,
-            "failure_reason": failure_reason or None,
-            "success_criteria": success_criteria,
-            "segment_summaries": planned_route.segment_summaries,
-            "road_option_counts": planned_route.road_option_counts,
-            "front_rgb_dir": relative_to_project(image_dir),
-            "video_path": _relative_or_none(video_path),
-            "video_fps": round(video_fps, 3) if video_path is not None else None,
-            "video_crf": artifacts.video_crf if video_path is not None else None,
-            "video_error": video_error,
-            "manifest_path": relative_to_project(manifest_path),
+        }
+    elif policy.kind == "expert":
+        summary = {
+            **base_summary,
+            "policy_type": "expert_route_policy",
+            "control_source": "ad_stack.run(expert_evaluate)",
+            "route_intent_source": "global_route_planner",
+            "lateral_control_source": "carla_local_planner_pid_via_ad_stack_expert_route_policy",
+            "is_camera_e2e_policy": False,
+            "git_commit_id": git_commit_id,
         }
     else:
         summary = {
-            "episode_id": episode_id,
+            **base_summary,
             "policy_type": "learned_lateral_policy",
             "control_source": "ad_stack.run(learned_evaluate)",
             "route_intent_source": "global_route_planner",
             "lateral_control_source": "pilotnet_learning_runtime_via_ad_stack",
-            "longitudinal_control_source": "ad_stack_expert_basic_agent_longitudinal",
+            "longitudinal_control_source": "ad_stack_expert_route_policy_longitudinal",
             "is_camera_e2e_policy": True,
             "e2e_scope": "front_rgb_plus_speed_to_steer",
             "model_checkpoint_path": _relative_or_none(Path(policy.checkpoint_path).resolve() if policy.checkpoint_path else None),
@@ -512,36 +766,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             "git_commit_id": git_commit_id,
             "steer_smoothing": policy.steer_smoothing,
             "max_steer_delta": policy.max_steer_delta,
-            "route_name": route_config.name,
-            "route_config_path": relative_to_project(route_config_path),
-            "town": route_config.town,
-            "weather": scenario.weather,
-            "frame_count": frame_index,
-            "elapsed_seconds": round(elapsed_seconds, 2),
-            "lap_time_seconds": round(elapsed_seconds, 2),
-            "target_speed_kmh": runtime.target_speed_kmh,
             "camera_width": runtime.camera_width,
             "camera_height": runtime.camera_height,
             "camera_fov": runtime.camera_fov,
-            "average_speed_kmh": round(average_speed_mps * 3.6, 2),
-            "collision_count": frame_events.collision_count,
-            "lane_invasion_count": frame_events.lane_invasion_count,
-            "max_stationary_seconds": round(max_stationary_seconds, 2),
-            "route_completion_ratio": round(max_completion_ratio, 4),
-            "distance_to_goal_m": round(distance_to_goal_m, 2),
-            "goal_tolerance_m": scenario.goal_tolerance_m,
-            "manual_interventions": 0,
-            "success": success,
-            "failure_reason": failure_reason or None,
-            "success_criteria": success_criteria,
-            "segment_summaries": planned_route.segment_summaries,
-            "road_option_counts": planned_route.road_option_counts,
-            "front_rgb_dir": relative_to_project(image_dir),
-            "video_path": _relative_or_none(video_path),
-            "video_fps": round(video_fps, 3) if video_path is not None else None,
-            "video_crf": artifacts.video_crf if video_path is not None else None,
-            "video_error": video_error,
-            "manifest_path": relative_to_project(manifest_path),
         }
 
     with summary_path.open("w", encoding="utf-8") as handle:

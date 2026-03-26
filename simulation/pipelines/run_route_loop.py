@@ -18,6 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
+    parser.add_argument("--traffic-setup", default=None)
+    parser.add_argument("--policy-kind", choices=("expert", "learned"), default=None)
     parser.add_argument("--vehicle-filter", default="vehicle.tesla.model3")
     parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
     parser.add_argument("--sensor-timeout", type=float, default=2.0)
@@ -63,10 +65,19 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.mode == "evaluate" and not args.checkpoint:
-        parser.error("--checkpoint is required when --mode=evaluate")
-    if args.mode == "collect" and args.checkpoint:
-        parser.error("--checkpoint is only valid when --mode=evaluate")
+    policy_kind = args.policy_kind
+    if policy_kind is None:
+        if args.mode == "collect":
+            policy_kind = "expert"
+        else:
+            policy_kind = "learned" if args.checkpoint else "expert"
+
+    if args.mode == "collect" and policy_kind != "expert":
+        parser.error("--mode=collect only supports --policy-kind=expert")
+    if policy_kind == "learned" and not args.checkpoint:
+        parser.error("--checkpoint is required when --policy-kind=learned")
+    if policy_kind == "expert" and args.mode == "collect" and args.checkpoint:
+        parser.error("--checkpoint is only valid for learned evaluation")
 
     request = RunRequest(
         mode=args.mode,
@@ -77,6 +88,7 @@ def main() -> None:
             max_stop_seconds=args.max_stop_seconds,
             stationary_speed_threshold_mps=args.stationary_speed_threshold_mps,
             max_seconds=args.max_seconds,
+            traffic_setup_path=Path(args.traffic_setup) if args.traffic_setup else None,
         ),
         runtime=RuntimeSpec(
             host=args.host,
@@ -91,7 +103,7 @@ def main() -> None:
             seed=args.seed,
         ),
         policy=PolicySpec(
-            kind="expert" if args.mode == "collect" else "learned",
+            kind=policy_kind,
             checkpoint_path=Path(args.checkpoint) if args.checkpoint else None,
             device=args.device,
             steer_smoothing=args.steer_smoothing,
