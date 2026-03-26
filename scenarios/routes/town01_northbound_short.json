@@ -1,0 +1,8 @@
+{
+  "name": "town01_northbound_short",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [70, 67],
+  "description": "Short northbound slice of Town01 used for following and overtaking acceptance checks."
+}

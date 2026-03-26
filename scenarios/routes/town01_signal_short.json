@@ -1,0 +1,8 @@
+{
+  "name": "town01_signal_short",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [206, 204],
+  "description": "Short eastbound slice of Town01 that crosses the light near actor 57 for signal acceptance checks."
+}
