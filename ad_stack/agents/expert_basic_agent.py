@@ -283,10 +283,22 @@ class ExpertBasicAgent:
         lead_vehicle = self._nearest_lead(scene_state.tracked_objects, relation="same_lane")
         lead_distance_m = float(lead_vehicle.longitudinal_distance_m) if lead_vehicle and lead_vehicle.longitudinal_distance_m is not None else None
         lead_speed_mps = float(lead_vehicle.speed_mps) if lead_vehicle is not None else 0.0
+        lead_speed_kmh = _speed_kmh(lead_speed_mps) if lead_vehicle is not None else 0.0
         closing_speed_mps = current_speed_mps - lead_speed_mps if lead_vehicle is not None else 0.0
         min_ttc = float("inf")
         if lead_distance_m is not None and closing_speed_mps > 1e-3:
             min_ttc = lead_distance_m / closing_speed_mps
+        follow_target_speed_kmh = self.config.target_speed_kmh
+        if lead_distance_m is not None:
+            distance_limited_speed_kmh = max(
+                0.0,
+                (lead_distance_m / max(self.config.follow_headway_seconds, 0.25)) * 3.6,
+            )
+            follow_target_speed_kmh = min(
+                self.config.target_speed_kmh,
+                lead_speed_kmh + 2.0,
+                distance_limited_speed_kmh,
+            )
 
         planner_state = "nominal_cruise"
         target_speed_kmh = self.config.target_speed_kmh
@@ -310,6 +322,9 @@ class ExpertBasicAgent:
                 planner_state = "pass_vehicle"
             else:
                 planner_state = self._overtake_state
+
+            if self._overtake_state in {"lane_change_out", "abort_return"}:
+                target_speed_kmh = min(target_speed_kmh, follow_target_speed_kmh)
 
             if self._overtake_state in {"lane_change_out", "pass_vehicle"} and self._should_stop_for_light(
                 active_light,
@@ -341,17 +356,6 @@ class ExpertBasicAgent:
             planner_state = "traffic_light_stop"
             target_speed_kmh = 0.0
         elif lead_vehicle is not None and not self.config.ignore_vehicles and self._overtake_state == "idle":
-            lead_speed_kmh = _speed_kmh(lead_speed_mps)
-            distance_limited_speed_kmh = (
-                max(0.0, (lead_distance_m / max(self.config.follow_headway_seconds, 0.25)) * 3.6)
-                if lead_distance_m is not None
-                else self.config.target_speed_kmh
-            )
-            follow_target_speed_kmh = min(
-                self.config.target_speed_kmh,
-                lead_speed_kmh + 2.0,
-                distance_limited_speed_kmh,
-            )
             should_overtake = (
                 self.config.allow_overtake
                 and lead_distance_m is not None
