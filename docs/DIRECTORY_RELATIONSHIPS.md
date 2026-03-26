@@ -1,117 +1,132 @@
 # Directory Relationships
 
-このドキュメントは、project root 直下のうち主にソースコードを持つディレクトリが、いまどう依存しているかをまとめたものです。
+このドキュメントは、現行実装の関係を 2 段で見せるためのものです。
+
+- 1 枚目:
+  - directory ごとの責務と大まかな依存
+- 2 枚目:
+  - 実際に使っている module / class の依存
 
 重要:
 
 - ここでは `docs/`, `data/`, `outputs/` のような非ソースコード中心のディレクトリは図から省いています
-- `scenarios/` はまだ現行の主要実行フローには組み込んでいないので、図から外しています
+- `libs/` は多くの場所から参照されるので、directory 図には入れますが module 図では本文補足に留めます
 
-## 1. 現在の実装依存
+## 1. Directory Responsibility
 
 ```mermaid
 flowchart LR
-  data_collection["data_collection<br/>expert collection entrypoints"] -->|collect_route_loop builds SceneState / calls agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
-  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|calls ad_stack agents / inference bridge| ad_stack
+  data_collection["data_collection<br/>expert collection entrypoint"] -->|build SceneState / call expert agent| ad_stack["ad_stack<br/>agent adapters / inference bridge / scene model"]
+  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|call agent or inference bridge| ad_stack
+  ad_stack -->|load learned runtime| learning["learning<br/>train / model / inference runtime"]
 
-  ad_stack -->|call learned inference runtime| learning
-
-  data_collection -->|shared helpers| libs["libs<br/>CARLA helper / schema / path"]
-  learning -->|shared helpers| libs
-  ad_stack -->|shared helpers| libs
+  data_collection -->|shared helpers| libs["libs<br/>CARLA helpers / schema / path"]
   evaluation -->|shared helpers| libs
+  ad_stack -->|shared helpers| libs
+  learning -->|shared helpers| libs
 ```
 
-現状のポイント:
+この図の読み方:
 
-- `data_collection/` は route-based expert collector だけを持つ
-  - `collect_route_loop` は `ad_stack.agents.ExpertBasicAgent` を使う
-- `evaluation/` は `ad_stack` だけを見る
-  - `evaluate_pilotnet_loop` は `ad_stack.agents.LearnedLateralAgent` を使う
-  - `interactive_command_drive` は `ad_stack` の inference bridge を使う
-- `ad_stack/` は learned lateral policy の推論時に `learning/` の inference runtime を呼ぶ
-- `learning/` は offline train code と inference runtime を持つ
-- `evaluation/` は `CARLA` closed-loop evaluator と、manual command の interactive drive を持つ
+- `data_collection/` は expert 収集の入口
+- `evaluation/` は closed-loop evaluator と interactive drive の入口
+- `ad_stack/` は online 実行側の境界
+- `learning/` は学習と learned runtime を持つ
+- 依存の主軸は `data_collection/evaluation -> ad_stack -> learning`
 
-## 2. 現在の責務分担
+## 2. Module / Class Dependency
 
-- `data_collection/`
-  - `CARLA` world を進める
-  - sensor と ego 状態から `SceneState` を組み立てる
-  - `ad_stack` の expert agent を呼ぶ
-  - `EpisodeRecord` と画像を保存する
-- `learning/`
-  - dataset, model, train code を持つ
-  - checkpoint load / preprocess / infer の runtime を持つ
-- `ad_stack/`
-  - `SceneState -> ControlDecision` の interface を提供する
-  - `BasicAgent` adapter と learned lateral agent adapter を持つ
-  - 必要に応じて `learning/` の inference runtime を呼ぶ
-- `evaluation/`
-  - closed-loop evaluator では `ad_stack` の agent interface を呼ぶ
-  - interactive drive では `ad_stack` の inference bridge を呼ぶ
-- `libs/`
-  - route config, `CARLA` PythonAPI 接続補助, project root 解決, schema を持つ
+```mermaid
+flowchart LR
+  subgraph data_collection["data_collection"]
+    CollectRouteLoop["collect_route_loop"]
+  end
 
-## 3. ディレクトリ間インターフェース
+  subgraph evaluation["evaluation"]
+    EvaluatePilotNetLoop["evaluate_pilotnet_loop"]
+    InteractiveCommandDrive["interactive_command_drive"]
+  end
 
-### `data_collection/` -> `ad_stack/`
+  subgraph ad_stack["ad_stack"]
+    ObservationBuilder["ObservationBuilder"]
+    SceneState["SceneState"]
+    EgoState["EgoState"]
+    RouteState["RouteState"]
+    ExpertBasicAgent["ExpertBasicAgent"]
+    LearnedLateralAgent["LearnedLateralAgent"]
+    PilotNetScenePolicy["PilotNetScenePolicy"]
+    InferenceBridge["inference.py"]
+    ControlDecision["ControlDecision"]
+  end
+
+  subgraph learning["learning"]
+    PilotNetInferenceRuntime["PilotNetInferenceRuntime"]
+  end
+
+  CollectRouteLoop -->|build SceneState| ObservationBuilder
+  CollectRouteLoop -->|call expert| ExpertBasicAgent
+  CollectRouteLoop -->|create| EgoState
+  CollectRouteLoop -->|create| RouteState
+
+  EvaluatePilotNetLoop -->|build SceneState| ObservationBuilder
+  EvaluatePilotNetLoop -->|longitudinal policy| ExpertBasicAgent
+  EvaluatePilotNetLoop -->|lateral policy| LearnedLateralAgent
+  EvaluatePilotNetLoop -->|load runtime| InferenceBridge
+  EvaluatePilotNetLoop -->|create| EgoState
+  EvaluatePilotNetLoop -->|create| RouteState
+
+  InteractiveCommandDrive -->|load runtime| InferenceBridge
+
+  ObservationBuilder -->|return| SceneState
+  SceneState -->|contain| EgoState
+  SceneState -->|contain| RouteState
+
+  ExpertBasicAgent -->|return| ControlDecision
+  LearnedLateralAgent -->|return| ControlDecision
+  LearnedLateralAgent -->|use| PilotNetScenePolicy
+  PilotNetScenePolicy -->|call predict_steer| PilotNetInferenceRuntime
+
+  InferenceBridge -->|load / device select| PilotNetInferenceRuntime
+```
+
+この図の読み方:
+
+- `collect_route_loop` は `ObservationBuilder` と `ExpertBasicAgent` を使う
+- `evaluate_pilotnet_loop` は `ExpertBasicAgent` と `LearnedLateralAgent` を組み合わせる
+- `interactive_command_drive` は agent interface ではなく `ad_stack.inference` を使う
+- `evaluation` から `learning` への direct import は持たせず、`ad_stack` を境界にしている
+
+## 3. Interface Boundary
+
+### `data_collection` / `evaluation` -> `ad_stack`
 
 - 入力:
-  - `ad_stack.world_model.scene_state.SceneState`
+  - `SceneState`
 - 出力:
-  - `ad_stack.agents.base.ControlDecision`
-  - その中の `VehicleCommand`
+  - `ControlDecision`
+  - `VehicleCommand`
 
-実際の流れ:
+### `ad_stack` -> `learning`
 
-- `data_collection/` が `ObservationBuilder` で `SceneState` を作る
-- `ExpertBasicAgent.step(scene_state)` を呼ぶ
-- 返ってきた `VehicleCommand` を `carla.VehicleControl` に変換して適用する
+- `PilotNetInferenceRuntime`
+- `load_pilotnet_runtime`
+- `select_device`
 
-### `evaluation/` -> `ad_stack/`
+現在の learned-policy 入力はまだ `SceneState.metadata` 経由です。
 
-- これは `evaluate_pilotnet_loop` に当てはまる
-- `evaluation/pipelines/` の closed-loop evaluator が `SceneState` を作る
-- `LearnedLateralAgent.step(scene_state)` を呼ぶ
-- longitudinal は `ExpertBasicAgent`、lateral は learned policy で合成する
+- `front_rgb_history`
+- `command`
+- `route_point`
 
-### `ad_stack/` -> `learning/`
+これは動作上は十分ですが、将来的に厳密化するなら typed な learned-observation 構造へ切り出すのが自然です。
 
-- `ad_stack` は `learning.libs.ml.PilotNetInferenceRuntime` を呼ぶ
-- `evaluation/` は `learning` を直接 import しない
-- `interactive_command_drive` も `ad_stack.inference` 経由で runtime を読む
-- 現在の入力は `SceneState.metadata` 経由で渡している
-  - `front_rgb_history`
-  - `command`
-  - `route_point`
+## 4. `libs` の位置づけ
 
-これは現在動いている interface だが、まだ暫定的です。将来的に厳密化するなら、`SceneState.metadata` ではなく typed な learned-observation 構造に切り出したほうがよいです。
+図では省いている細かい共通依存は `libs/` にあります。
 
-## 4. 主要な公開面
-
-### `ad_stack` が提供するもの
-
-- `ad_stack.agents.base.AutonomyAgent`
-  - `step(scene_state) -> ControlDecision`
-- `ad_stack.agents.base.VehicleCommand`
-  - `steer`, `throttle`, `brake`
-- `ad_stack.world_model.scene_state.SceneState`
-  - ego / route / metadata / optional world objects をまとめた状態
-- `ad_stack.agents.ExpertBasicAgent`
-  - `CARLA BasicAgent` の adapter
-- `ad_stack.agents.LearnedLateralAgent`
-  - learned steer policy を online loop に載せる agent
-
-### `learning` が提供するもの
-
-- model 定義
-- checkpoint load / preprocess / infer の runtime
-- `learning.libs.ml.PilotNetInferenceRuntime`
-
-### `libs` が提供するもの
-
-- route config / planned route
-- `CARLA` PythonAPI への接続補助
-- project root 解決
-- JSONL schema
+- `libs.carla_utils`
+  - route config, planned route, CARLA helper
+- `libs.schemas`
+  - `EpisodeRecord`
+- `libs.project`
+  - project root 解決と evaluation 用 run id helper
