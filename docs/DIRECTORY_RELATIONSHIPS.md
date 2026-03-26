@@ -3,21 +3,22 @@
 このドキュメントは、現行実装の関係を 2 段で見せるためのものです。
 
 - 1 枚目:
-  - directory ごとの責務と大まかな依存
+  - directory ごとの責務と公開依存
 - 2 枚目:
-  - 実際に使っている module / class の依存
+  - 実際に使っている module / public API の依存
 
-重要:
+前提:
 
-- ここでは `docs/`, `data/`, `outputs/` のような非ソースコード中心のディレクトリは図から省いています
-- `libs/` は多くの場所から参照されるので、directory 図には入れますが module 図では本文補足に留めます
+- `docs/`, `data/`, `outputs/` のような非ソースコード中心のディレクトリは図から省いています
+- `libs/` は多くの場所から参照されるので、directory 図にだけ出し、module 図では本文補足に留めます
+- 外側の runner は `ad_stack` の内部モジュールを直接 import しません
 
 ## 1. Directory Responsibility
 
 ```mermaid
 flowchart LR
-  data_collection["data_collection<br/>expert collection entrypoint"] -->|build SceneState / call expert agent| ad_stack["ad_stack<br/>agent adapters / inference bridge / scene model"]
-  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|call agent or inference bridge| ad_stack
+  data_collection["data_collection<br/>expert collection entrypoint"] -->|import public facade| ad_stack["ad_stack<br/>public facade + online driving components"]
+  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|import public facade| ad_stack
   ad_stack -->|load learned runtime| learning["learning<br/>train / model / inference runtime"]
 
   data_collection -->|shared helpers| libs["libs<br/>CARLA helpers / schema / path"]
@@ -30,11 +31,11 @@ flowchart LR
 
 - `data_collection/` は expert 収集の入口
 - `evaluation/` は closed-loop evaluator と interactive drive の入口
-- `ad_stack/` は online 実行側の境界
-- `learning/` は学習と learned runtime を持つ
+- `ad_stack/` は外部に公開する依存面と online 実行部品をまとめて持つ
+- `learning/` は学習コードと learned runtime を持つ
 - 依存の主軸は `data_collection/evaluation -> ad_stack -> learning`
 
-## 2. Module / Class Dependency
+## 2. Module / Public API Dependency
 
 ```mermaid
 flowchart LR
@@ -45,19 +46,27 @@ flowchart LR
   subgraph evaluation["evaluation"]
     EvaluatePilotNetLoop["evaluate_pilotnet_loop"]
     InteractiveCommandDrive["interactive_command_drive"]
+    EvalCommon["common.py"]
   end
 
   subgraph ad_stack["ad_stack"]
     PublicFacade["__init__.py<br/>public facade"]
+    ExpertCollectorFactory["create_expert_collector_stack(...)"]
+    PilotNetEvalFactory["create_pilotnet_eval_stack(...)"]
+    InteractiveFactory["create_interactive_pilotnet_controller(...)"]
+    ToCarlaControl["to_carla_control(...)"]
+    ExpertCollectorStack["ExpertCollectorStack"]
+    PilotNetEvalStack["PilotNetEvalStack"]
+    InteractiveController["InteractivePilotNetController"]
+    StackStepResult["StackStepResult"]
     ObservationBuilder["ObservationBuilder"]
     SceneState["SceneState"]
-    EgoState["EgoState"]
-    RouteState["RouteState"]
     ExpertBasicAgent["ExpertBasicAgent"]
     LearnedLateralAgent["LearnedLateralAgent"]
     PilotNetScenePolicy["PilotNetScenePolicy"]
     InferenceBridge["inference.py"]
     ControlDecision["ControlDecision"]
+    VehicleCommand["VehicleCommand"]
   end
 
   subgraph learning["learning"]
@@ -68,36 +77,47 @@ flowchart LR
   EvaluatePilotNetLoop -->|import| PublicFacade
   InteractiveCommandDrive -->|import| PublicFacade
 
-  PublicFacade -->|export| ObservationBuilder
-  PublicFacade -->|export| EgoState
-  PublicFacade -->|export| RouteState
-  PublicFacade -->|export| ExpertBasicAgent
-  PublicFacade -->|export| LearnedLateralAgent
-  PublicFacade -->|export| PilotNetScenePolicy
-  PublicFacade -->|export| InferenceBridge
+  EvaluatePilotNetLoop -->|import helper| EvalCommon
+  InteractiveCommandDrive -->|import helper| EvalCommon
 
-  CollectRouteLoop -->|build SceneState| ObservationBuilder
-  CollectRouteLoop -->|call expert| ExpertBasicAgent
-  CollectRouteLoop -->|create| EgoState
-  CollectRouteLoop -->|create| RouteState
+  PublicFacade -->|export| ExpertCollectorFactory
+  PublicFacade -->|export| PilotNetEvalFactory
+  PublicFacade -->|export| InteractiveFactory
+  PublicFacade -->|export| ToCarlaControl
 
-  EvaluatePilotNetLoop -->|build SceneState| ObservationBuilder
-  EvaluatePilotNetLoop -->|longitudinal policy| ExpertBasicAgent
-  EvaluatePilotNetLoop -->|lateral policy| LearnedLateralAgent
-  EvaluatePilotNetLoop -->|load runtime| InferenceBridge
-  EvaluatePilotNetLoop -->|create| EgoState
-  EvaluatePilotNetLoop -->|create| RouteState
+  CollectRouteLoop -->|create stack| ExpertCollectorFactory
+  CollectRouteLoop -->|convert command| ToCarlaControl
+  EvaluatePilotNetLoop -->|create stack| PilotNetEvalFactory
+  EvaluatePilotNetLoop -->|convert command| ToCarlaControl
+  InteractiveCommandDrive -->|create controller| InteractiveFactory
+  InteractiveCommandDrive -->|convert command| ToCarlaControl
 
-  InteractiveCommandDrive -->|load runtime| InferenceBridge
+  ExpertCollectorFactory -->|return| ExpertCollectorStack
+  PilotNetEvalFactory -->|return| PilotNetEvalStack
+  InteractiveFactory -->|return| InteractiveController
+
+  ExpertCollectorStack -->|compose| ObservationBuilder
+  ExpertCollectorStack -->|call expert| ExpertBasicAgent
+  ExpertCollectorStack -->|return| StackStepResult
+
+  PilotNetEvalStack -->|compose| ObservationBuilder
+  PilotNetEvalStack -->|longitudinal policy| ExpertBasicAgent
+  PilotNetEvalStack -->|lateral policy| LearnedLateralAgent
+  PilotNetEvalStack -->|load runtime| InferenceBridge
+  PilotNetEvalStack -->|return| StackStepResult
+
+  InteractiveController -->|load runtime| InferenceBridge
+  InteractiveController -->|return| StackStepResult
 
   ObservationBuilder -->|return| SceneState
-  SceneState -->|contain| EgoState
-  SceneState -->|contain| RouteState
-
   ExpertBasicAgent -->|return| ControlDecision
   LearnedLateralAgent -->|return| ControlDecision
   LearnedLateralAgent -->|use| PilotNetScenePolicy
   PilotNetScenePolicy -->|call predict_steer| PilotNetInferenceRuntime
+
+  StackStepResult -->|contain| ControlDecision
+  ControlDecision -->|contain| VehicleCommand
+  ToCarlaControl -->|convert| VehicleCommand
 
   InferenceBridge -->|load / device select| PilotNetInferenceRuntime
 ```
@@ -105,27 +125,52 @@ flowchart LR
 この図の読み方:
 
 - 外側の runner は `ad_stack.__init__` だけを import する
-- `collect_route_loop` は `ObservationBuilder` と `ExpertBasicAgent` を使う
-- `evaluate_pilotnet_loop` は `ExpertBasicAgent` と `LearnedLateralAgent` を組み合わせる
-- `interactive_command_drive` は agent interface ではなく facade 経由の `InferenceBridge` を使う
+- `collect_route_loop` は `create_expert_collector_stack(...)` が返す stack を呼ぶ
+- `evaluate_pilotnet_loop` は `create_pilotnet_eval_stack(...)` が返す stack を呼ぶ
+- `interactive_command_drive` は `create_interactive_pilotnet_controller(...)` が返す controller を呼ぶ
+- 外側は `StackStepResult` から `ControlDecision` を取り出し、必要なら `to_carla_control(...)` で `carla.VehicleControl` に変換する
+- `SceneState` と `ObservationBuilder` は `ad_stack` の内部に閉じる
 - `evaluation` / `data_collection` から `learning` への direct import は持たせない
 
-## 3. Interface Boundary
+## 3. Public Dependency Surface
+
+外側の directory が見てよい `ad_stack` の公開面は [ad_stack/__init__.py](/home/masa/carla_alpamayo/ad_stack/__init__.py) です。
+
+主に公開しているもの:
+
+- `create_expert_collector_stack`
+- `create_pilotnet_eval_stack`
+- `create_interactive_pilotnet_controller`
+- `to_carla_control`
+- `StackStepResult`
+- `ControlDecision`
+- `VehicleCommand`
+
+実務上、外側の runner が直接使うのは主に factory 関数群と `to_carla_control` です。
+`ExpertCollectorStack` などの stack class は factory の戻り値として扱います。
+
+`data_collection/` と `evaluation/` は、`ad_stack.runtime.*`, `ad_stack.agents.*`, `ad_stack.world_model.*`, `ad_stack.inference` のような内部パスを直接 import しません。
+
+## 4. Agent / Inference Boundary
 
 ### `data_collection` / `evaluation` -> `ad_stack`
 
-- 入力:
-  - `SceneState`
+外側が受け取るのは high-level stack / controller とその step 結果です。
+
 - 出力:
+  - `StackStepResult`
   - `ControlDecision`
-  - `VehicleCommand`
+  - その中の `VehicleCommand`
 
 ### `ad_stack` -> `learning`
+
+learned runtime を使う経路では、境界は次です。
 
 - `PilotNetInferenceRuntime`
 - `load_pilotnet_runtime`
 - `select_device`
 
+`SceneState` は外側の directory の interface ではなく、`ad_stack` 内部表現です。
 現在の learned-policy 入力はまだ `SceneState.metadata` 経由です。
 
 - `front_rgb_history`
@@ -134,7 +179,7 @@ flowchart LR
 
 これは動作上は十分ですが、将来的に厳密化するなら typed な learned-observation 構造へ切り出すのが自然です。
 
-## 4. `libs` の位置づけ
+## 5. `libs` の位置づけ
 
 図では省いている細かい共通依存は `libs/` にあります。
 

@@ -20,7 +20,7 @@ try:
 except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
-from ad_stack import load_pilotnet_runtime, select_device
+from ad_stack import create_interactive_pilotnet_controller, to_carla_control
 from libs.project import PROJECT_ROOT
 from libs.carla_utils import (
     FrameEventTracker,
@@ -31,7 +31,7 @@ from libs.carla_utils import (
     speed_mps,
     wait_for_image,
 )
-from evaluation.pipelines.common import carla_image_to_rgb_array, resolve_weather, smooth_steer
+from evaluation.pipelines.common import carla_image_to_rgb_array, resolve_weather
 DEFAULT_CHECKPOINT_PATH = (
     PROJECT_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
 )
@@ -75,37 +75,6 @@ class RawKeyboardInput:
                 break
             keys.append(chunk)
         return keys
-
-
-class SpeedController:
-    def __init__(
-        self,
-        *,
-        target_speed_kmh: float,
-        throttle_gain: float = 0.06,
-        brake_gain: float = 0.08,
-        derivative_gain: float = 0.01,
-        max_throttle: float = 0.65,
-        max_brake: float = 0.5,
-    ) -> None:
-        self.target_speed_kmh = target_speed_kmh
-        self.throttle_gain = throttle_gain
-        self.brake_gain = brake_gain
-        self.derivative_gain = derivative_gain
-        self.max_throttle = max_throttle
-        self.max_brake = max_brake
-        self.previous_error = 0.0
-
-    def step(self, current_speed_mps: float) -> tuple[float, float]:
-        current_speed_kmh = current_speed_mps * 3.6
-        error = self.target_speed_kmh - current_speed_kmh
-        derivative = error - self.previous_error
-        self.previous_error = error
-        if error >= 0.0:
-            throttle = min(self.max_throttle, max(0.0, (self.throttle_gain * error) + (self.derivative_gain * derivative)))
-            return throttle, 0.0
-        brake = min(self.max_brake, max(0.0, self.brake_gain * (-error)))
-        return 0.0, brake
 
 
 class FrontCameraPreview:
@@ -226,18 +195,15 @@ def main() -> None:
     if not checkpoint_path.exists():
         raise SystemExit(f"Checkpoint not found: {checkpoint_path}")
 
-    device = select_device(args.device)
-    runtime = load_pilotnet_runtime(checkpoint_path, device)
-    model_config = runtime.model_config
-    if int(model_config.get("route_point_dim", 0)) > 0:
-        raise SystemExit("This app only supports checkpoints without route-point conditioning.")
-
-    max_frame_stack = runtime.frame_stack
+    controller = create_interactive_pilotnet_controller(
+        checkpoint_path=checkpoint_path,
+        device=args.device,
+        target_speed_kmh=args.target_speed_kmh,
+    )
     frame_events = FrameEventTracker()
-    speed_controller = SpeedController(target_speed_kmh=args.target_speed_kmh)
     current_command = "lanefollow"
     previous_applied_steer: float | None = None
-    rgb_history: deque[np.ndarray] = deque(maxlen=max_frame_stack)
+    rgb_history: deque[np.ndarray] = deque(maxlen=controller.frame_stack)
     preview: FrontCameraPreview | None = None
 
     client = carla.Client(args.host, args.port)
@@ -305,30 +271,24 @@ def main() -> None:
 
                 rgb_history.append(carla_image_to_rgb_array(current_image))
                 current_speed = speed_mps(vehicle)
-                predicted_steer_raw = runtime.predict_steer(
+                step_result = controller.run_step(
                     rgb_history=list(rgb_history),
                     speed_mps=current_speed,
                     command=current_command,
-                    route_point=None,
+                    previous_applied_steer=previous_applied_steer,
+                    steering_smoothing=args.steer_smoothing,
+                    max_steer_delta=args.max_steer_delta,
                 )
-                predicted_steer = smooth_steer(
-                    predicted_steer_raw,
-                    previous_applied_steer,
-                    smoothing=args.steer_smoothing,
-                    max_delta=args.max_steer_delta,
+                predicted_steer = (
+                    step_result.applied_steer
+                    if step_result.applied_steer is not None
+                    else step_result.decision.command.steer
                 )
                 previous_applied_steer = predicted_steer
-                throttle, brake = speed_controller.step(current_speed)
-                vehicle.apply_control(
-                    carla.VehicleControl(
-                        throttle=throttle,
-                        steer=predicted_steer,
-                        brake=brake,
-                        hand_brake=False,
-                        reverse=False,
-                        manual_gear_shift=False,
-                    )
-                )
+                control = to_carla_control(carla, step_result.decision.command)
+                throttle = control.throttle
+                brake = control.brake
+                vehicle.apply_control(control)
                 update_spectator(
                     spectator,
                     vehicle.get_transform(),
