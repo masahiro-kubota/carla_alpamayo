@@ -20,6 +20,7 @@ try:
 except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
+from ad_stack.inference import load_pilotnet_runtime, select_device
 from libs.project import PROJECT_ROOT
 from libs.carla_utils import (
     FrameEventTracker,
@@ -31,7 +32,6 @@ from libs.carla_utils import (
     wait_for_image,
 )
 from evaluation.pipelines.common import carla_image_to_rgb_array, resolve_weather, smooth_steer
-from learning.libs.ml import load_pilotnet_runtime, select_device
 DEFAULT_CHECKPOINT_PATH = (
     PROJECT_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
 )

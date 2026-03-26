@@ -20,6 +20,7 @@ from ad_stack.agents import (
     LearnedLateralAgent,
     PilotNetScenePolicy,
 )
+from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.runtime.observation_builder import ObservationBuilder
 from ad_stack.world_model import EgoState, RouteState
 from libs.carla_utils import (
@@ -41,7 +42,6 @@ from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_
 from libs.schemas import EpisodeRecord, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 from evaluation.pipelines.common import carla_image_to_rgb_array, completion_ratio, resolve_weather, smooth_steer
-from learning.libs.ml import load_pilotnet_runtime, select_device
 
 
 def build_parser() -> argparse.ArgumentParser:

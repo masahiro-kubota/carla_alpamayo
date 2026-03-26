@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
-from ad_stack.world_model.scene_state import SceneState
+from ad_stack.world_model import SceneState
 from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
 
 

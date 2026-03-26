@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
-from ad_stack.safety.emergency_brake import EmergencyBrakeGuard
-from ad_stack.world_model.scene_state import SceneState
+from ad_stack.world_model import SceneState
 from learning.libs.ml import PilotNetInferenceRuntime
 
 SteerPolicy = Callable[[SceneState], float]
@@ -42,12 +41,11 @@ class PilotNetScenePolicy:
 
 @dataclass(slots=True)
 class LearnedLateralAgent:
-    """Wrap a learned steer policy with pluggable longitudinal control and safety guards."""
+    """Wrap a learned steer policy with pluggable longitudinal control."""
 
     lateral_policy: SteerPolicy
     longitudinal_policy: LongitudinalPolicy | None = None
-    safety_guard: EmergencyBrakeGuard = field(default_factory=EmergencyBrakeGuard)
-    name: str = field(init=False, default="learned_lateral_agent")
+    name: str = "learned_lateral_agent"
 
     def reset(self) -> None:
         return None
@@ -68,7 +66,7 @@ class LearnedLateralAgent:
             planner_state="learned_lateral",
             debug={"route_progress_ratio": scene_state.route.progress_ratio},
         )
-        return self.safety_guard.apply(scene_state, decision)
+        return decision
 
     @staticmethod
     def _fallback_longitudinal(scene_state: SceneState) -> tuple[float, float]:

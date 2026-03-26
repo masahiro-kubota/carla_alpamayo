@@ -2,11 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ad_stack.world_model.ego_state import EgoState
-from ad_stack.world_model.route_state import RouteState
-from ad_stack.world_model.scene_state import SceneState
-from ad_stack.world_model.tracked_object import TrackedObject
-from ad_stack.world_model.traffic_light_state import TrafficLightState
+from ad_stack.world_model import EgoState, RouteState, SceneState
 
 
 class ObservationBuilder:
@@ -19,8 +15,8 @@ class ObservationBuilder:
         town_id: str,
         ego: EgoState,
         route: RouteState,
-        tracked_objects: tuple[TrackedObject, ...] = (),
-        traffic_lights: tuple[TrafficLightState, ...] = (),
+        tracked_objects: tuple[object, ...] = (),
+        traffic_lights: tuple[object, ...] = (),
         metadata: dict[str, Any] | None = None,
     ) -> SceneState:
         return SceneState(

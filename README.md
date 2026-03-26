@@ -177,12 +177,7 @@ carla_alpamayo/
   uv.lock
   ad_stack/
     agents/
-    configs/
-    control/
-    planning/
     runtime/
-    safety/
-    scripts/
     world_model/
   data/
     manifests/

@@ -12,8 +12,7 @@
 ```mermaid
 flowchart LR
   data_collection["data_collection<br/>expert collection entrypoints"] -->|collect_route_loop builds SceneState / calls agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
-  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|evaluate_pilotnet_loop calls agents| ad_stack
-  evaluation -.interactive_command_drive calls runtime directly.-> learning["learning<br/>train / inference runtime"]
+  evaluation["evaluation<br/>closed-loop eval / interactive drive"] -->|calls ad_stack agents / inference bridge| ad_stack
 
   ad_stack -->|call learned inference runtime| learning
 
@@ -27,12 +26,12 @@ flowchart LR
 
 - `data_collection/` は route-based expert collector だけを持つ
   - `collect_route_loop` は `ad_stack.agents.ExpertBasicAgent` を使う
-- `evaluation/` 全体が `ad_stack` 依存ではない
+- `evaluation/` は `ad_stack` だけを見る
   - `evaluate_pilotnet_loop` は `ad_stack.agents.LearnedLateralAgent` を使う
-  - `interactive_command_drive` は `ad_stack` を通さず `learning` runtime を直接呼ぶ
+  - `interactive_command_drive` は `ad_stack` の inference bridge を使う
 - `ad_stack/` は learned lateral policy の推論時に `learning/` の inference runtime を呼ぶ
 - `learning/` は offline train code と inference runtime を持つ
-- `evaluation/` は `CARLA` closed-loop evaluator と、runtime 直結の interactive drive を持つ
+- `evaluation/` は `CARLA` closed-loop evaluator と、manual command の interactive drive を持つ
 
 ## 2. 現在の責務分担
 
@@ -49,8 +48,8 @@ flowchart LR
   - `BasicAgent` adapter と learned lateral agent adapter を持つ
   - 必要に応じて `learning/` の inference runtime を呼ぶ
 - `evaluation/`
-  - closed-loop evaluator では `ad_stack` を呼ぶ
-  - interactive drive では `learning` runtime を直接呼ぶ
+  - closed-loop evaluator では `ad_stack` の agent interface を呼ぶ
+  - interactive drive では `ad_stack` の inference bridge を呼ぶ
 - `libs/`
   - route config, `CARLA` PythonAPI 接続補助, project root 解決, schema を持つ
 
@@ -77,15 +76,11 @@ flowchart LR
 - `LearnedLateralAgent.step(scene_state)` を呼ぶ
 - longitudinal は `ExpertBasicAgent`、lateral は learned policy で合成する
 
-### `evaluation/` -> `learning/`
-
-- `interactive_command_drive` は `ad_stack` を通さない
-- `learning.libs.ml.PilotNetInferenceRuntime` を直接呼ぶ
-- 速度制御は `evaluation/pipelines/interactive_command_drive.py` 内の `SpeedController` が持つ
-
 ### `ad_stack/` -> `learning/`
 
 - `ad_stack` は `learning.libs.ml.PilotNetInferenceRuntime` を呼ぶ
+- `evaluation/` は `learning` を直接 import しない
+- `interactive_command_drive` も `ad_stack.inference` 経由で runtime を読む
 - 現在の入力は `SceneState.metadata` 経由で渡している
   - `front_rgb_history`
   - `command`
@@ -102,7 +97,7 @@ flowchart LR
 - `ad_stack.agents.base.VehicleCommand`
   - `steer`, `throttle`, `brake`
 - `ad_stack.world_model.scene_state.SceneState`
-  - ego / route / traffic light / tracked object の統合状態
+  - ego / route / metadata / optional world objects をまとめた状態
 - `ad_stack.agents.ExpertBasicAgent`
   - `CARLA BasicAgent` の adapter
 - `ad_stack.agents.LearnedLateralAgent`
