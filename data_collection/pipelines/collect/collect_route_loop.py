@@ -19,7 +19,6 @@ from libs.carla_utils import (
     attach_sensor,
     build_episode_id,
     build_planned_route,
-    compute_local_target_point,
     destroy_actors,
     load_route_config,
     relative_to_project,
@@ -122,12 +121,12 @@ def main() -> None:
     average_speed_mps = 0.0
     speed_sum = 0.0
     max_completion_ratio = 0.0
+    current_completion_ratio = 0.0
     success = False
     failure_reason = ""
     distance_to_goal_m = 0.0
     video_path: str | None = None
     video_error: str | None = None
-    route_index_cursor: int | None = None
 
     planned_route = build_planned_route(world.get_map(), route_config)
     route_geometry = route_geometry_from_planned_route(planned_route)
@@ -176,6 +175,7 @@ def main() -> None:
             ignore_stop_signs=args.ignore_stop_signs,
             ignore_vehicles=args.ignore_vehicles,
             sampling_resolution_m=route_config.sampling_resolution_m,
+            route_geometry=route_geometry,
         )
 
         world.tick()
@@ -190,7 +190,7 @@ def main() -> None:
             decision = step_result.decision
             control = to_carla_control(carla, decision.command)
             vehicle.apply_control(control)
-            current_completion_ratio = stack.completion_ratio()
+            current_completion_ratio = step_result.progress_ratio
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
 
             world_frame = world.tick()
@@ -215,16 +215,8 @@ def main() -> None:
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
             distance_to_goal_m = vehicle_location.distance(goal_location)
-            command = decision.behavior
-            route_point, route_index_cursor = compute_local_target_point(
-                route_geometry,
-                vehicle_x=vehicle_location.x,
-                vehicle_y=vehicle_location.y,
-                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                lookahead_m=8.0,
-                target_normalization_m=20.0,
-                previous_route_index=route_index_cursor,
-            )
+            command = step_result.behavior or decision.behavior
+            route_point = step_result.route_point
 
             episode_success_so_far = not collision and not failure_reason
             record = EpisodeRecord(
@@ -262,14 +254,14 @@ def main() -> None:
                 failure_reason = "stalled"
                 break
 
-            if stack.done():
+            if step_result.done:
                 break
 
             if elapsed_seconds >= args.max_seconds:
                 failure_reason = "max_seconds_exceeded"
                 break
 
-        max_completion_ratio = max(max_completion_ratio, stack.completion_ratio())
+        max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
         distance_to_goal_m = vehicle.get_location().distance(goal_location)
         success = (
             not failure_reason

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from collections import deque
 import math
 import os
 from pathlib import Path
@@ -202,8 +201,6 @@ def main() -> None:
     )
     frame_events = FrameEventTracker()
     current_command = "lanefollow"
-    previous_applied_steer: float | None = None
-    rgb_history: deque[np.ndarray] = deque(maxlen=controller.frame_stack)
     preview: FrontCameraPreview | None = None
 
     client = carla.Client(args.host, args.port)
@@ -269,13 +266,12 @@ def main() -> None:
                     elif normalized_key == "q":
                         raise KeyboardInterrupt
 
-                rgb_history.append(carla_image_to_rgb_array(current_image))
+                current_rgb = carla_image_to_rgb_array(current_image)
                 current_speed = speed_mps(vehicle)
                 step_result = controller.run_step(
-                    rgb_history=list(rgb_history),
+                    current_rgb=current_rgb,
                     speed_mps=current_speed,
                     command=current_command,
-                    previous_applied_steer=previous_applied_steer,
                     steering_smoothing=args.steer_smoothing,
                     max_steer_delta=args.max_steer_delta,
                 )
@@ -284,7 +280,6 @@ def main() -> None:
                     if step_result.applied_steer is not None
                     else step_result.decision.command.steer
                 )
-                previous_applied_steer = predicted_steer
                 control = to_carla_control(carla, step_result.decision.command)
                 throttle = control.throttle
                 brake = control.brake
@@ -312,7 +307,7 @@ def main() -> None:
                 sys.stdout.write(status)
                 sys.stdout.flush()
                 if preview is not None and not preview.closed:
-                    preview.update(rgb_history[-1], status_core)
+                    preview.update(current_rgb, status_core)
                 elif preview is not None and preview.closed:
                     raise KeyboardInterrupt
 

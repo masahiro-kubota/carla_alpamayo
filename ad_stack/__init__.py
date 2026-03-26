@@ -2,9 +2,7 @@
 
 from ad_stack.api import (
     ControlDecision,
-    ExpertCollectorStack,
-    InteractivePilotNetController,
-    PilotNetEvalStack,
+    StackDescription,
     StackStepResult,
     VehicleCommand,
     create_expert_collector_stack,
@@ -15,9 +13,7 @@ from ad_stack.api import (
 
 __all__ = [
     "ControlDecision",
-    "ExpertCollectorStack",
-    "InteractivePilotNetController",
-    "PilotNetEvalStack",
+    "StackDescription",
     "StackStepResult",
     "VehicleCommand",
     "create_expert_collector_stack",

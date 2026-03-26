@@ -55,9 +55,8 @@ flowchart LR
     PilotNetEvalFactory["create_pilotnet_eval_stack(...)"]
     InteractiveFactory["create_interactive_pilotnet_controller(...)"]
     ToCarlaControl["to_carla_control(...)"]
-    ExpertCollectorStack["ExpertCollectorStack"]
-    PilotNetEvalStack["PilotNetEvalStack"]
-    InteractiveController["InteractivePilotNetController"]
+    StackDescribe["describe()"]
+    StackRunStep["run_step(...)"]
     StackStepResult["StackStepResult"]
     ObservationBuilder["ObservationBuilder"]
     SceneState["SceneState"]
@@ -84,6 +83,8 @@ flowchart LR
   PublicFacade -->|export| PilotNetEvalFactory
   PublicFacade -->|export| InteractiveFactory
   PublicFacade -->|export| ToCarlaControl
+  PublicFacade -->|export| StackDescribe
+  PublicFacade -->|export| StackStepResult
 
   CollectRouteLoop -->|create stack| ExpertCollectorFactory
   CollectRouteLoop -->|convert command| ToCarlaControl
@@ -92,22 +93,18 @@ flowchart LR
   InteractiveCommandDrive -->|create controller| InteractiveFactory
   InteractiveCommandDrive -->|convert command| ToCarlaControl
 
-  ExpertCollectorFactory -->|return| ExpertCollectorStack
-  PilotNetEvalFactory -->|return| PilotNetEvalStack
-  InteractiveFactory -->|return| InteractiveController
+  ExpertCollectorFactory -->|return object with| StackRunStep
+  ExpertCollectorFactory -->|return object with| StackDescribe
+  PilotNetEvalFactory -->|return object with| StackRunStep
+  PilotNetEvalFactory -->|return object with| StackDescribe
+  InteractiveFactory -->|return object with| StackRunStep
+  InteractiveFactory -->|return object with| StackDescribe
 
-  ExpertCollectorStack -->|compose| ObservationBuilder
-  ExpertCollectorStack -->|call expert| ExpertBasicAgent
-  ExpertCollectorStack -->|return| StackStepResult
-
-  PilotNetEvalStack -->|compose| ObservationBuilder
-  PilotNetEvalStack -->|longitudinal policy| ExpertBasicAgent
-  PilotNetEvalStack -->|lateral policy| LearnedLateralAgent
-  PilotNetEvalStack -->|load runtime| InferenceBridge
-  PilotNetEvalStack -->|return| StackStepResult
-
-  InteractiveController -->|load runtime| InferenceBridge
-  InteractiveController -->|return| StackStepResult
+  StackRunStep -->|compose| ObservationBuilder
+  StackRunStep -->|call expert| ExpertBasicAgent
+  StackRunStep -->|lateral policy| LearnedLateralAgent
+  StackRunStep -->|load runtime| InferenceBridge
+  StackRunStep -->|return| StackStepResult
 
   ObservationBuilder -->|return| SceneState
   ExpertBasicAgent -->|return| ControlDecision
@@ -128,6 +125,7 @@ flowchart LR
 - `collect_route_loop` は `create_expert_collector_stack(...)` が返す stack を呼ぶ
 - `evaluate_pilotnet_loop` は `create_pilotnet_eval_stack(...)` が返す stack を呼ぶ
 - `interactive_command_drive` は `create_interactive_pilotnet_controller(...)` が返す controller を呼ぶ
+- 外側は返ってきた object に対して `run_step()` を呼び、必要なら `describe()` で静的情報を読む
 - 外側は `StackStepResult` から `ControlDecision` を取り出し、必要なら `to_carla_control(...)` で `carla.VehicleControl` に変換する
 - `SceneState` と `ObservationBuilder` は `ad_stack` の内部に閉じる
 - `evaluation` / `data_collection` から `learning` への direct import は持たせない
@@ -142,12 +140,13 @@ flowchart LR
 - `create_pilotnet_eval_stack`
 - `create_interactive_pilotnet_controller`
 - `to_carla_control`
+- `StackDescription`
 - `StackStepResult`
 - `ControlDecision`
 - `VehicleCommand`
 
-実務上、外側の runner が直接使うのは主に factory 関数群と `to_carla_control` です。
-`ExpertCollectorStack` などの stack class は factory の戻り値として扱います。
+実務上、外側の runner が直接使うのは主に factory 関数群、戻り値 object の `run_step()` / `describe()`、`to_carla_control` です。
+現状の利用としては `describe()` を主に使っているのは `evaluate_pilotnet_loop` です。
 
 `data_collection/` と `evaluation/` は、`ad_stack.runtime.*`, `ad_stack.agents.*`, `ad_stack.world_model.*`, `ad_stack.inference` のような内部パスを直接 import しません。
 
@@ -158,6 +157,7 @@ flowchart LR
 外側が受け取るのは high-level stack / controller とその step 結果です。
 
 - 出力:
+  - `StackDescription`
   - `StackStepResult`
   - `ControlDecision`
   - その中の `VehicleCommand`

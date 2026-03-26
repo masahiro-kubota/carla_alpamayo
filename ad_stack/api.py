@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.runtime import ObservationBuilder
 from ad_stack.world_model import EgoState, RouteState
+from libs.carla_utils import compute_local_target_point
 
 
 def _completion_ratio(initial_waypoint_count: int, remaining_count: int) -> float:
@@ -77,6 +79,15 @@ class StackStepResult:
     decision: ControlDecision
     expert_decision: ControlDecision | None = None
     applied_steer: float | None = None
+    behavior: str | None = None
+    progress_ratio: float = 0.0
+    done: bool = False
+    route_point: tuple[float, float] | None = None
+
+
+@dataclass(slots=True)
+class StackDescription:
+    model_name: str | None = None
 
 
 @dataclass(slots=True)
@@ -118,10 +129,17 @@ class ExpertCollectorStack:
         ignore_stop_signs: bool,
         ignore_vehicles: bool,
         sampling_resolution_m: float,
+        route_geometry: Any | None = None,
+        route_lookahead_m: float = 8.0,
+        route_target_normalization_m: float = 20.0,
     ) -> None:
         self.route_id = route_id
         self.town_id = town_id
         self.target_speed_mps = target_speed_kmh / 3.6
+        self._route_geometry = route_geometry
+        self._route_lookahead_m = route_lookahead_m
+        self._route_target_normalization_m = route_target_normalization_m
+        self._route_index_cursor: int | None = None
         self._observation_builder = ObservationBuilder()
         self._agent = ExpertBasicAgent(
             vehicle,
@@ -139,17 +157,14 @@ class ExpertCollectorStack:
         if self._initial_waypoint_count <= 0:
             raise RuntimeError("Planner produced an empty local plan.")
 
-    def remaining_waypoints(self) -> int:
+    def _remaining_waypoints(self) -> int:
         return self._agent.remaining_waypoints()
 
-    def current_behavior(self) -> str:
+    def _current_behavior(self) -> str:
         return self._agent.current_behavior()
 
-    def completion_ratio(self) -> float:
-        return _completion_ratio(self._initial_waypoint_count, self.remaining_waypoints())
-
-    def done(self) -> bool:
-        return self._agent.done()
+    def describe(self) -> StackDescription:
+        return StackDescription(model_name=None)
 
     def run_step(
         self,
@@ -159,6 +174,20 @@ class ExpertCollectorStack:
         speed_mps: float,
         metadata: dict[str, Any] | None = None,
     ) -> StackStepResult:
+        route_point: tuple[float, float] | None = None
+        if self._route_geometry is not None:
+            vehicle_location = vehicle_transform.location
+            route_point, self._route_index_cursor = compute_local_target_point(
+                self._route_geometry,
+                vehicle_x=vehicle_location.x,
+                vehicle_y=vehicle_location.y,
+                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                lookahead_m=self._route_lookahead_m,
+                target_normalization_m=self._route_target_normalization_m,
+                previous_route_index=self._route_index_cursor,
+            )
+        current_behavior = self._current_behavior()
+        current_progress = _completion_ratio(self._initial_waypoint_count, self._remaining_waypoints())
         scene_state = self._observation_builder.build(
             timestamp_s=timestamp_s,
             town_id=self.town_id,
@@ -169,13 +198,21 @@ class ExpertCollectorStack:
             ),
             route=RouteState(
                 route_id=self.route_id,
-                maneuver=self.current_behavior(),
-                progress_ratio=self.completion_ratio(),
+                maneuver=current_behavior,
+                progress_ratio=current_progress,
                 target_speed_mps=self.target_speed_mps,
             ),
-            metadata=metadata,
+            metadata={"route_point": route_point, **dict(metadata or {})},
         )
-        return StackStepResult(decision=self._agent.step(scene_state))
+        decision = self._agent.step(scene_state)
+        progress_after_step = _completion_ratio(self._initial_waypoint_count, self._remaining_waypoints())
+        return StackStepResult(
+            decision=decision,
+            behavior=decision.behavior,
+            progress_ratio=progress_after_step,
+            done=self._agent.done(),
+            route_point=route_point,
+        )
 
 
 class PilotNetEvalStack:
@@ -194,6 +231,7 @@ class PilotNetEvalStack:
         ignore_stop_signs: bool,
         ignore_vehicles: bool,
         sampling_resolution_m: float,
+        route_geometry: Any | None = None,
     ) -> None:
         resolved_checkpoint_path = Path(checkpoint_path).resolve()
         runtime_device = select_device(device)
@@ -201,6 +239,10 @@ class PilotNetEvalStack:
         self.route_id = route_id
         self.town_id = town_id
         self.target_speed_mps = target_speed_kmh / 3.6
+        self._route_geometry = route_geometry
+        self._route_index_cursor: int | None = None
+        self._rgb_history: deque[Any] = deque(maxlen=self._runtime.frame_stack)
+        self._previous_applied_steer: float | None = None
         self._observation_builder = ObservationBuilder()
         self._expert_agent = ExpertBasicAgent(
             vehicle,
@@ -229,37 +271,15 @@ class PilotNetEvalStack:
             longitudinal_policy=expert_longitudinal_policy,
         )
 
-    @property
-    def frame_stack(self) -> int:
-        return self._runtime.frame_stack
-
-    @property
-    def model_name(self) -> str | None:
+    def describe(self) -> StackDescription:
         model_name = self._runtime.checkpoint.get("model_name")
-        return str(model_name) if model_name is not None else None
+        return StackDescription(model_name=str(model_name) if model_name is not None else None)
 
-    @property
-    def route_lookahead_m(self) -> float:
-        return float(self._runtime.model_config.get("route_lookahead_m", 8.0))
-
-    @property
-    def route_target_normalization_m(self) -> float:
-        return float(self._runtime.model_config.get("route_target_normalization_m", 20.0))
-
-    def requires_route_point(self) -> bool:
-        return self._runtime.requires_route_point()
-
-    def remaining_waypoints(self) -> int:
+    def _remaining_waypoints(self) -> int:
         return self._expert_agent.remaining_waypoints()
 
-    def current_behavior(self) -> str:
+    def _current_behavior(self) -> str:
         return self._expert_agent.current_behavior()
-
-    def completion_ratio(self) -> float:
-        return _completion_ratio(self._initial_waypoint_count, self.remaining_waypoints())
-
-    def done(self) -> bool:
-        return self._expert_agent.done()
 
     def run_step(
         self,
@@ -267,14 +287,25 @@ class PilotNetEvalStack:
         timestamp_s: float,
         vehicle_transform: Any,
         speed_mps: float,
-        rgb_history: list[Any],
-        previous_applied_steer: float | None,
+        current_rgb: Any,
         steering_smoothing: float,
         max_steer_delta: float | None,
-        route_point: tuple[float, float] | None = None,
-        command: str | None = None,
     ) -> StackStepResult:
-        current_command = command or self.current_behavior()
+        self._rgb_history.append(current_rgb)
+        current_command = self._current_behavior()
+        progress_before_step = _completion_ratio(self._initial_waypoint_count, self._remaining_waypoints())
+        route_point: tuple[float, float] | None = None
+        if self._runtime.requires_route_point() and self._route_geometry is not None:
+            vehicle_location = vehicle_transform.location
+            route_point, self._route_index_cursor = compute_local_target_point(
+                self._route_geometry,
+                vehicle_x=vehicle_location.x,
+                vehicle_y=vehicle_location.y,
+                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                lookahead_m=float(self._runtime.model_config.get("route_lookahead_m", 8.0)),
+                target_normalization_m=float(self._runtime.model_config.get("route_target_normalization_m", 20.0)),
+                previous_route_index=self._route_index_cursor,
+            )
         scene_state = self._observation_builder.build(
             timestamp_s=timestamp_s,
             town_id=self.town_id,
@@ -286,11 +317,11 @@ class PilotNetEvalStack:
             route=RouteState(
                 route_id=self.route_id,
                 maneuver=current_command,
-                progress_ratio=self.completion_ratio(),
+                progress_ratio=progress_before_step,
                 target_speed_mps=self.target_speed_mps,
             ),
             metadata={
-                "front_rgb_history": rgb_history,
+                "front_rgb_history": list(self._rgb_history),
                 "command": current_command,
                 "route_point": route_point,
             },
@@ -298,15 +329,21 @@ class PilotNetEvalStack:
         decision = self._agent.step(scene_state)
         applied_steer = _smooth_steer(
             decision.command.steer,
-            previous_applied_steer,
+            self._previous_applied_steer,
             smoothing=steering_smoothing,
             max_delta=max_steer_delta,
         )
+        self._previous_applied_steer = applied_steer
         decision.command.steer = applied_steer
+        progress_after_step = _completion_ratio(self._initial_waypoint_count, self._remaining_waypoints())
         return StackStepResult(
             decision=decision,
             expert_decision=self._latest_expert_decision,
             applied_steer=applied_steer,
+            behavior=decision.behavior,
+            progress_ratio=progress_after_step,
+            done=self._expert_agent.done(),
+            route_point=route_point,
         )
 
 
@@ -324,33 +361,36 @@ class InteractivePilotNetController:
         if int(self._runtime.model_config.get("route_point_dim", 0)) > 0:
             raise ValueError("This app only supports checkpoints without route-point conditioning.")
         self._speed_controller = _SpeedController(target_speed_kmh=target_speed_kmh)
+        self._rgb_history: deque[Any] = deque(maxlen=self._runtime.frame_stack)
+        self._previous_applied_steer: float | None = None
 
-    @property
-    def frame_stack(self) -> int:
-        return self._runtime.frame_stack
+    def describe(self) -> StackDescription:
+        model_name = self._runtime.checkpoint.get("model_name")
+        return StackDescription(model_name=str(model_name) if model_name is not None else None)
 
     def run_step(
         self,
         *,
-        rgb_history: list[Any],
+        current_rgb: Any,
         speed_mps: float,
         command: str,
-        previous_applied_steer: float | None,
         steering_smoothing: float,
         max_steer_delta: float | None,
     ) -> StackStepResult:
+        self._rgb_history.append(current_rgb)
         raw_steer = self._runtime.predict_steer(
-            rgb_history=rgb_history,
+            rgb_history=list(self._rgb_history),
             speed_mps=speed_mps,
             command=command,
             route_point=None,
         )
         applied_steer = _smooth_steer(
             raw_steer,
-            previous_applied_steer,
+            self._previous_applied_steer,
             smoothing=steering_smoothing,
             max_delta=max_steer_delta,
         )
+        self._previous_applied_steer = applied_steer
         throttle, brake = self._speed_controller.step(speed_mps)
         return StackStepResult(
             decision=ControlDecision(
@@ -363,6 +403,7 @@ class InteractivePilotNetController:
                 planner_state="interactive_pilotnet_runtime",
             ),
             applied_steer=applied_steer,
+            behavior=command,
         )
 
 
@@ -383,6 +424,7 @@ __all__ = [
     "ExpertCollectorStack",
     "InteractivePilotNetController",
     "PilotNetEvalStack",
+    "StackDescription",
     "StackStepResult",
     "VehicleCommand",
     "create_expert_collector_stack",

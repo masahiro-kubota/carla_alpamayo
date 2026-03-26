@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import argparse
-from collections import deque
 import json
 from pathlib import Path
 import queue
 import random
-
-import numpy as np
 
 try:
     import carla
@@ -23,7 +20,6 @@ from libs.carla_utils import (
     FrameEventTracker,
     attach_sensor,
     build_planned_route,
-    compute_local_target_point,
     destroy_actors,
     load_route_config,
     relative_to_project,
@@ -130,8 +126,6 @@ def main() -> None:
     distance_to_goal_m = 0.0
     video_path: str | None = None
     video_error: str | None = None
-    previous_applied_steer: float | None = None
-    route_index_cursor: int | None = None
 
     planned_route = build_planned_route(world.get_map(), route_config)
     route_geometry = route_geometry_from_planned_route(planned_route)
@@ -182,44 +176,28 @@ def main() -> None:
             ignore_stop_signs=args.ignore_stop_signs,
             ignore_vehicles=args.ignore_vehicles,
             sampling_resolution_m=route_config.sampling_resolution_m,
+            route_geometry=route_geometry,
         )
-        rgb_history: deque[np.ndarray] = deque(maxlen=stack.frame_stack)
+        stack_description = stack.describe()
 
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
         while True:
-            rgb_history.append(carla_image_to_rgb_array(current_image))
+            current_rgb = carla_image_to_rgb_array(current_image)
             current_speed = speed_mps(vehicle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
-            current_completion_ratio = stack.completion_ratio()
-            command = stack.current_behavior()
-            route_point = None
-            if stack.requires_route_point():
-                route_point, route_index_cursor = compute_local_target_point(
-                    route_geometry,
-                    vehicle_x=vehicle_location.x,
-                    vehicle_y=vehicle_location.y,
-                    vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                    lookahead_m=stack.route_lookahead_m,
-                    target_normalization_m=stack.route_target_normalization_m,
-                    previous_route_index=route_index_cursor,
-                )
             step_result = stack.run_step(
                 timestamp_s=elapsed_seconds,
                 vehicle_transform=vehicle_transform,
                 speed_mps=current_speed,
-                rgb_history=list(rgb_history),
-                route_point=route_point,
-                command=command,
-                previous_applied_steer=previous_applied_steer,
+                current_rgb=current_rgb,
                 steering_smoothing=args.steer_smoothing,
                 max_steer_delta=args.max_steer_delta,
             )
             decision = step_result.decision
             expert_decision = step_result.expert_decision
             predicted_steer = step_result.applied_steer if step_result.applied_steer is not None else decision.command.steer
-            previous_applied_steer = predicted_steer
             control = to_carla_control(carla, decision.command)
             vehicle.apply_control(control)
 
@@ -238,9 +216,10 @@ def main() -> None:
                 current_stationary_seconds = 0.0
             max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
 
-            current_completion_ratio = stack.completion_ratio()
+            current_completion_ratio = step_result.progress_ratio
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
             distance_to_goal_m = vehicle_location.distance(goal_location)
+            route_point = step_result.route_point
 
             reached_success_goal = (
                 not collision
@@ -287,7 +266,7 @@ def main() -> None:
                 failure_reason = "stalled"
                 break
 
-            if stack.done():
+            if step_result.done:
                 break
 
             if elapsed_seconds >= args.max_seconds:
@@ -297,7 +276,7 @@ def main() -> None:
             world_frame = world.tick()
             current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
 
-        max_completion_ratio = max(max_completion_ratio, stack.completion_ratio())
+        max_completion_ratio = max(max_completion_ratio, current_completion_ratio if frame_index else 0.0)
         distance_to_goal_m = vehicle.get_location().distance(goal_location)
         success = (
             not failure_reason
@@ -339,7 +318,7 @@ def main() -> None:
         "is_camera_e2e_policy": True,
         "e2e_scope": "front_rgb_plus_speed_to_steer",
         "model_checkpoint_path": relative_to_project(checkpoint_path),
-        "model_name": stack.model_name,
+        "model_name": stack_description.model_name,
         "git_commit_id": git_commit_id,
         "steer_smoothing": args.steer_smoothing,
         "max_steer_delta": args.max_steer_delta,
