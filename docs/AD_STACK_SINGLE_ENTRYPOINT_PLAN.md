@@ -1,11 +1,11 @@
 # AD Stack Single Entrypoint Plan
 
-このドキュメントは、`data_collection` と `evaluation` を
+このドキュメントは、旧 `data_collection` と `evaluation` を
 「同じ simulation runner を違う条件で回すだけ」と見なしたときに、
 最終的にどこをどう変えるかを整理するためのものです。
 
 現状では、この方針は main の実装に反映済みです。いま読むときは
-「現在の public API をこういう意図で作ったか」の背景メモとして扱ってください。
+「現在の `simulation/` + `ad_stack.run(request)` 形にどう至ったか」の背景メモとして扱ってください。
 
 ## 1. 目標
 

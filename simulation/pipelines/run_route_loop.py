@@ -6,29 +6,34 @@ from pathlib import Path
 
 from ad_stack import ArtifactSpec, PolicySpec, RouteLoopScenarioSpec, RunRequest, RuntimeSpec, run
 
-DEFAULT_ROUTE_CONFIG_PATH = Path("data_collection/configs/routes/town01_pilotnet_loop.json")
+DEFAULT_ROUTE_CONFIG_PATH = Path("scenarios/routes/town01_pilotnet_loop.json")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Collect a fixed-loop Town01 episode using CARLA's planner as an expert."
+        description="Run the Town01 fixed loop in collect or evaluate mode via ad_stack.run(request)."
     )
+    parser.add_argument("--mode", choices=("collect", "evaluate"), default="collect")
+    parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
     parser.add_argument("--vehicle-filter", default="vehicle.tesla.model3")
     parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
     parser.add_argument("--sensor-timeout", type=float, default=2.0)
-    parser.add_argument("--image-width", type=int, default=320)
-    parser.add_argument("--image-height", type=int, default=180)
-    parser.add_argument("--image-fov", type=int, default=90)
     parser.add_argument("--target-speed-kmh", type=float, default=30.0)
+    parser.add_argument("--camera-width", type=int, default=320)
+    parser.add_argument("--camera-height", type=int, default=180)
+    parser.add_argument("--camera-fov", type=int, default=90)
     parser.add_argument("--goal-tolerance-m", type=float, default=10.0)
     parser.add_argument("--max-stop-seconds", type=float, default=10.0)
     parser.add_argument("--stationary-speed-threshold-mps", type=float, default=0.5)
     parser.add_argument("--max-seconds", type=float, default=600.0)
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--device", default=None)
+    parser.add_argument("--steer-smoothing", type=float, default=1.0)
+    parser.add_argument("--max-steer-delta", type=float, default=None)
     parser.add_argument(
         "--record-video",
         action=argparse.BooleanOptionalAction,
@@ -55,9 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.mode == "evaluate" and not args.checkpoint:
+        parser.error("--checkpoint is required when --mode=evaluate")
+    if args.mode == "collect" and args.checkpoint:
+        parser.error("--checkpoint is only valid when --mode=evaluate")
+
     request = RunRequest(
-        mode="collect",
+        mode=args.mode,
         scenario=RouteLoopScenarioSpec(
             route_config_path=Path(args.route_config),
             weather=args.weather,
@@ -72,14 +84,18 @@ def main() -> None:
             vehicle_filter=args.vehicle_filter,
             fixed_delta_seconds=args.fixed_delta_seconds,
             sensor_timeout=args.sensor_timeout,
-            camera_width=args.image_width,
-            camera_height=args.image_height,
-            camera_fov=args.image_fov,
+            camera_width=args.camera_width,
+            camera_height=args.camera_height,
+            camera_fov=args.camera_fov,
             target_speed_kmh=args.target_speed_kmh,
             seed=args.seed,
         ),
         policy=PolicySpec(
-            kind="expert",
+            kind="expert" if args.mode == "collect" else "learned",
+            checkpoint_path=Path(args.checkpoint) if args.checkpoint else None,
+            device=args.device,
+            steer_smoothing=args.steer_smoothing,
+            max_steer_delta=args.max_steer_delta,
             ignore_traffic_lights=args.ignore_traffic_lights,
             ignore_stop_signs=args.ignore_stop_signs,
             ignore_vehicles=args.ignore_vehicles,

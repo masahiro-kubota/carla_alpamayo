@@ -1,4 +1,4 @@
-"""Scene representation shared across collection and evaluation."""
+"""Scene representation shared across simulation modes."""
 
 from ad_stack.world_model.scene_state import EgoState, RouteState, SceneState
 

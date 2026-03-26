@@ -76,8 +76,6 @@ class FrontCameraPreview:
         )
         self.status_label.pack(fill="x")
         self._photo_image: ImageTk.PhotoImage | None = None
-        self.source_width = source_width
-        self.source_height = source_height
         self.display_width = max(1, int(round(source_width * display_scale)))
         self.display_height = max(1, int(round(source_height * display_scale)))
         self.root.update()
@@ -156,6 +154,7 @@ def main() -> None:
         print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
         preview_enabled = False
 
+    result = None
     try:
         if preview_enabled:
             preview = FrontCameraPreview(
@@ -226,8 +225,10 @@ def main() -> None:
     finally:
         if preview is not None:
             preview.close()
+
     print()
-    print(json.dumps(result.summary, indent=2))
+    if result is not None:
+        print(json.dumps(result.summary, indent=2))
 
 
 if __name__ == "__main__":

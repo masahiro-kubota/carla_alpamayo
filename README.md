@@ -9,7 +9,7 @@
 
 を回すための最小リポジトリです。
 
-現在の実行アーキテクチャは [docs/DIRECTORY_RELATIONSHIPS.md](docs/DIRECTORY_RELATIONSHIPS.md) にまとめています。`data_collection/` と `evaluation/` は薄い CLI wrapper で、実行本体は `ad_stack.run(request)` に集約しています。
+現在の実行アーキテクチャは [docs/DIRECTORY_RELATIONSHIPS.md](docs/DIRECTORY_RELATIONSHIPS.md) にまとめています。`simulation/` は薄い CLI wrapper で、実行本体は `ad_stack.run(request)` に集約しています。
 
 ## 前提
 
@@ -40,10 +40,10 @@ fixed loop の expert 収集:
 
 ```bash
 cd /home/masa/carla_alpamayo
-./data_collection/scripts/run_collect_town01.sh
+./simulation/scripts/run_collect_town01.sh
 ```
 
-内部では `data_collection.pipelines.collect.collect_route_loop` が `RunRequest(mode="collect", ...)` を作り、`ad_stack.run(...)` を呼びます。
+内部では `simulation.pipelines.run_route_loop` が `RunRequest(mode="collect", ...)` を作り、`ad_stack.run(...)` を呼びます。
 
 主な出力:
 
@@ -76,9 +76,10 @@ closed-loop 評価:
 
 ```bash
 cd /home/masa/carla_alpamayo
-PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop \
+PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
+  --mode evaluate \
   --checkpoint outputs/train/<train_run>/best.pt \
-  --route-config data_collection/configs/routes/town01_pilotnet_loop.json
+  --route-config scenarios/routes/town01_pilotnet_loop.json
 ```
 
 評価は clean git worktree でのみ実行できます。出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` です。
@@ -88,7 +89,7 @@ interactive 試走:
 ```bash
 cd /home/masa/carla_alpamayo
 export DISPLAY=:1
-PYTHONPATH="" uv run python -m evaluation.pipelines.interactive_command_drive
+PYTHONPATH="" uv run python -m simulation.pipelines.interactive_command_drive
 ```
 
 操作:
@@ -101,12 +102,9 @@ PYTHONPATH="" uv run python -m evaluation.pipelines.interactive_command_drive
 
 ## いまの責務分割
 
-- `data_collection/`
-  - collect 用 CLI
-  - `RunRequest(mode="collect")` を組み立てる
-- `evaluation/`
-  - eval / interactive 用 CLI
-  - `RunRequest(mode="evaluate" | "interactive")` を組み立てる
+- `simulation/`
+  - collect / evaluate / interactive 用 CLI
+  - `RunRequest` を組み立てる
 - `ad_stack/`
   - `run(request)` を提供する single entrypoint
   - CARLA world setup, actor/sensor lifecycle, simulation loop, artifact 出力を持つ
@@ -122,15 +120,9 @@ carla_alpamayo/
   ad_stack/
   data/
     manifests/
-  data_collection/
-    configs/
-    pipelines/
-    scripts/
   docs/
     AD_STACK_SINGLE_ENTRYPOINT_PLAN.md
     DIRECTORY_RELATIONSHIPS.md
-  evaluation/
-    pipelines/
   learning/
     libs/
     pipelines/
@@ -144,4 +136,9 @@ carla_alpamayo/
     collect/
     evaluate/
     train/
+  simulation/
+    pipelines/
+    scripts/
+  scenarios/
+    routes/
 ```

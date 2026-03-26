@@ -11,7 +11,7 @@ from libs.project import PROJECT_ROOT
 
 from .python_api import ensure_carla_agents_on_path
 
-DEFAULT_ROUTE_CONFIG_PATH = PROJECT_ROOT / "data_collection" / "configs" / "routes" / "town01_pilotnet_loop.json"
+DEFAULT_ROUTE_CONFIG_PATH = PROJECT_ROOT / "scenarios" / "routes" / "town01_pilotnet_loop.json"
 
 if TYPE_CHECKING:
     import carla

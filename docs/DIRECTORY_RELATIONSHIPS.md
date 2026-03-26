@@ -11,14 +11,13 @@
 
 - `docs/`, `data/`, `outputs/` のような非ソースコード中心のディレクトリは図から省いています
 - `libs/` は多くの場所から参照されるので、directory 図にだけ出し、module 図では本文補足に留めます
-- `data_collection/` と `evaluation/` は `ad_stack` の内部 module を直接 import しません
+- `simulation/` は `ad_stack` の内部 module を直接 import しません
 
 ## 1. Directory Responsibility
 
 ```mermaid
 flowchart LR
-  data_collection["data_collection<br/>collect CLI / RunRequest builder"] -->|build request + call run| ad_stack["ad_stack<br/>single public facade"]
-  evaluation["evaluation<br/>eval / interactive CLI / RunRequest builder"] -->|build request + call run| ad_stack
+  simulation["simulation<br/>collect / evaluate / interactive CLI"] -->|build request + call run| ad_stack["ad_stack<br/>single public facade"]
   ad_stack -->|load learned runtime| learning["learning<br/>train / model / inference runtime"]
 
   ad_stack -->|shared helpers| libs
@@ -27,22 +26,17 @@ flowchart LR
 
 この図の読み方:
 
-- `data_collection/` は collect 用 CLI と request 組み立てを持つ
-- `evaluation/` は closed-loop eval / interactive drive の CLI と request 組み立てを持つ
+- `simulation/` は collect / evaluate / interactive の CLI と request 組み立てを持つ
 - 実行本体は `ad_stack.run(request)` に集約している
 - `learning/` は learned runtime を供給する
-- directory 間の主な依存は `data_collection/evaluation -> ad_stack -> learning`
+- directory 間の主な依存は `simulation -> ad_stack -> learning`
 
 ## 2. Module / Public API Dependency
 
 ```mermaid
 flowchart LR
-  subgraph data_collection["data_collection"]
-    CollectRouteLoop["collect_route_loop.py"]
-  end
-
-  subgraph evaluation["evaluation"]
-    EvaluatePilotNetLoop["evaluate_pilotnet_loop.py"]
+  subgraph simulation["simulation"]
+    RunRouteLoop["run_route_loop.py"]
     InteractiveCommandDrive["interactive_command_drive.py"]
   end
 
@@ -61,20 +55,17 @@ flowchart LR
     PilotNetRuntime["PilotNetInferenceRuntime"]
   end
 
-  CollectRouteLoop -->|import| PublicFacade
-  EvaluatePilotNetLoop -->|import| PublicFacade
+  RunRouteLoop -->|import| PublicFacade
   InteractiveCommandDrive -->|import| PublicFacade
 
   PublicFacade -->|export| RunRequest
   PublicFacade -->|export| RunFn
   PublicFacade -->|export| RunResult
 
-  CollectRouteLoop -->|build| RunRequest
-  EvaluatePilotNetLoop -->|build| RunRequest
+  RunRouteLoop -->|build| RunRequest
   InteractiveCommandDrive -->|build| RunRequest
 
-  CollectRouteLoop -->|call| RunFn
-  EvaluatePilotNetLoop -->|call| RunFn
+  RunRouteLoop -->|call| RunFn
   InteractiveCommandDrive -->|call| RunFn
 
   RunFn -->|return| RunResult
@@ -110,15 +101,15 @@ flowchart LR
 - `ArtifactSpec`
 - `run`
 
-`data_collection/` と `evaluation/` は、`ad_stack.api`, `ad_stack.runtime.*`, `ad_stack.agents.*`, `ad_stack.world_model.*`, `ad_stack.inference` を直接 import しません。
+`simulation/` は、`ad_stack.api`, `ad_stack.runtime.*`, `ad_stack.agents.*`, `ad_stack.world_model.*`, `ad_stack.inference` を直接 import しません。
 
 ## 4. Single Entrypoint Boundary
 
 外側が `ad_stack` に渡す interface は `RunRequest` だけです。
 
-- collect:
+- route-loop collect:
   - `RunRequest(mode="collect", ...)`
-- evaluate:
+- route-loop evaluate:
   - `RunRequest(mode="evaluate", ...)`
 - interactive:
   - `RunRequest(mode="interactive", ...)`
