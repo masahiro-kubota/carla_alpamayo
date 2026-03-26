@@ -100,18 +100,7 @@ PILOTNET_COMMAND_CONDITIONING=embedding ./learning/scripts/run_train_pilotnet.sh
 
 episode 単位 split を使うときは `PILOTNET_SPLIT_MODE=episode` を付けます。複数 dataset を混ぜるときは `--manifest-glob` を複数回渡せます。
 
-7. 学習済み steer policy を recorded eval data で offline 評価する
-
-```bash
-cd /media/masa/ssd_data/carla_alpamayo
-./learning/scripts/run_evaluate_pilotnet_dataset.sh \
-  --checkpoint outputs/train/<train_run>/best.pt \
-  --manifest-glob 'data/manifests/episodes/*.jsonl'
-```
-
-これは `CARLA` closed-loop ではなく、保存済み manifest に対して `MAE / RMSE` を見る offline 評価です。
-
-8. 学習済み steer policy を fixed loop で closed-loop 評価する
+7. 学習済み steer policy を fixed loop で closed-loop 評価する
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
@@ -120,7 +109,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 評価は `git diff` が空の clean worktree でのみ実行できます。出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` の形で、実行時刻と commit id を含む一意なディレクトリ名になります。
 
-9. 学習済み steer policy を手動 command で動かす
+8. 学習済み steer policy を手動 command で動かす
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
@@ -154,8 +143,6 @@ export DISPLAY=:1
   - 既存 episode の PNG 列から MP4 を再生成する
 - `learning.pipelines.train.train_pilotnet`
   - `front RGB + speed (+ command) -> steer` の `PilotNet風` モデルを学習する
-- `learning.pipelines.evaluate.evaluate_pilotnet_dataset`
-  - saved manifest を使って offline に `MAE / RMSE` を評価する
 - `evaluation.pipelines.evaluate_pilotnet_loop`
   - learned steer を fixed loop で closed-loop 評価する
   - `command` 条件付き checkpoint もそのまま評価できる
@@ -169,7 +156,6 @@ export DISPLAY=:1
 - fixed-loop summary: `outputs/collect/<episode_id>/summary.json`
 - fixed-loop video: `outputs/collect/<episode_id>/front_rgb.mp4`
 - train artifacts: `outputs/train/<run_id>/{config.json,summary.json,best.pt}`
-- offline eval summary: 任意の `--summary-output`
 - evaluate artifacts: `outputs/evaluate/<episode_id>/{summary.json,manifest.jsonl}`
 - evaluate suite summary: `outputs/evaluate_suites/<suite_name>.json`
 
@@ -206,7 +192,6 @@ eval route suite を checkpoint に流すときは `./evaluation/scripts/run_eva
 
 camera 画像からの learned steer 実験も 1 本回しています。結果は [docs/TOWN01_CAMERA_E2E_RESULTS.md](docs/TOWN01_CAMERA_E2E_RESULTS.md) にまとめました。
 再現手順と、学習に使った data recipe / correction loop の整理は [docs/TOWN01_MAINLINE_REPRO.md](docs/TOWN01_MAINLINE_REPRO.md) にまとめています。
-accepted run 当時の manifest 一覧をそのまま replay したいときは `./learning/scripts/run_train_town01_mainline_exact.sh` を使います。
 
 要点:
 

@@ -18,7 +18,6 @@ PYTHONPATH="" uv run python -m data_collection.pipelines.collect.minimal_collect
 PYTHONPATH="" uv run python -m data_collection.pipelines.collect.collect_route_loop --help
 PYTHONPATH="" uv run python -m data_collection.pipelines.collect.render_episode_video --help
 PYTHONPATH="" uv run python -m learning.pipelines.train.train_pilotnet --help
-PYTHONPATH="" uv run python -m learning.pipelines.evaluate.evaluate_pilotnet_dataset --help
 PYTHONPATH="" uv run python -m evaluation.pipelines.evaluate_pilotnet_loop --help
 PYTHONPATH="" uv run python -m evaluation.pipelines.interactive_command_drive --help
 PYTHONPATH="" uv run python -m compileall libs learning evaluation data_collection
@@ -90,7 +89,7 @@ cd /media/masa/ssd_data/carla_alpamayo
 
 ## 5. 追加で見ておく bridging 条件
 
-学習と収集の境界で壊れやすい箇所として、次のどちらか 1 つは通すこと:
+学習と収集の境界で壊れやすい箇所として、次を通すこと:
 
 ```bash
 cd /media/masa/ssd_data/carla_alpamayo
@@ -101,18 +100,10 @@ cd /media/masa/ssd_data/carla_alpamayo
   --no-record-video
 ```
 
-または
-
-```bash
-cd /media/masa/ssd_data/carla_alpamayo
-./learning/scripts/run_build_correction_windows.sh \
-  --suite-summary outputs/evaluate_suites/<suite_summary>.json
-```
-
 判定:
 
 - evaluation 側 script から data_collection 側 route config を参照できる
-- 生成される summary / correction artifact の path が repo root 基準で正しい
+- 生成される summary artifact の path が repo root 基準で正しい
 
 ## 最終判定
 

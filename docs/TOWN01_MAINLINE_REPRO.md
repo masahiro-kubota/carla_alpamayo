@@ -114,12 +114,8 @@ cd /home/masa/carla_alpamayo
 
 現在の workspace にある expert episodes と correction manifests を使って、accepted mainline 設定を再学習する手順です。
 
-```bash
-cd /home/masa/carla_alpamayo
-./learning/scripts/run_train_town01_mainline.sh
-```
-
-この script は accepted recipe の hyperparameter を固定します。
+現在の簡素化後 repo では、専用 wrapper `run_train_town01_mainline.sh` は残していません。
+再学習するときは `./learning/scripts/run_train_pilotnet.sh` から、下の recipe を手で渡してください。
 
 - split mode: `episode`
 - frame stack: `3`
@@ -143,14 +139,8 @@ accepted training run の例:
 
 ## 3. Exact Replay Of The Accepted Training Set
 
-accepted run 当時の manifest 一覧をそのまま使って replay したいときは、こちらを使います。
-
-```bash
-cd /home/masa/carla_alpamayo
-./learning/scripts/run_train_town01_mainline_exact.sh
-```
-
-この script は `outputs/train/pilotnet_branch_fs3_20260321_231852/config.json` を読み、
+accepted run 当時の manifest 一覧をそのまま使った exact replay wrapper も、簡素化後 repo では残していません。
+必要なら `outputs/train/pilotnet_branch_fs3_20260321_231852/config.json` を参照して、
 
 - exact manifest list
 - accepted hyperparameter
@@ -209,11 +199,7 @@ correction windows を再生成したい場合:
 
 2026-03-21 から 2026-03-22 に確認したもの:
 
-- `bash -n learning/scripts/run_train_town01_mainline.sh`
-- `bash -n learning/scripts/run_train_town01_mainline_exact.sh`
 - `bash -n evaluation/scripts/run_evaluate_town01_mainline.sh`
-- `./learning/scripts/run_train_town01_mainline.sh --help`
-- `./learning/scripts/run_train_town01_mainline_exact.sh --help`
 - accepted checkpoint の closed-loop 再評価
   - summary: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/summary.json`
   - video: `outputs/evaluate/town01_pilotnet_loop_pilotnet_eval_20260321_235649/front_rgb.mp4`

@@ -11,9 +11,9 @@
 
 ```mermaid
 flowchart LR
-  data_collection["data_collection<br/>expert collection / replay"] -->|build SceneState / call agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
-  evaluation["evaluation<br/>closed-loop sim eval / interactive drive / suite runner"] -->|build SceneState / call agents| ad_stack
-  learning["learning<br/>train / offline eval / inference runtime"]
+  data_collection["data_collection<br/>collection entrypoints"] -->|collect_route_loop builds SceneState / calls agents| ad_stack["ad_stack<br/>online agent interface / adapters"]
+  evaluation["evaluation<br/>evaluation entrypoints"] -->|evaluate_pilotnet_loop / scenario runner call agents| ad_stack
+  evaluation -.interactive_command_drive calls runtime directly.-> learning["learning<br/>train / inference runtime"]
 
   ad_stack -->|call learned inference runtime| learning
 
@@ -25,29 +25,34 @@ flowchart LR
 
 現状のポイント:
 
-- `data_collection/` の fixed-route expert 収集は `ad_stack.agents.ExpertBasicAgent` を使う
-- `evaluation/` の closed-loop 評価は `ad_stack.agents.LearnedLateralAgent` を使う
+- `data_collection/` 全体が `ad_stack` 依存ではない
+  - `collect_route_loop` は `ad_stack.agents.ExpertBasicAgent` を使う
+  - `minimal_collect` は `Traffic Manager` の autopilot を直接使う
+- `evaluation/` 全体が `ad_stack` 依存ではない
+  - `evaluate_pilotnet_loop` は `ad_stack.agents.LearnedLateralAgent` を使う
+  - `interactive_command_drive` は `ad_stack` を通さず `learning` runtime を直接呼ぶ
 - `ad_stack/` は learned lateral policy の推論時に `learning/` の inference runtime を呼ぶ
-- `learning/` は offline train code, inference runtime, recorded-manifest 用 evaluator を持つ
-- `evaluation/` は `CARLA` closed-loop の main flow を持つ
+- `learning/` は offline train code と inference runtime を持つ
+- `evaluation/` は `CARLA` closed-loop evaluator と、runtime 直結の interactive drive を持つ
 
 ## 2. 現在の責務分担
 
 - `data_collection/`
   - `CARLA` world を進める
-  - sensor と ego 状態から `SceneState` を組み立てる
-  - `ad_stack` の expert agent を呼ぶ
+  - route-based collector では sensor と ego 状態から `SceneState` を組み立てる
+  - route-based collector では `ad_stack` の expert agent を呼ぶ
+  - minimal collector では `Traffic Manager` autopilot を直接使う
   - `EpisodeRecord` と画像を保存する
 - `learning/`
   - dataset, model, train code を持つ
   - checkpoint load / preprocess / infer の runtime を持つ
-  - recorded manifest に対する offline evaluator を持つ
 - `ad_stack/`
   - `SceneState -> ControlDecision` の interface を提供する
   - `BasicAgent` adapter と learned lateral agent adapter を持つ
   - 必要に応じて `learning/` の inference runtime を呼ぶ
 - `evaluation/`
-  - closed-loop evaluator, suite runner, interactive drive を持つ
+  - closed-loop evaluator と suite runner では `ad_stack` を呼ぶ
+  - interactive drive では `learning` runtime を直接呼ぶ
 - `libs/`
   - route config, `CARLA` PythonAPI 接続補助, project root 解決, schema を持つ
 
@@ -63,15 +68,24 @@ flowchart LR
 
 実際の流れ:
 
+- これは `collect_route_loop` に当てはまる
 - `data_collection/` が `ObservationBuilder` で `SceneState` を作る
 - `ExpertBasicAgent.step(scene_state)` を呼ぶ
 - 返ってきた `VehicleCommand` を `carla.VehicleControl` に変換して適用する
+- `minimal_collect` はこの経路を通らない
 
 ### `evaluation/` -> `ad_stack/`
 
+- これは `evaluate_pilotnet_loop` と generic runner に当てはまる
 - `evaluation/pipelines/` の closed-loop evaluator が `SceneState` を作る
 - `LearnedLateralAgent.step(scene_state)` を呼ぶ
 - longitudinal は `ExpertBasicAgent`、lateral は learned policy で合成する
+
+### `evaluation/` -> `learning/`
+
+- `interactive_command_drive` は `ad_stack` を通さない
+- `learning.libs.ml.PilotNetInferenceRuntime` を直接呼ぶ
+- 速度制御は `evaluation/pipelines/interactive_command_drive.py` 内の `SpeedController` が持つ
 
 ### `ad_stack/` -> `learning/`
 
@@ -101,7 +115,6 @@ flowchart LR
 ### `learning` が提供するもの
 
 - model 定義
-- offline dataset evaluator
 - checkpoint load / preprocess / infer の runtime
 - `learning.libs.ml.PilotNetInferenceRuntime`
 
