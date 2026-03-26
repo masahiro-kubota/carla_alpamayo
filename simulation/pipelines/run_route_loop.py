@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ignore-traffic-lights",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
     )
     parser.add_argument(
         "--ignore-stop-signs",
@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ignore-vehicles",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
     )
     return parser
 
