@@ -3,6 +3,7 @@
 `CARLA` を擬似フリート兼シミュレータとして使い、収集 -> 整形 -> 検索 -> 学習 -> 再学習のループを個人で回すための作業リポジトリです。
 
 詳細な構想は [docs/PERSONAL_PROJECT_PLAN.md](docs/PERSONAL_PROJECT_PLAN.md) にまとめています。このルートでは、まず `front RGB + speed + command` を収集する最小パイプラインから始めます。
+将来の NPC 含み full-stack 自動運転向けの設計は [docs/AD_STACK_ARCHITECTURE.md](docs/AD_STACK_ARCHITECTURE.md) に切り出しています。
 
 現在の mainline 方針:
 
@@ -225,11 +226,22 @@ accepted run 当時の manifest 一覧をそのまま replay したいときは 
 
 ## リポジトリ構成
 
+直下ディレクトリ間の依存関係は [docs/DIRECTORY_RELATIONSHIPS.md](docs/DIRECTORY_RELATIONSHIPS.md) に分けてあります。
+
 ```text
 carla_alpamayo/
   README.md
   pyproject.toml
   uv.lock
+  ad_stack/
+    agents/
+    configs/
+    control/
+    planning/
+    runtime/
+    safety/
+    scripts/
+    world_model/
   data/
     manifests/
       corrections/
@@ -239,10 +251,16 @@ carla_alpamayo/
     pipelines/
     scripts/
   docs/
+    DIRECTORY_RELATIONSHIPS.md
+    AD_STACK_ARCHITECTURE.md
   learning/
     libs/
     pipelines/
     scripts/
+  evaluation/
+    metrics/
+    reports/
+    runners/
   libs/
     carla_utils/
     project.py
@@ -253,4 +271,9 @@ carla_alpamayo/
     evaluate/
     evaluate_suites/
     train/
+  scenarios/
+    eval_suites/
+    npc_profiles/
+    routes/
+    traffic_setups/
 ```
