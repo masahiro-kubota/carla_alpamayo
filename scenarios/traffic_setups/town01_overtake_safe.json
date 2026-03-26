@@ -10,7 +10,8 @@
   ],
   "traffic_light_overrides": [],
   "expert_overrides": {
-    "allow_overtake": true
+    "allow_overtake": true,
+    "overtake_trigger_distance_m": 24.0
   },
   "description": "Single slow lead vehicle with no close oncoming blocker so the expert can overtake."
 }

@@ -15,7 +15,8 @@
   ],
   "traffic_light_overrides": [],
   "expert_overrides": {
-    "allow_overtake": true
+    "allow_overtake": true,
+    "overtake_trigger_distance_m": 24.0
   },
   "description": "Slow lead vehicle with a close oncoming blocker in the adjacent lane to force overtake rejection."
 }

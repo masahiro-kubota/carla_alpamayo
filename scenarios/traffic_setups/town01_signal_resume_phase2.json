@@ -1,0 +1,27 @@
+{
+  "name": "town01_signal_resume_phase2",
+  "town": "Town01",
+  "npc_vehicles": [],
+  "traffic_light_overrides": [],
+  "traffic_light_schedules": [
+    {
+      "actor_id": 57,
+      "phases": [
+        {
+          "at_seconds": 0.0,
+          "state": "red",
+          "freeze": true
+        },
+        {
+          "at_seconds": 6.0,
+          "state": "green",
+          "freeze": true
+        }
+      ]
+    }
+  ],
+  "expert_overrides": {
+    "allow_overtake": false
+  },
+  "description": "Deterministic red-to-green schedule for verifying stop then resume behavior on the short signal route."
+}

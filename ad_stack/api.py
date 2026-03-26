@@ -364,7 +364,7 @@ class ExpertCollectorStack(_RouteSceneMixin):
         route_geometry: Any | None = None,
         route_lookahead_m: float = 8.0,
         route_target_normalization_m: float = 20.0,
-        allow_overtake: bool = True,
+        expert_config_overrides: dict[str, Any] | None = None,
     ) -> None:
         import carla
 
@@ -389,7 +389,7 @@ class ExpertCollectorStack(_RouteSceneMixin):
                 ignore_stop_signs=ignore_stop_signs,
                 ignore_vehicles=ignore_vehicles,
                 sampling_resolution_m=sampling_resolution_m,
-                allow_overtake=allow_overtake,
+                **dict(expert_config_overrides or {}),
             ),
         )
         self._agent.set_global_plan(planned_trace)
@@ -440,7 +440,7 @@ class PilotNetEvalStack(_RouteSceneMixin):
         ignore_vehicles: bool,
         sampling_resolution_m: float,
         route_geometry: Any | None = None,
-        allow_overtake: bool = True,
+        expert_config_overrides: dict[str, Any] | None = None,
     ) -> None:
         import carla
 
@@ -470,7 +470,7 @@ class PilotNetEvalStack(_RouteSceneMixin):
                 ignore_stop_signs=ignore_stop_signs,
                 ignore_vehicles=ignore_vehicles,
                 sampling_resolution_m=sampling_resolution_m,
-                allow_overtake=allow_overtake,
+                **dict(expert_config_overrides or {}),
             ),
         )
         self._expert_agent.set_global_plan(planned_trace)

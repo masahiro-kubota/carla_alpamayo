@@ -74,11 +74,25 @@ class TrafficLightOverrideSpec:
 
 
 @dataclass(slots=True)
+class TrafficLightSchedulePhaseSpec:
+    at_seconds: float
+    state: str
+    freeze: bool = True
+
+
+@dataclass(slots=True)
+class TrafficLightScheduleSpec:
+    actor_id: int
+    phases: list[TrafficLightSchedulePhaseSpec] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class TrafficSetupSpec:
     name: str
     town: str
     npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
+    traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
     expert_overrides: dict[str, Any] = field(default_factory=dict)
     description: str = ""
 
@@ -224,6 +238,23 @@ def _load_traffic_setup(path: Path) -> TrafficSetupSpec:
             )
             for item in raw.get("traffic_light_overrides", [])
         ],
+        traffic_light_schedules=[
+            TrafficLightScheduleSpec(
+                actor_id=int(item["actor_id"]),
+                phases=[
+                    TrafficLightSchedulePhaseSpec(
+                        at_seconds=float(phase["at_seconds"]),
+                        state=str(phase["state"]),
+                        freeze=bool(phase.get("freeze", True)),
+                    )
+                    for phase in sorted(
+                        item.get("phases", []),
+                        key=lambda phase: float(phase["at_seconds"]),
+                    )
+                ],
+            )
+            for item in raw.get("traffic_light_schedules", [])
+        ],
         expert_overrides=dict(raw.get("expert_overrides", {})),
         description=str(raw.get("description", "")),
     )
@@ -263,25 +294,76 @@ def _update_spectator(
     spectator.set_transform(carla_module.Transform(spectator_location, spectator_rotation))
 
 
-def _apply_traffic_light_overrides(carla_module: Any, world: Any, overrides: list[TrafficLightOverrideSpec]) -> None:
-    if not overrides:
-        return
-    lights_by_id = {int(actor.id): actor for actor in world.get_actors().filter("*traffic_light*")}
+def _traffic_lights_by_id(world: Any) -> dict[int, Any]:
+    return {int(actor.id): actor for actor in world.get_actors().filter("*traffic_light*")}
+
+
+def _set_traffic_light_state(carla_module: Any, traffic_light: Any, *, state_name: str, freeze: bool) -> None:
     state_map = {
         "red": carla_module.TrafficLightState.Red,
         "yellow": carla_module.TrafficLightState.Yellow,
         "green": carla_module.TrafficLightState.Green,
     }
+    state = state_map.get(state_name.lower())
+    if state is None:
+        raise ValueError(f"Unsupported traffic light override state: {state_name}")
+    traffic_light.set_state(state)
+    traffic_light.freeze(bool(freeze))
+
+
+def _apply_traffic_light_overrides(
+    carla_module: Any,
+    world: Any,
+    overrides: list[TrafficLightOverrideSpec],
+) -> dict[int, Any]:
+    lights_by_id = _traffic_lights_by_id(world)
+    if not overrides:
+        return lights_by_id
     for override in overrides:
         traffic_light = lights_by_id.get(override.actor_id)
         if traffic_light is None:
             raise RuntimeError(f"Traffic light actor_id={override.actor_id} not found for override.")
-        state = state_map.get(override.state.lower())
-        if state is None:
-            raise ValueError(f"Unsupported traffic light override state: {override.state}")
-        traffic_light.set_state(state)
-        if override.freeze:
-            traffic_light.freeze(True)
+        _set_traffic_light_state(
+            carla_module,
+            traffic_light,
+            state_name=override.state,
+            freeze=override.freeze,
+        )
+    return lights_by_id
+
+
+def _apply_traffic_light_schedules(
+    carla_module: Any,
+    lights_by_id: dict[int, Any],
+    schedules: list[TrafficLightScheduleSpec],
+    *,
+    elapsed_seconds: float,
+    applied_phase_indices: dict[int, int],
+) -> None:
+    if not schedules:
+        return
+    for schedule in schedules:
+        traffic_light = lights_by_id.get(schedule.actor_id)
+        if traffic_light is None:
+            raise RuntimeError(f"Traffic light actor_id={schedule.actor_id} not found for schedule.")
+        latest_index = -1
+        for phase_index, phase in enumerate(schedule.phases):
+            if phase.at_seconds <= elapsed_seconds:
+                latest_index = phase_index
+            else:
+                break
+        if latest_index < 0:
+            continue
+        if applied_phase_indices.get(schedule.actor_id) == latest_index:
+            continue
+        phase = schedule.phases[latest_index]
+        _set_traffic_light_state(
+            carla_module,
+            traffic_light,
+            state_name=phase.state,
+            freeze=phase.freeze,
+        )
+        applied_phase_indices[schedule.actor_id] = latest_index
 
 
 def _spawn_npc_vehicles(
@@ -386,7 +468,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         raise ValueError(
             f"traffic_setup town mismatch: route={route_config.town} traffic_setup={traffic_setup.town}"
         )
-    allow_overtake = bool(traffic_setup.expert_overrides.get("allow_overtake", True)) if traffic_setup is not None else True
+    expert_config_overrides = dict(traffic_setup.expert_overrides) if traffic_setup is not None else {}
+    allow_overtake = bool(expert_config_overrides.get("allow_overtake", True))
 
     git_commit_id: str | None = None
     if request.mode == "evaluate":
@@ -439,6 +522,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     min_lead_distance_m = float("inf")
     _traffic_light_violation_active = False
     npc_actors_summary: list[dict[str, Any]] = []
+    traffic_light_phase_indices: dict[int, int] = {}
 
     planned_route = build_planned_route(world.get_map(), route_config)
     route_geometry = route_geometry_from_planned_route(planned_route)
@@ -470,7 +554,18 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         actors.append(lane_sensor)
         lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
 
-        _apply_traffic_light_overrides(carla, world, traffic_setup.traffic_light_overrides if traffic_setup is not None else [])
+        lights_by_id = _apply_traffic_light_overrides(
+            carla,
+            world,
+            traffic_setup.traffic_light_overrides if traffic_setup is not None else [],
+        )
+        _apply_traffic_light_schedules(
+            carla,
+            lights_by_id,
+            traffic_setup.traffic_light_schedules if traffic_setup is not None else [],
+            elapsed_seconds=0.0,
+            applied_phase_indices=traffic_light_phase_indices,
+        )
         npc_actors_summary = _spawn_npc_vehicles(
             client=client,
             world=world,
@@ -493,7 +588,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ignore_vehicles=policy.ignore_vehicles,
                 sampling_resolution_m=route_config.sampling_resolution_m,
                 route_geometry=route_geometry,
-                allow_overtake=allow_overtake,
+                expert_config_overrides=expert_config_overrides,
             )
             stack_description = stack.describe()
         else:
@@ -511,13 +606,20 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ignore_vehicles=policy.ignore_vehicles,
                 sampling_resolution_m=route_config.sampling_resolution_m,
                 route_geometry=route_geometry,
-                allow_overtake=allow_overtake,
+                expert_config_overrides=expert_config_overrides,
             )
             stack_description = stack.describe()
 
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
         while True:
+            _apply_traffic_light_schedules(
+                carla,
+                lights_by_id,
+                traffic_setup.traffic_light_schedules if traffic_setup is not None else [],
+                elapsed_seconds=elapsed_seconds,
+                applied_phase_indices=traffic_light_phase_indices,
+            )
             current_speed = speed_mps(vehicle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
@@ -667,8 +769,13 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 failure_reason = "success_criteria_failed"
     finally:
         if traffic_setup is not None:
+            scheduled_or_overridden_ids = {
+                override.actor_id for override in traffic_setup.traffic_light_overrides
+            } | {
+                schedule.actor_id for schedule in traffic_setup.traffic_light_schedules
+            }
             for actor in world.get_actors().filter("*traffic_light*"):
-                if any(int(actor.id) == override.actor_id and override.freeze for override in traffic_setup.traffic_light_overrides):
+                if int(actor.id) in scheduled_or_overridden_ids:
                     actor.freeze(False)
         client.get_trafficmanager(8000).set_synchronous_mode(False)
         world.apply_settings(original_settings)
@@ -692,6 +799,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "route_config_path": relative_to_project(route_config_path),
         "traffic_setup_path": _relative_or_none(Path(scenario.traffic_setup_path).resolve() if scenario.traffic_setup_path else None),
         "traffic_setup_name": traffic_setup.name if traffic_setup is not None else None,
+        "expert_config_overrides": expert_config_overrides or None,
         "npc_vehicle_count": len(npc_actors_summary),
         "npc_vehicles": npc_actors_summary,
         "town": route_config.town,
