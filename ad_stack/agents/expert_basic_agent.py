@@ -147,7 +147,9 @@ class ExpertBasicAgent:
             distance_same_lane=self.config.lane_change_same_lane_distance_m,
             distance_other_lane=self.config.lane_change_other_lane_distance_m,
             lane_change_distance=self.config.lane_change_distance_m,
-            check=True,
+            # Gap and signal checks are handled in this policy. Keep CARLA's path generator
+            # as a geometry helper instead of letting it reject opposite-lane overtakes.
+            check=False,
             lane_changes=1,
             step_distance=self.config.sampling_resolution_m,
         )
