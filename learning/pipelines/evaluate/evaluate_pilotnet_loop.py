@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import queue
 import random
-from typing import Any
 
 import numpy as np
 
@@ -15,8 +14,14 @@ try:
 except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
-import torch
-
+from ad_stack.agents import (
+    ExpertBasicAgent,
+    ExpertBasicAgentConfig,
+    LearnedLateralAgent,
+    PilotNetScenePolicy,
+)
+from ad_stack.runtime.observation_builder import ObservationBuilder
+from ad_stack.world_model import EgoState, RouteState
 from libs.carla_utils import (
     DEFAULT_ROUTE_CONFIG_PATH,
     FrameEventTracker,
@@ -25,11 +30,9 @@ from libs.carla_utils import (
     build_planned_route,
     compute_local_target_point,
     destroy_actors,
-    ensure_carla_agents_on_path,
     load_route_config,
     relative_to_project,
     require_blueprint,
-    road_option_name,
     route_geometry_from_planned_route,
     setup_world,
     speed_mps,
@@ -38,7 +41,7 @@ from libs.carla_utils import (
 from libs.project import PROJECT_ROOT
 from libs.schemas import EpisodeRecord, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
-from learning.libs.ml import PilotNet, command_to_index, preprocess_numpy_rgb
+from learning.libs.ml import load_pilotnet_runtime, select_device
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -87,23 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def select_device(explicit_device: str | None) -> torch.device:
-    if explicit_device:
-        return torch.device(explicit_device)
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    return torch.device("cpu")
-
-
 def resolve_weather(carla_module, weather_name: str):
     weather = getattr(carla_module.WeatherParameters, weather_name, None)
     if weather is None:
         raise ValueError(f"Unknown CARLA weather preset: {weather_name}")
     return weather
-
-
-def remaining_waypoints(agent) -> int:
-    return len(agent.get_local_planner().get_plan())
 
 
 def completion_ratio(initial_waypoint_count: int, remaining_count: int) -> float:
@@ -117,67 +108,6 @@ def carla_image_to_rgb_array(image: "carla.Image") -> np.ndarray:
     array = np.frombuffer(image.raw_data, dtype=np.uint8)
     array = array.reshape((image.height, image.width, 4))
     return array[:, :, :3][:, :, ::-1].copy()
-
-
-def load_model(checkpoint_path: Path, device: torch.device) -> tuple[PilotNet, dict]:
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    model_config = checkpoint["model_config"]
-    model = PilotNet(
-        image_channels=int(model_config.get("image_channels", 3)),
-        image_height=int(model_config["image_height"]),
-        image_width=int(model_config["image_width"]),
-        frame_stack=int(model_config.get("frame_stack", max(1, int(model_config.get("image_channels", 3)) // 3))),
-        temporal_fusion=str(model_config.get("temporal_fusion", "flatten")),
-        temporal_hidden_dim=int(model_config.get("temporal_hidden_dim", 256)),
-        route_point_dim=int(model_config.get("route_point_dim", 0)),
-        command_vocab_size=int(model_config.get("command_vocab_size", 0)),
-        command_embedding_dim=int(model_config.get("command_embedding_dim", 0)),
-        command_branching=bool(model_config.get("command_branching", False)),
-    ).to(device)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
-    return model, checkpoint
-
-
-def predict_steer(
-    model: PilotNet,
-    checkpoint: dict[str, Any],
-    rgb_history: list[np.ndarray],
-    speed: float,
-    command: str,
-    route_point: tuple[float, float] | None,
-    device: torch.device,
-) -> float:
-    model_config = checkpoint["model_config"]
-    frame_stack = int(model_config.get("frame_stack", max(1, int(model_config.get("image_channels", 3)) // 3)))
-    image_tensors = [
-        preprocess_numpy_rgb(
-            rgb_array,
-            image_width=int(model_config["image_width"]),
-            image_height=int(model_config["image_height"]),
-            crop_top_ratio=float(model_config["crop_top_ratio"]),
-        )
-        for rgb_array in rgb_history[-frame_stack:]
-    ]
-    while len(image_tensors) < frame_stack:
-        image_tensors.insert(0, image_tensors[0])
-    image_tensor = torch.cat(image_tensors, dim=0).unsqueeze(0).to(device)
-    speed_tensor = torch.tensor(
-        [[speed / float(model_config["speed_norm_mps"])]],
-        dtype=torch.float32,
-        device=device,
-    )
-    command_index = None
-    if model_config.get("command_conditioning", "none") in {"embedding", "branch"}:
-        command_index = torch.tensor([command_to_index(command)], dtype=torch.long, device=device)
-    route_point_tensor = None
-    if int(model_config.get("route_point_dim", 0)) > 0:
-        if route_point is None:
-            raise ValueError("route_point is required when the checkpoint expects route conditioning.")
-        route_point_tensor = torch.tensor([route_point], dtype=torch.float32, device=device)
-    with torch.no_grad():
-        prediction = model(image_tensor, speed_tensor, command_index, route_point_tensor)
-    return float(prediction.squeeze().clamp(-1.0, 1.0).item())
 
 
 def smooth_steer(
@@ -200,6 +130,20 @@ def smooth_steer(
     return max(-1.0, min(1.0, applied))
 
 
+def to_carla_control(command) -> "carla.VehicleControl":
+    if carla is None:
+        raise RuntimeError("CARLA is required to convert VehicleCommand into VehicleControl.")
+    return carla.VehicleControl(
+        throttle=float(command.throttle),
+        steer=float(command.steer),
+        brake=float(command.brake),
+        hand_brake=bool(command.hand_brake),
+        reverse=bool(command.reverse),
+        manual_gear_shift=False,
+        gear=0,
+    )
+
+
 def main() -> None:
     args = build_parser().parse_args()
     if carla is None:
@@ -208,13 +152,10 @@ def main() -> None:
             "Run 'uv sync' after confirming the CARLA wheel path in pyproject.toml."
         )
 
-    ensure_carla_agents_on_path()
-    from agents.navigation.basic_agent import BasicAgent
-
     device = select_device(args.device)
     checkpoint_path = Path(args.checkpoint).resolve()
-    model, checkpoint = load_model(checkpoint_path, device)
-    max_frame_stack = int(checkpoint["model_config"].get("frame_stack", max(1, int(checkpoint["model_config"].get("image_channels", 3)) // 3)))
+    runtime = load_pilotnet_runtime(checkpoint_path, device)
+    max_frame_stack = runtime.frame_stack
 
     random_seed = random.Random(args.seed)
     route_config_path = Path(args.route_config).resolve()
@@ -237,6 +178,7 @@ def main() -> None:
     frame_events = FrameEventTracker()
     image_queue: queue.Queue[carla.Image] = queue.Queue()
     actors: list[carla.Actor] = []
+    observation_builder = ObservationBuilder()
 
     elapsed_seconds = 0.0
     frame_index = 0
@@ -253,6 +195,7 @@ def main() -> None:
     previous_applied_steer: float | None = None
     rgb_history: deque[np.ndarray] = deque(maxlen=max_frame_stack)
     route_index_cursor: int | None = None
+    latest_expert_decision = {"decision": None}
 
     planned_route = build_planned_route(world.get_map(), route_config)
     route_geometry = route_geometry_from_planned_route(planned_route)
@@ -290,69 +233,87 @@ def main() -> None:
         actors.append(lane_sensor)
         lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
 
-        agent = BasicAgent(
+        expert_agent = ExpertBasicAgent(
             vehicle,
-            target_speed=args.target_speed_kmh,
-            opt_dict={
-                "ignore_traffic_lights": args.ignore_traffic_lights,
-                "ignore_stop_signs": args.ignore_stop_signs,
-                "ignore_vehicles": args.ignore_vehicles,
-                "sampling_resolution": route_config.sampling_resolution_m,
-            },
-            map_inst=world.get_map(),
+            world.get_map(),
+            config=ExpertBasicAgentConfig(
+                target_speed_kmh=args.target_speed_kmh,
+                ignore_traffic_lights=args.ignore_traffic_lights,
+                ignore_stop_signs=args.ignore_stop_signs,
+                ignore_vehicles=args.ignore_vehicles,
+                sampling_resolution_m=route_config.sampling_resolution_m,
+            ),
         )
-        agent.set_global_plan(planned_route.trace, stop_waypoint_creation=True, clean_queue=True)
-        initial_waypoint_count = remaining_waypoints(agent)
+        expert_agent.set_global_plan(planned_route.trace)
+        initial_waypoint_count = expert_agent.remaining_waypoints()
         if initial_waypoint_count <= 0:
             raise RuntimeError("Planner produced an empty local plan.")
+
+        def expert_longitudinal_policy(scene_state) -> tuple[float, float]:
+            expert_decision = expert_agent.step(scene_state)
+            latest_expert_decision["decision"] = expert_decision
+            return expert_decision.command.throttle, expert_decision.command.brake
+
+        learned_agent = LearnedLateralAgent(
+            lateral_policy=PilotNetScenePolicy(runtime),
+            longitudinal_policy=expert_longitudinal_policy,
+        )
 
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
         while True:
             rgb_history.append(carla_image_to_rgb_array(current_image))
             current_speed = speed_mps(vehicle)
-            command = road_option_name(agent.get_local_planner().target_road_option)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
+            current_completion_ratio = completion_ratio(initial_waypoint_count, expert_agent.remaining_waypoints())
+            command = expert_agent.current_behavior()
             route_point = None
-            if int(checkpoint["model_config"].get("route_point_dim", 0)) > 0:
+            if runtime.requires_route_point():
                 route_point, route_index_cursor = compute_local_target_point(
                     route_geometry,
                     vehicle_x=vehicle_location.x,
                     vehicle_y=vehicle_location.y,
                     vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                    lookahead_m=float(checkpoint["model_config"].get("route_lookahead_m", 8.0)),
+                    lookahead_m=float(runtime.model_config.get("route_lookahead_m", 8.0)),
                     target_normalization_m=float(
-                        checkpoint["model_config"].get("route_target_normalization_m", 20.0)
+                        runtime.model_config.get("route_target_normalization_m", 20.0)
                     ),
                     previous_route_index=route_index_cursor,
                 )
-            predicted_steer_raw = predict_steer(
-                model,
-                checkpoint,
-                list(rgb_history),
-                current_speed,
-                command,
-                route_point,
-                device,
+            scene_state = observation_builder.build(
+                timestamp_s=elapsed_seconds,
+                town_id=route_config.town,
+                ego=EgoState(
+                    x_m=vehicle_location.x,
+                    y_m=vehicle_location.y,
+                    yaw_deg=vehicle_transform.rotation.yaw,
+                    speed_mps=current_speed,
+                    speed_limit_mps=args.target_speed_kmh / 3.6,
+                ),
+                route=RouteState(
+                    route_id=route_config.name,
+                    maneuver=command,
+                    progress_ratio=current_completion_ratio,
+                    target_speed_mps=args.target_speed_kmh / 3.6,
+                ),
+                metadata={
+                    "front_rgb_history": list(rgb_history),
+                    "command": command,
+                    "route_point": route_point,
+                },
             )
-            longitudinal_control = agent.run_step()
+            decision = learned_agent.step(scene_state)
+            expert_decision = latest_expert_decision["decision"]
             predicted_steer = smooth_steer(
-                predicted_steer_raw,
+                decision.command.steer,
                 previous_applied_steer,
                 smoothing=args.steer_smoothing,
                 max_delta=args.max_steer_delta,
             )
             previous_applied_steer = predicted_steer
-            control = carla.VehicleControl(
-                throttle=longitudinal_control.throttle,
-                steer=predicted_steer,
-                brake=longitudinal_control.brake,
-                hand_brake=False,
-                reverse=False,
-                manual_gear_shift=False,
-                gear=0,
-            )
+            decision.command.steer = predicted_steer
+            control = to_carla_control(decision.command)
             vehicle.apply_control(control)
 
             image_path = image_dir / f"{frame_index:06d}.png"
@@ -370,7 +331,7 @@ def main() -> None:
                 current_stationary_seconds = 0.0
             max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
 
-            current_completion_ratio = completion_ratio(initial_waypoint_count, remaining_waypoints(agent))
+            current_completion_ratio = completion_ratio(initial_waypoint_count, expert_agent.remaining_waypoints())
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
             distance_to_goal_m = vehicle_location.distance(goal_location)
 
@@ -389,7 +350,7 @@ def main() -> None:
                 timestamp=current_image.timestamp,
                 front_rgb_path=relative_to_project(image_path),
                 speed=current_speed,
-                command=command,
+                command=decision.behavior,
                 steer=predicted_steer,
                 throttle=control.throttle,
                 brake=control.brake,
@@ -402,7 +363,7 @@ def main() -> None:
                 vehicle_yaw_deg=vehicle_transform.rotation.yaw,
                 route_completion_ratio=current_completion_ratio,
                 distance_to_goal_m=distance_to_goal_m,
-                expert_steer=longitudinal_control.steer,
+                expert_steer=expert_decision.command.steer if expert_decision is not None else None,
                 route_target_x=route_point[0] if route_point is not None else None,
                 route_target_y=route_point[1] if route_point is not None else None,
             )
@@ -419,7 +380,7 @@ def main() -> None:
                 failure_reason = "stalled"
                 break
 
-            if agent.done():
+            if expert_agent.done():
                 break
 
             if elapsed_seconds >= args.max_seconds:
@@ -429,7 +390,7 @@ def main() -> None:
             world_frame = world.tick()
             current_image = wait_for_image(image_queue, world_frame, args.sensor_timeout)
 
-        max_completion_ratio = max(max_completion_ratio, completion_ratio(initial_waypoint_count, remaining_waypoints(agent)))
+        max_completion_ratio = max(max_completion_ratio, completion_ratio(initial_waypoint_count, expert_agent.remaining_waypoints()))
         distance_to_goal_m = vehicle.get_location().distance(goal_location)
         success = (
             not failure_reason
@@ -464,14 +425,14 @@ def main() -> None:
     summary = {
         "episode_id": episode_id,
         "policy_type": "learned_lateral_policy",
-        "control_source": "pilotnet_steer_plus_basic_agent_longitudinal",
+        "control_source": "ad_stack_learned_lateral_agent",
         "route_intent_source": "global_route_planner",
-        "lateral_control_source": "pilotnet",
-        "longitudinal_control_source": "basic_agent_local_planner_pid",
+        "lateral_control_source": "pilotnet_learning_runtime_via_ad_stack",
+        "longitudinal_control_source": "ad_stack_expert_basic_agent_longitudinal",
         "is_camera_e2e_policy": True,
         "e2e_scope": "front_rgb_plus_speed_to_steer",
         "model_checkpoint_path": relative_to_project(checkpoint_path),
-        "model_name": checkpoint.get("model_name"),
+        "model_name": runtime.checkpoint.get("model_name"),
         "steer_smoothing": args.steer_smoothing,
         "max_steer_delta": args.max_steer_delta,
         "route_name": route_config.name,

@@ -11,6 +11,9 @@ try:
 except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
+from ad_stack.agents import ExpertBasicAgent, ExpertBasicAgentConfig
+from ad_stack.runtime.observation_builder import ObservationBuilder
+from ad_stack.world_model import EgoState, RouteState
 from libs.project import PROJECT_ROOT
 from libs.carla_utils import (
     DEFAULT_ROUTE_CONFIG_PATH,
@@ -20,11 +23,9 @@ from libs.carla_utils import (
     build_planned_route,
     compute_local_target_point,
     destroy_actors,
-    ensure_carla_agents_on_path,
     load_route_config,
     relative_to_project,
     require_blueprint,
-    road_option_name,
     route_geometry_from_planned_route,
     setup_world,
     speed_mps,
@@ -86,15 +87,25 @@ def resolve_weather(carla_module, weather_name: str):
     return weather
 
 
-def remaining_waypoints(agent) -> int:
-    return len(agent.get_local_planner().get_plan())
-
-
 def completion_ratio(initial_waypoint_count: int, remaining_count: int) -> float:
     if initial_waypoint_count <= 0:
         return 0.0
     progress = 1.0 - (remaining_count / initial_waypoint_count)
     return max(0.0, min(1.0, progress))
+
+
+def to_carla_control(command) -> "carla.VehicleControl":
+    if carla is None:
+        raise RuntimeError("CARLA is required to convert VehicleCommand into VehicleControl.")
+    return carla.VehicleControl(
+        throttle=float(command.throttle),
+        steer=float(command.steer),
+        brake=float(command.brake),
+        hand_brake=bool(command.hand_brake),
+        reverse=bool(command.reverse),
+        manual_gear_shift=False,
+        gear=0,
+    )
 
 
 def main() -> None:
@@ -104,9 +115,6 @@ def main() -> None:
             "The 'carla' Python package is not installed. "
             "Run 'uv sync' after confirming the CARLA wheel path in pyproject.toml."
         )
-
-    ensure_carla_agents_on_path()
-    from agents.navigation.basic_agent import BasicAgent
 
     random_seed = random.Random(args.seed)
     route_config_path = Path(args.route_config).resolve()
@@ -129,6 +137,7 @@ def main() -> None:
     frame_events = FrameEventTracker()
     image_queue: queue.Queue[carla.Image] = queue.Queue()
     actors: list[carla.Actor] = []
+    observation_builder = ObservationBuilder()
 
     elapsed_seconds = 0.0
     frame_index = 0
@@ -180,27 +189,49 @@ def main() -> None:
         actors.append(lane_sensor)
         lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
 
-        agent = BasicAgent(
+        agent = ExpertBasicAgent(
             vehicle,
-            target_speed=args.target_speed_kmh,
-            opt_dict={
-                "ignore_traffic_lights": args.ignore_traffic_lights,
-                "ignore_stop_signs": args.ignore_stop_signs,
-                "ignore_vehicles": args.ignore_vehicles,
-                "sampling_resolution": route_config.sampling_resolution_m,
-            },
-            map_inst=world.get_map(),
+            world.get_map(),
+            config=ExpertBasicAgentConfig(
+                target_speed_kmh=args.target_speed_kmh,
+                ignore_traffic_lights=args.ignore_traffic_lights,
+                ignore_stop_signs=args.ignore_stop_signs,
+                ignore_vehicles=args.ignore_vehicles,
+                sampling_resolution_m=route_config.sampling_resolution_m,
+            ),
         )
-        agent.set_global_plan(planned_route.trace, stop_waypoint_creation=True, clean_queue=True)
-        initial_waypoint_count = remaining_waypoints(agent)
+        agent.set_global_plan(planned_route.trace)
+        initial_waypoint_count = agent.remaining_waypoints()
         if initial_waypoint_count <= 0:
             raise RuntimeError("Planner produced an empty local plan.")
 
         world.tick()
         while True:
-            control = agent.run_step()
+            current_transform = vehicle.get_transform()
+            current_location = current_transform.location
+            current_speed = speed_mps(vehicle)
+            current_completion_ratio = completion_ratio(initial_waypoint_count, agent.remaining_waypoints())
+            scene_state = observation_builder.build(
+                timestamp_s=elapsed_seconds,
+                town_id=route_config.town,
+                ego=EgoState(
+                    x_m=current_location.x,
+                    y_m=current_location.y,
+                    yaw_deg=current_transform.rotation.yaw,
+                    speed_mps=current_speed,
+                    speed_limit_mps=args.target_speed_kmh / 3.6,
+                ),
+                route=RouteState(
+                    route_id=route_config.name,
+                    maneuver=agent.current_behavior(),
+                    progress_ratio=current_completion_ratio,
+                    target_speed_mps=args.target_speed_kmh / 3.6,
+                ),
+            )
+            decision = agent.step(scene_state)
+            control = to_carla_control(decision.command)
             vehicle.apply_control(control)
-            current_completion_ratio = completion_ratio(initial_waypoint_count, remaining_waypoints(agent))
+            current_completion_ratio = completion_ratio(initial_waypoint_count, agent.remaining_waypoints())
             max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
 
             world_frame = world.tick()
@@ -225,7 +256,7 @@ def main() -> None:
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
             distance_to_goal_m = vehicle_location.distance(goal_location)
-            command = road_option_name(agent.get_local_planner().target_road_option)
+            command = decision.behavior
             route_point, route_index_cursor = compute_local_target_point(
                 route_geometry,
                 vehicle_x=vehicle_location.x,
@@ -247,9 +278,9 @@ def main() -> None:
                 front_rgb_path=relative_to_project(image_path),
                 speed=speed,
                 command=command,
-                steer=control.steer,
-                throttle=control.throttle,
-                brake=control.brake,
+                steer=decision.command.steer,
+                throttle=decision.command.throttle,
+                brake=decision.command.brake,
                 collision=collision,
                 lane_invasion=lane_invasion,
                 success=episode_success_so_far,
@@ -279,7 +310,7 @@ def main() -> None:
                 failure_reason = "max_seconds_exceeded"
                 break
 
-        max_completion_ratio = max(max_completion_ratio, completion_ratio(initial_waypoint_count, remaining_waypoints(agent)))
+        max_completion_ratio = max(max_completion_ratio, completion_ratio(initial_waypoint_count, agent.remaining_waypoints()))
         distance_to_goal_m = vehicle.get_location().distance(goal_location)
         success = (
             not failure_reason
@@ -315,9 +346,9 @@ def main() -> None:
     summary = {
         "episode_id": episode_id,
         "policy_type": "expert_demonstration",
-        "control_source": "carla_basic_agent",
+        "control_source": "ad_stack_expert_basic_agent",
         "route_intent_source": "global_route_planner",
-        "lateral_control_source": "basic_agent_local_planner_pid",
+        "lateral_control_source": "basic_agent_local_planner_pid_via_ad_stack",
         "is_camera_e2e_policy": False,
         "route_name": route_config.name,
         "route_config_path": relative_to_project(route_config_path),

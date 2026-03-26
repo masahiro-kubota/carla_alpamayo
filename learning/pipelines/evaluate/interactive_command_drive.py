@@ -4,6 +4,7 @@ import argparse
 from collections import deque
 import math
 import os
+from pathlib import Path
 import queue
 import select
 import sys
@@ -20,14 +21,6 @@ except ModuleNotFoundError:
     carla = None  # type: ignore[assignment]
 
 from libs.project import PROJECT_ROOT
-from learning.pipelines.evaluate.evaluate_pilotnet_loop import (
-    load_model,
-    predict_steer,
-    resolve_weather,
-    select_device,
-    smooth_steer,
-)
-
 from libs.carla_utils import (
     FrameEventTracker,
     attach_sensor,
@@ -37,6 +30,8 @@ from libs.carla_utils import (
     speed_mps,
     wait_for_image,
 )
+from learning.libs.ml import load_pilotnet_runtime, select_device
+from learning.pipelines.evaluate.evaluate_pilotnet_loop import resolve_weather, smooth_steer
 DEFAULT_CHECKPOINT_PATH = (
     PROJECT_ROOT / "outputs" / "train" / "pilotnet_branch_fs3_movementall20_hardx3_corr1_20260322_1920" / "best.pt"
 )
@@ -239,12 +234,12 @@ def main() -> None:
         raise SystemExit(f"Checkpoint not found: {checkpoint_path}")
 
     device = select_device(args.device)
-    model, checkpoint = load_model(checkpoint_path, device)
-    model_config = checkpoint["model_config"]
+    runtime = load_pilotnet_runtime(checkpoint_path, device)
+    model_config = runtime.model_config
     if int(model_config.get("route_point_dim", 0)) > 0:
         raise SystemExit("This app only supports checkpoints without route-point conditioning.")
 
-    max_frame_stack = int(model_config.get("frame_stack", max(1, int(model_config.get("image_channels", 3)) // 3)))
+    max_frame_stack = runtime.frame_stack
     frame_events = FrameEventTracker()
     speed_controller = SpeedController(target_speed_kmh=args.target_speed_kmh)
     current_command = "lanefollow"
@@ -317,14 +312,11 @@ def main() -> None:
 
                 rgb_history.append(carla_image_to_rgb_array(current_image))
                 current_speed = speed_mps(vehicle)
-                predicted_steer_raw = predict_steer(
-                    model,
-                    checkpoint,
-                    list(rgb_history),
-                    current_speed,
-                    current_command,
+                predicted_steer_raw = runtime.predict_steer(
+                    rgb_history=list(rgb_history),
+                    speed_mps=current_speed,
+                    command=current_command,
                     route_point=None,
-                    device=device,
                 )
                 predicted_steer = smooth_steer(
                     predicted_steer_raw,
