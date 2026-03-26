@@ -16,7 +16,7 @@ rule-based / planner-based expert です。
 - 将来の学習用データ収集で使える、安定した expert driver を作る
 - `simulation -> ad_stack.run(request)` の共通実行系で、そのまま closed-loop 評価にも使える基準 policy を作る
 
-最初に必須とする driving capability は次です。
+最終的に必須とする driving capability は次です。
 
 - 信号に従って走行できる
 - 自車より低速の先行車を安全に追従できる
@@ -160,7 +160,7 @@ rule-based / planner-based expert です。
 - summary に最低限次を記録する
   - traffic_light_stop_count
   - traffic_light_violation_count
-  - car_follow_events
+  - car_follow_event_count
   - overtake_attempt_count
   - overtake_success_count
   - overtake_abort_count
@@ -193,7 +193,9 @@ rule-based / planner-based expert です。
 
 ## 7. シナリオ要件
 
-最低限、次のシナリオを用意する。
+最終的には、最低限次のシナリオを用意する。
+Phase 1 の最初の実装対象は `SR-1` から `SR-3` までとし、
+`SR-4` 以降は overtaking 機能を有効化した段階で追加する。
 
 ### SR-1: Red Light Stop
 
@@ -208,8 +210,6 @@ rule-based / planner-based expert です。
 
 - 同一 lane に低速 NPC がいる
 - expert は衝突せず追従できる
-- 短いシミュレーション時間でovertakeのテストができるように、他車の初期値が置かれている。
-- 追い越しが複数会発生するように、マップに対して十分な量の他車両が存在する。
 
 ### SR-4: Safe Overtake
 
@@ -240,6 +240,7 @@ rule-based / planner-based expert です。
 
 ### AC-3: Overtake
 
+- overtaking 機能を有効化した phase で評価する
 - safe overtake scenario で少なくとも 1 回成功する
 - unsafe overtake scenario で unsafe lane change を起こさない
 
@@ -299,13 +300,14 @@ rule-based / planner-based expert です。
 - fixed route
 - 1 台の低速 lead vehicle
 - traffic light direct state handling
-- 単純な left/right どちらか 1 側だけの overtake
+- overtake なし
 
 ここで
 
 - 信号遵守
 - 追従
-- 追い越し
-- 安全な abort
+- 低速車追従での安全性
 
 が通れば、expert data collection 用の最小本体として扱える。
+
+追い越しと abort は Phase 2 以降の受け入れ対象とする。

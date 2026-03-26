@@ -27,7 +27,14 @@ from ad_stack import RunRequest, run
 result = run(request)
 ```
 
-とし、`PolicySpec(kind="expert")` の中身を強化する。
+とし、public dataclass を過度に増やさない。
+
+`PolicySpec(kind="expert")` は維持するが、
+expert 専用の tuning knob を大量に public field として増やすのは避ける。
+細かな閾値や挙動調整値は、原則として次のどちらかで扱う。
+
+- `ad_stack` 内部の `ExpertPolicyConfig`
+- `traffic_setup` 側の設定値
 
 ### 2.2 低レベル制御は既存資産を最大限再利用する
 
@@ -104,7 +111,7 @@ flowchart LR
 
 `ad_stack/run.py` に追加・変更する責務:
 
-- route-loop 実行時に `traffic_setup` / `npc_profile` を読み込む
+- route-loop 実行時に `traffic_setup` を読み込み、必要なら内部で `npc_profile` を解決する
 - NPC spawn と lifecycle 管理
 - observer 用 actor collection
 - summary に expert 固有指標を集約
@@ -118,7 +125,7 @@ flowchart LR
 - current route progress の更新
 - typed な traffic light / vehicle observation の組み立て
 - overtake state machine の管理
-- output を `StackStepResult` に格納
+- output と debug snapshot を `StackStepResult` に格納
 
 ### 4.3 `scene_state.py`
 
@@ -127,10 +134,13 @@ flowchart LR
 - `TrafficLightStateView`
 - `DynamicVehicleStateView`
 - `LaneRelation`
-- `ExpertStateView`
 
 今の `metadata: dict[str, Any]` だけではなく、
 expert policy が必要な状態を typed field として持つ。
+
+ただし、ここで持つのは environment observation に限る。
+`planner_state` や `overtake_state` のような policy 内部状態は
+`SceneState` には入れず、`StackStepResult.debug` として別に出す。
 
 ## 5. データモデル
 
@@ -148,7 +158,6 @@ class RouteLoopScenarioSpec:
     stationary_speed_threshold_mps: float = 0.5
     max_seconds: float = 600.0
     traffic_setup_path: Path | None = None
-    npc_profile_path: Path | None = None
 ```
 
 意味:
@@ -156,16 +165,19 @@ class RouteLoopScenarioSpec:
 - `route_config_path`
   - ego の global route
 - `traffic_setup_path`
-  - 信号状態や NPC 初期配置、短時間 overtaking 用の setup
-- `npc_profile_path`
-  - NPC ごとの target speed や lane behavior
+  - 信号 override、NPC 初期配置、scenario 固有の traffic 条件
+  - 必要なら内部で `npc_profile_id` を参照する
 
 ## 5.2 `PolicySpec` の扱い
 
 `PolicySpec.kind="expert"` を維持しつつ、内部実装を強化する。
 新しい public enum は増やさない。
 
-必要なら expert tuning 用に次を追加する。
+expert tuning 用の閾値は、まず `ExpertPolicyConfig` として
+`ad_stack` 内部に閉じるのが自然である。
+必要なら `traffic_setup` から一部 override できるようにする。
+
+初期候補は次:
 
 ```python
 follow_headway_seconds: float = 1.8
@@ -179,6 +191,9 @@ overtake_signal_suppression_distance_m: float = 35.0
 ## 5.3 `SceneState` の拡張
 
 ```python
+LaneRelation = Literal["same_lane", "left_lane", "right_lane", "unknown"]
+
+
 @dataclass(slots=True)
 class TrafficLightStateView:
     actor_id: int
@@ -196,19 +211,10 @@ class DynamicVehicleStateView:
     yaw_deg: float
     speed_mps: float
     lane_id: str | None
-    relation: Literal["same_lane", "left_lane", "right_lane", "unknown"]
+    relation: LaneRelation
     longitudinal_distance_m: float | None
     lateral_distance_m: float | None
     is_ahead: bool
-
-
-@dataclass(slots=True)
-class ExpertStateView:
-    planner_state: str
-    overtake_state: str
-    lead_vehicle_id: int | None
-    lead_vehicle_distance_m: float | None
-    active_traffic_light_state: str | None
 ```
 
 `SceneState` は最終的にこう持つ。
@@ -216,8 +222,22 @@ class ExpertStateView:
 ```python
 traffic_lights: tuple[TrafficLightStateView, ...]
 tracked_objects: tuple[DynamicVehicleStateView, ...]
-expert: ExpertStateView | None
 ```
+
+policy 内部状態や debug 用情報は別で持つ。
+
+```python
+@dataclass(slots=True)
+class ExpertDebugSnapshot:
+    planner_state: str
+    overtake_state: str
+    lead_vehicle_id: int | None
+    lead_vehicle_distance_m: float | None
+    active_traffic_light_state: str | None
+```
+
+これは `SceneState` ではなく、`StackStepResult.debug` や
+frame manifest 用の metadata source として扱う。
 
 ## 6. Internal module 責務
 
@@ -468,15 +488,19 @@ stateDiagram-v2
   "town": "Town01",
   "npc_vehicles": [
     {
+      "npc_profile_id": "slow_lead_profile_v1",
       "spawn_index": 74,
       "target_speed_kmh": 12.0,
       "lane_behavior": "keep_lane"
     }
   ],
   "traffic_light_overrides": [],
-  "description": "Short-horizon setup for red-light stop and repeated slow-lead interactions."
+  "description": "Phase 1 用の short-horizon setup。red-light stop と low-speed lead following を確認する。"
 }
 ```
+
+ここで `npc_profile_id` は再利用可能な preset を指し、
+`target_speed_kmh` や `lane_behavior` は scenario ごとの override として扱う。
 
 ## 12.3 NPC profile
 
@@ -490,6 +514,11 @@ stateDiagram-v2
   "enable_autopilot": false
 }
 ```
+
+public な `RunRequest` には `traffic_setup_path` だけを足し、
+個々の NPC preset は `traffic_setup` から `npc_profile_id` で参照する。
+これにより public API を増やさずに、scenario ごとの配置と
+再利用可能な NPC preset の両方を表現できる。
 
 ## 13. Logging 設計
 
@@ -518,8 +547,8 @@ stateDiagram-v2
 - `overtake_state`
 - `target_lane_id`
 
-初期段階では `metadata` 的な拡張 JSON field を追加してもよいが、
-最終的には schema に昇格させる。
+初期段階では `StackStepResult.debug` をそのまま manifest metadata に
+serialize してもよいが、安定した項目は最終的に schema に昇格させる。
 
 ## 14. 実装順
 
