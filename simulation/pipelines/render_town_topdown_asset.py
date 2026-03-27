@@ -13,7 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--town", default="Town01")
-    parser.add_argument("--pixels-per-meter", type=float, default=4.0)
+    parser.add_argument("--pixels-per-meter", type=float, default=8.0)
     parser.add_argument("--padding-m", type=float, default=20.0)
     parser.add_argument("--lane-sampling-m", type=float, default=2.0)
     parser.add_argument("--camera-height-m", type=float, default=1000.0)

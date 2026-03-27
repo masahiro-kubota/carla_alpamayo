@@ -164,7 +164,7 @@ def build_topdown_map_asset(
     *,
     output_image_path: Path,
     output_metadata_path: Path,
-    pixels_per_meter: float = 4.0,
+    pixels_per_meter: float = 8.0,
     padding_m: float = 20.0,
     lane_sampling_m: float = 2.0,
     frame_id: str = "map/topdown_camera",
