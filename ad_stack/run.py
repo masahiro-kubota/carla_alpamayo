@@ -95,6 +95,7 @@ class TrafficLightGroupCycleSpec:
     yellow_seconds: float
     red_seconds: float
     reset_groups: bool = True
+    initial_offset_seconds: float = 0.0
 
 
 @dataclass(slots=True)
@@ -268,6 +269,7 @@ def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
                 yellow_seconds=float(raw_cycle["yellow_seconds"]),
                 red_seconds=float(raw_cycle["red_seconds"]),
                 reset_groups=bool(raw_cycle.get("reset_groups", True)),
+                initial_offset_seconds=float(raw_cycle.get("initial_offset_seconds", 0.0)),
             )
             if raw_cycle is not None
             else None
@@ -835,6 +837,21 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 expert_config=effective_expert_config,
             )
             stack_description = stack.describe()
+
+        group_cycle = environment_config.traffic_light_group_cycle if environment_config is not None else None
+        if group_cycle is not None and group_cycle.initial_offset_seconds > 0.0:
+            warmup_ticks = max(0, round(group_cycle.initial_offset_seconds / runtime.fixed_delta_seconds))
+            warmup_elapsed = 0.0
+            for _ in range(warmup_ticks):
+                world.tick()
+                warmup_elapsed += runtime.fixed_delta_seconds
+                _apply_traffic_light_schedules(
+                    carla,
+                    lights_by_id,
+                    environment_config.traffic_light_schedules if environment_config is not None else [],
+                    elapsed_seconds=warmup_elapsed,
+                    applied_phase_indices=traffic_light_phase_indices,
+                )
 
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
