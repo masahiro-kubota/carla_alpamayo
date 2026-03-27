@@ -36,6 +36,36 @@ export DISPLAY=:1
 ./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound
 ```
 
+## 並列収集
+
+このマシンでは、`60s` の expert route-loop を `--ignore-traffic-lights --no-record-video` で実測した結果、収集用途の実用上限は `3並列` でした。
+
+- `1並列`: 約 `2.67x realtime`
+- `2並列`: 約 `4.42x realtime`
+- `3並列`: 約 `4.85x realtime`
+- `4並列`: 約 `3.30x realtime`
+
+そのため、長時間の収集は `3並列` を推奨します。`4並列` では `RTX 4070 Ti 12GB` の GPU 使用率と VRAM 使用率がほぼ飽和して、aggregate throughput が逆に落ちました。
+
+独立した CARLA server を増やすときは、`RPC port` をずらすだけでなく `-carla-streaming-port=0` を付けます。今回の環境では次の port family が安定しました。
+
+- `2000` / `2002`
+- `2004` / `2006`
+- `2008` / `2010`
+
+起動例:
+
+```bash
+cd ~/sim/carla-0.9.16
+export DISPLAY=:1
+
+./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound
+./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound -carla-rpc-port=2004 -carla-streaming-port=0
+./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound -carla-rpc-port=2008 -carla-streaming-port=0
+```
+
+それぞれに対して `simulation.pipelines.run_route_loop` の `--port` を `2000`, `2004`, `2008` に振り分けます。
+
 ## Expert Route Loop
 
 fixed loop の expert 実行:
