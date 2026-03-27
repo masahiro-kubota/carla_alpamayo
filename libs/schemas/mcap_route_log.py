@@ -201,6 +201,65 @@ _FOXGLOVE_SCENE_UPDATE_SCHEMA = {
                             "additionalProperties": False,
                         },
                     },
+                    "cubes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "pose": {
+                                    "type": "object",
+                                    "properties": {
+                                        "position": {
+                                            "type": "object",
+                                            "properties": {
+                                                "x": {"type": "number"},
+                                                "y": {"type": "number"},
+                                                "z": {"type": "number"},
+                                            },
+                                            "required": ["x", "y", "z"],
+                                            "additionalProperties": False,
+                                        },
+                                        "orientation": {
+                                            "type": "object",
+                                            "properties": {
+                                                "x": {"type": "number"},
+                                                "y": {"type": "number"},
+                                                "z": {"type": "number"},
+                                                "w": {"type": "number"},
+                                            },
+                                            "required": ["x", "y", "z", "w"],
+                                            "additionalProperties": False,
+                                        },
+                                    },
+                                    "required": ["position", "orientation"],
+                                    "additionalProperties": False,
+                                },
+                                "size": {
+                                    "type": "object",
+                                    "properties": {
+                                        "x": {"type": "number"},
+                                        "y": {"type": "number"},
+                                        "z": {"type": "number"},
+                                    },
+                                    "required": ["x", "y", "z"],
+                                    "additionalProperties": False,
+                                },
+                                "color": {
+                                    "type": "object",
+                                    "properties": {
+                                        "r": {"type": "number"},
+                                        "g": {"type": "number"},
+                                        "b": {"type": "number"},
+                                        "a": {"type": "number"},
+                                    },
+                                    "required": ["r", "g", "b", "a"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "required": ["pose", "size", "color"],
+                            "additionalProperties": False,
+                        },
+                    },
                     "lines": {
                         "type": "array",
                         "items": {
@@ -271,7 +330,7 @@ _FOXGLOVE_SCENE_UPDATE_SCHEMA = {
                         },
                     },
                 },
-                "required": ["timestamp", "frame_id", "id", "lifetime", "frame_locked", "metadata", "lines"],
+                "required": ["timestamp", "frame_id", "id", "lifetime", "frame_locked", "metadata"],
                 "additionalProperties": False,
             },
         },
@@ -455,6 +514,12 @@ class RouteLoopMcapWriter:
             message_encoding="json",
             schema_id=scene_update_schema_id,
             metadata={"frame_id": "map"},
+        )
+        self._ego_marker_channel_id = self._writer.register_channel(
+            topic="/ego/marker",
+            message_encoding="json",
+            schema_id=scene_update_schema_id,
+            metadata={"frame_id": "ego/base_link"},
         )
         self._topdown_image_channel_id = self._writer.register_channel(
             topic="/map/topdown/compressed",
@@ -729,6 +794,39 @@ class RouteLoopMcapWriter:
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
             data=json.dumps(frame_transforms, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        ego_marker_message = {
+            "deletions": [],
+            "entities": [
+                {
+                    "timestamp": timestamp,
+                    "frame_id": "ego/base_link",
+                    "id": "ego_vehicle_box",
+                    "lifetime": {"sec": 0, "nsec": 0},
+                    "frame_locked": True,
+                    "metadata": [
+                        {"key": "kind", "value": "ego_vehicle_marker"},
+                    ],
+                    "cubes": [
+                        {
+                            "pose": {
+                                "position": {"x": 0.0, "y": 0.0, "z": 0.8},
+                                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                            },
+                            "size": {"x": 4.6, "y": 1.9, "z": 1.6},
+                            "color": {"r": 0.95, "g": 0.16, "b": 0.16, "a": 0.9},
+                        }
+                    ],
+                }
+            ],
+        }
+        self._writer.add_message(
+            channel_id=self._ego_marker_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=ego_state.frame_id,
+            data=json.dumps(ego_marker_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
         ego_state_message = {
