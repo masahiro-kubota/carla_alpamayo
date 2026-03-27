@@ -1,0 +1,8 @@
+{
+  "name": "town01_intersection_weave_cw",
+  "town": "Town01",
+  "closed_loop": true,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [107, 74, 113, 110, 83, 104, 88, 77, 82, 75, 111, 112],
+  "description": "Clockwise dense junction-weave loop that threads representative anchors through Town01 interior intersections to maximize turn and approach coverage."
+}

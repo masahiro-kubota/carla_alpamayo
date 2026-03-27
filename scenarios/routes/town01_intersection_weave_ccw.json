@@ -1,0 +1,8 @@
+{
+  "name": "town01_intersection_weave_ccw",
+  "town": "Town01",
+  "closed_loop": true,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [112, 111, 75, 82, 77, 88, 104, 83, 110, 113, 74, 107],
+  "description": "Counter-clockwise reverse of the dense Town01 junction-weave loop to capture opposite-direction approaches and exits through the same interior intersections."
+}
