@@ -86,7 +86,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
 ```
 
 `simulation.pipelines.run_route_loop` は `collect` / `evaluate` の両方で clean git worktree が必要です。`evaluate` の出力先は `outputs/evaluate/<date>_<time>_<memo>_<commit>/` です。
-default では `telemetry.mcap` も出力し、`front_rgb` の JPEG、ego pose / control / route progress、Foxglove `SceneUpdate` の static route / lane centerline を記録します。地図は default で town 全体を出し、重い場合だけ `--mcap-map-scope near_route` で route 近傍に絞れます。不要なら `--no-record-mcap` を使います。
+default では `telemetry.mcap` を出力し、front camera の JPEG、ego pose / control / route progress、Foxglove `SceneUpdate` の static route / lane centerline を記録します。地図は default で town 全体を出し、重い場合だけ `--mcap-map-scope near_route` で route 近傍に絞れます。不要なら `--no-record-mcap` を使います。`front_rgb/` の連番 PNG は常設せず、`--record-video` のときだけ一時フレームから `front_rgb.mp4` を生成します。
 default の front camera は `1280x720`、artifact 記録レートは `10Hz` です。必要なら `--camera-width`, `--camera-height`, `--record-hz` で上書きできます。
 
 フロントカメラをライブ表示しながら評価したいときは `DISPLAY` を設定して `--show-front-camera` を付けます。

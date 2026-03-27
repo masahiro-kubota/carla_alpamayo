@@ -6,6 +6,7 @@ from math import inf
 from pathlib import Path
 import queue
 import random
+import tempfile
 from typing import Any, Callable, Literal
 
 from ad_stack.api import (
@@ -587,11 +588,14 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         episode_id = build_episode_id(route_config.name)
         episode_dir = PROJECT_ROOT / "outputs" / "collect" / episode_id
         manifest_path = PROJECT_ROOT / "data" / "manifests" / "episodes" / f"{episode_id}.jsonl"
-    image_dir = episode_dir / "front_rgb"
     summary_path = episode_dir / "summary.json"
     mcap_path = episode_dir / "telemetry.mcap"
     episode_dir.mkdir(parents=True, exist_ok=True)
-    image_dir.mkdir(parents=True, exist_ok=True)
+    temp_image_dir_handle: tempfile.TemporaryDirectory[str] | None = None
+    image_dir: Path | None = None
+    if artifacts.record_video:
+        temp_image_dir_handle = tempfile.TemporaryDirectory(prefix="carla_alpamayo_front_rgb_")
+        image_dir = Path(temp_image_dir_handle.name)
 
     client = carla.Client(runtime.host, runtime.port)
     client.set_timeout(30.0)
@@ -823,8 +827,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 if current_rgb is None:
                     current_rgb = _carla_image_to_rgb_array(current_image)
 
-                image_path = image_dir / f"{recorded_frame_index:06d}.png"
-                current_image.save_to_disk(str(image_path))
+                image_path: Path | None = None
+                if artifacts.record_video and image_dir is not None:
+                    image_path = image_dir / f"{recorded_frame_index:06d}.png"
+                    current_image.save_to_disk(str(image_path))
 
                 record = EpisodeRecord(
                     episode_id=episode_id,
@@ -833,7 +839,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     route_id=route_config.name,
                     weather_id=scenario.weather,
                     timestamp=current_image.timestamp,
-                    front_rgb_path=relative_to_project(image_path),
+                    front_rgb_path=relative_to_project(image_path) if image_path is not None else None,
                     speed=current_speed,
                     command=behavior,
                     steer=decision.command.steer,
@@ -983,7 +989,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         destroy_actors(reversed(actors))
 
     video_fps = artifacts.video_fps or artifacts.record_hz
-    if artifacts.record_video:
+    if artifacts.record_video and image_dir is not None:
         try:
             video_path = render_png_sequence_to_mp4(
                 image_dir=image_dir,
@@ -993,6 +999,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
         except Exception as exc:  # pragma: no cover - depends on ffmpeg/runtime env
             video_error = str(exc)
+        finally:
+            if temp_image_dir_handle is not None:
+                temp_image_dir_handle.cleanup()
+                temp_image_dir_handle = None
 
     base_summary = {
         "episode_id": episode_id,
@@ -1039,7 +1049,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "success_criteria": success_criteria,
         "segment_summaries": planned_route.segment_summaries,
         "road_option_counts": planned_route.road_option_counts,
-        "front_rgb_dir": relative_to_project(image_dir),
+        "front_rgb_dir": None,
         "video_path": _relative_or_none(video_path),
         "video_fps": round(video_fps, 3) if video_path is not None else None,
         "video_crf": artifacts.video_crf if video_path is not None else None,

@@ -14,7 +14,7 @@ class EpisodeRecord:
     route_id: str
     weather_id: str
     timestamp: float
-    front_rgb_path: str
+    front_rgb_path: str | None
     speed: float
     command: str
     steer: float
