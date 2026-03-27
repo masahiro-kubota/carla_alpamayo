@@ -12,6 +12,14 @@ from mcap.writer import CompressionType, Writer
 from PIL import Image
 
 
+def _carla_point_to_foxglove(*, x: float, y: float, z: float) -> dict[str, float]:
+    return {"x": float(x), "y": float(-y), "z": float(z)}
+
+
+def _carla_rpy_to_foxglove(*, roll_deg: float, pitch_deg: float, yaw_deg: float) -> tuple[float, float, float]:
+    return float(roll_deg), float(-pitch_deg), float(-yaw_deg)
+
+
 def _foxglove_time_schema() -> dict[str, Any]:
     return {
         "type": "object",
@@ -454,7 +462,7 @@ class RouteLoopMcapWriter:
                 "pose": identity_pose,
                 "thickness": 0.12,
                 "scale_invariant": False,
-                "points": [{"x": x, "y": y, "z": z} for x, y, z in line],
+                "points": [_carla_point_to_foxglove(x=x, y=y, z=z) for x, y, z in line],
                 "color": {"r": 0.55, "g": 0.55, "b": 0.55, "a": 0.65},
                 "indices": [],
             }
@@ -468,7 +476,7 @@ class RouteLoopMcapWriter:
                 "pose": identity_pose,
                 "thickness": 0.3,
                 "scale_invariant": False,
-                "points": [{"x": x, "y": y, "z": z} for x, y, z in route_points],
+                "points": [_carla_point_to_foxglove(x=x, y=y, z=z) for x, y, z in route_points],
                 "color": {"r": 0.08, "g": 0.72, "b": 1.0, "a": 0.95},
                 "indices": [],
             }
@@ -520,6 +528,12 @@ class RouteLoopMcapWriter:
         log_time_ns = int(round(ego_state.timestamp_s * 1_000_000_000))
         timestamp = _foxglove_time(ego_state.timestamp_s)
         pose = ego_state.pose
+        foxglove_position = _carla_point_to_foxglove(x=pose["x"], y=pose["y"], z=pose["z"])
+        foxglove_roll_deg, foxglove_pitch_deg, foxglove_yaw_deg = _carla_rpy_to_foxglove(
+            roll_deg=pose["roll_deg"],
+            pitch_deg=pose["pitch_deg"],
+            yaw_deg=pose["yaw_deg"],
+        )
 
         jpeg_buffer = io.BytesIO()
         Image.fromarray(current_rgb).save(jpeg_buffer, format="JPEG", quality=self._jpeg_quality)
@@ -538,9 +552,9 @@ class RouteLoopMcapWriter:
         )
 
         base_link_orientation = _euler_degrees_to_quaternion(
-            roll_deg=pose["roll_deg"],
-            pitch_deg=pose["pitch_deg"],
-            yaw_deg=pose["yaw_deg"],
+            roll_deg=foxglove_roll_deg,
+            pitch_deg=foxglove_pitch_deg,
+            yaw_deg=foxglove_yaw_deg,
         )
         frame_transforms = {
             "transforms": [
@@ -548,11 +562,7 @@ class RouteLoopMcapWriter:
                     "timestamp": timestamp,
                     "parent_frame_id": "map",
                     "child_frame_id": "ego/base_link",
-                    "translation": {
-                        "x": pose["x"],
-                        "y": pose["y"],
-                        "z": pose["z"],
-                    },
+                    "translation": foxglove_position,
                     "rotation": base_link_orientation,
                 },
                 {
@@ -608,6 +618,14 @@ class RouteLoopMcapWriter:
 
         ego_status = asdict(ego_state)
         ego_status["timestamp"] = timestamp
+        ego_status["pose"] = {
+            "x": foxglove_position["x"],
+            "y": foxglove_position["y"],
+            "z": foxglove_position["z"],
+            "yaw_deg": foxglove_yaw_deg,
+            "pitch_deg": foxglove_pitch_deg,
+            "roll_deg": foxglove_roll_deg,
+        }
         self._writer.add_message(
             channel_id=self._ego_status_channel_id,
             log_time=log_time_ns,
