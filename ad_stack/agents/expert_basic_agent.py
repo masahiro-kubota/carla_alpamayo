@@ -100,6 +100,7 @@ class ExpertBasicAgent:
         self._overtake_waypoints: deque[Any] = deque()
         self._car_follow_active = False
         self._waiting_on_light = False
+        self._traffic_light_speed_error_kmh = 0.0
 
     def set_global_plan(self, trace: list[tuple[Any, Any]]) -> None:
         self._base_trace = list(trace)
@@ -132,6 +133,28 @@ class ExpertBasicAgent:
         self._overtake_waypoints.clear()
         self._car_follow_active = False
         self._waiting_on_light = False
+        self._traffic_light_speed_error_kmh = 0.0
+
+    def _traffic_light_longitudinal_control(
+        self,
+        *,
+        current_speed_mps: float,
+        target_speed_kmh: float,
+    ) -> tuple[float, float]:
+        current_speed_kmh = _speed_kmh(current_speed_mps)
+        error_kmh = target_speed_kmh - current_speed_kmh
+        derivative_kmh = error_kmh - self._traffic_light_speed_error_kmh
+        self._traffic_light_speed_error_kmh = error_kmh
+
+        if error_kmh >= 0.0:
+            throttle = min(
+                0.5,
+                max(0.0, (0.06 * error_kmh) + (0.01 * derivative_kmh)),
+            )
+            return throttle, 0.0
+
+        brake = min(0.5, max(0.0, 0.08 * (-error_kmh)))
+        return 0.0, brake
 
     def _route_trace_index(self, route_index: int | None) -> int:
         if not self._route_point_to_trace_index:
@@ -491,9 +514,19 @@ class ExpertBasicAgent:
             )
         )
         if planner_state == "traffic_light_stop":
-            control.throttle = 0.0
             if stop_target_distance_m is None or stop_target_distance_m <= 0.5:
+                self._traffic_light_speed_error_kmh = 0.0
+                control.throttle = 0.0
                 control.brake = max(float(control.brake), 0.45)
+            else:
+                traffic_light_throttle, traffic_light_brake = self._traffic_light_longitudinal_control(
+                    current_speed_mps=current_speed_mps,
+                    target_speed_kmh=target_speed_kmh,
+                )
+                control.throttle = traffic_light_throttle
+                control.brake = max(float(control.brake), traffic_light_brake)
+        else:
+            self._traffic_light_speed_error_kmh = 0.0
         if emergency_stop:
             planner_state = "emergency_brake"
             control.throttle = 0.0
@@ -528,6 +561,7 @@ class ExpertBasicAgent:
                 "traffic_light_state": active_light.state if active_light is not None else None,
                 "traffic_light_stop_buffer_m": self.config.traffic_light_stop_buffer_m,
                 "traffic_light_stop_target_distance_m": stop_target_distance_m,
+                "target_speed_kmh": target_speed_kmh,
                 "lead_vehicle_id": lead_vehicle.actor_id if lead_vehicle is not None else None,
                 "lead_vehicle_distance_m": lead_distance_m,
                 "overtake_state": self._overtake_state,
