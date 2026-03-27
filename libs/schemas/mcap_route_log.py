@@ -482,7 +482,7 @@ class RouteLoopMcapWriter:
                     "frame_id": "map",
                     "id": "lane_centerlines",
                     "lifetime": zero_duration,
-                    "frame_locked": False,
+                    "frame_locked": True,
                     "metadata": [
                         {"key": "kind", "value": "lane_centerlines"},
                         {"key": "route_name", "value": route_name},
@@ -494,7 +494,7 @@ class RouteLoopMcapWriter:
                     "frame_id": "map",
                     "id": "planned_route",
                     "lifetime": zero_duration,
-                    "frame_locked": False,
+                    "frame_locked": True,
                     "metadata": [
                         {"key": "kind", "value": "planned_route"},
                         {"key": "route_name", "value": route_name},
