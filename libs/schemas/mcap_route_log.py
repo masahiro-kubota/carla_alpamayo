@@ -400,7 +400,7 @@ class RouteLoopMcapWriter:
             topic="/ego/pose",
             message_encoding="json",
             schema_id=pose_in_frame_schema_id,
-            metadata={"frame_id": "map"},
+            metadata={"frame_id": "ego/base_link"},
         )
         self._map_scene_channel_id = self._writer.register_channel(
             topic="/map/scene",
@@ -583,14 +583,19 @@ class RouteLoopMcapWriter:
 
         pose_in_frame = {
             "timestamp": timestamp,
-            "frame_id": "map",
+            "frame_id": "ego/base_link",
             "pose": {
                 "position": {
-                    "x": pose["x"],
-                    "y": pose["y"],
-                    "z": pose["z"],
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
                 },
-                "orientation": base_link_orientation,
+                "orientation": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "w": 1.0,
+                },
             },
         }
         self._writer.add_message(
