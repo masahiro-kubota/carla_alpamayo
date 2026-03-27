@@ -253,6 +253,8 @@ class _RouteSceneMixin:
         if ego_waypoint is None:
             return ()
         ego_location = vehicle_transform.location
+        ego_forward = vehicle_transform.get_forward_vector()
+        ego_right = vehicle_transform.get_right_vector()
         traffic_lights: list[TrafficLightStateView] = []
         for traffic_light in self._world.get_actors().filter("*traffic_light*"):
             trigger_waypoint = self._light_trigger_cache.get(int(traffic_light.id))
@@ -267,17 +269,18 @@ class _RouteSceneMixin:
 
             affects_ego = False
             stop_line_distance_m: float | None = None
-            if trigger_waypoint.road_id == ego_waypoint.road_id:
-                ego_forward = ego_waypoint.transform.get_forward_vector()
+            if (
+                trigger_waypoint.road_id == ego_waypoint.road_id
+                and trigger_waypoint.lane_id == ego_waypoint.lane_id
+            ):
                 trigger_forward = trigger_waypoint.transform.get_forward_vector()
                 dot = (ego_forward.x * trigger_forward.x) + (ego_forward.y * trigger_forward.y) + (ego_forward.z * trigger_forward.z)
-                if dot >= 0.0 and self._is_within_distance(
-                    trigger_waypoint.transform,
-                    vehicle_transform,
-                    80.0,
-                    [0, 90],
-                ):
-                    stop_line_distance_m = float(trigger_waypoint.transform.location.distance(ego_location))
+                dx = trigger_location.x - ego_location.x
+                dy = trigger_location.y - ego_location.y
+                longitudinal_distance_m = (dx * ego_forward.x) + (dy * ego_forward.y)
+                lateral_distance_m = (dx * ego_right.x) + (dy * ego_right.y)
+                if dot >= 0.0 and longitudinal_distance_m > 0.0 and abs(lateral_distance_m) <= 4.0:
+                    stop_line_distance_m = float(longitudinal_distance_m)
                     affects_ego = stop_line_distance_m <= self._MAX_ACTIVE_TRAFFIC_LIGHT_DISTANCE_M
 
             state_name = str(traffic_light.state).split(".")[-1].lower()
