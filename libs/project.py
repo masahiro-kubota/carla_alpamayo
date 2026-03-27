@@ -48,5 +48,6 @@ def ensure_clean_git_worktree_for_evaluation() -> str:
 
 
 def build_versioned_run_id(prefix: str, *, commit_id: str) -> str:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{prefix.lower()}_{timestamp}_{commit_id}"
+    date_part = datetime.now().strftime("%Y%m%d")
+    time_part = datetime.now().strftime("%H%M%S")
+    return f"{date_part}_{time_part}_{prefix.lower()}_{commit_id}"
