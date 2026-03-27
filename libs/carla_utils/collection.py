@@ -26,8 +26,12 @@ class FrameEventTracker:
         self.collision_count += 1
         self._collision_this_frame = True
         if other_actor is not None:
-            self.last_collision_actor_id = int(getattr(other_actor, "id", 0)) or None
-            self.last_collision_actor_type_id = getattr(other_actor, "type_id", None)
+            try:
+                self.last_collision_actor_id = int(getattr(other_actor, "id", 0)) or None
+                self.last_collision_actor_type_id = getattr(other_actor, "type_id", None)
+            except RuntimeError as exc:
+                if "destroyed actor" not in str(exc):
+                    raise
 
     def mark_lane_invasion(self) -> None:
         self.lane_invasion_count += 1
