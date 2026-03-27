@@ -30,6 +30,9 @@ class ExpertBasicAgentConfig:
     follow_headway_seconds: float = 1.8
     yellow_stop_margin_seconds: float = 1.0
     traffic_light_stop_buffer_m: float = 3.0
+    traffic_light_brake_start_distance_m: float = 10.0
+    traffic_light_creep_resume_distance_m: float = 1.0
+    traffic_light_creep_speed_kmh: float = 4.0
     traffic_light_red_latch_seconds: float = 0.5
     overtake_speed_delta_kmh: float = 8.0
     overtake_min_front_gap_m: float = 20.0
@@ -393,14 +396,26 @@ class ExpertBasicAgent:
     def _traffic_light_stop_target_speed_kmh(
         self,
         light: TrafficLightStateView | None,
+        *,
+        current_speed_mps: float,
     ) -> float:
         target_distance = self._traffic_light_stop_target_distance_m(light)
-        if target_distance is None or target_distance <= 0.25:
+        if target_distance is None or target_distance <= 0.0:
             return 0.0
-        desired_speed_mps = math.sqrt(
-            max(0.0, 2.0 * max(self.config.preferred_deceleration_mps2, 1e-3) * target_distance)
-        )
-        return min(self.config.target_speed_kmh, desired_speed_mps * 3.6)
+
+        brake_start_distance_m = max(self.config.traffic_light_brake_start_distance_m, 1e-3)
+        if target_distance >= brake_start_distance_m:
+            target_speed_kmh = self.config.target_speed_kmh
+        else:
+            target_speed_kmh = self.config.target_speed_kmh * max(0.0, min(1.0, target_distance / brake_start_distance_m))
+
+        if (
+            current_speed_mps <= 0.2
+            and target_distance > self.config.traffic_light_creep_resume_distance_m
+        ):
+            target_speed_kmh = max(target_speed_kmh, self.config.traffic_light_creep_speed_kmh)
+
+        return min(self.config.target_speed_kmh, max(0.0, target_speed_kmh))
 
     def _traffic_light_stop_control(
         self,
@@ -429,13 +444,13 @@ class ExpertBasicAgent:
                 late_ratio = 1.0 - min(1.0, stop_target_distance_m / max(stopping_distance_m, 1e-3))
                 return 0.0, min(1.0, max(0.45, 0.45 + (0.55 * late_ratio)))
 
-        _throttle, brake = self._speed_control(
+        throttle, brake = self._speed_control(
             current_speed_mps=current_speed_mps,
             target_speed_kmh=target_speed_kmh,
-            max_throttle=0.0,
+            max_throttle=0.75,
             max_brake=1.0,
         )
-        return 0.0, brake
+        return throttle, brake
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
@@ -527,7 +542,10 @@ class ExpertBasicAgent:
         stop_target_distance_m = self._traffic_light_stop_target_distance_m(active_light)
         if stop_for_light and self._overtake_state == "idle":
             planner_state = "traffic_light_stop"
-            target_speed_kmh = self._traffic_light_stop_target_speed_kmh(active_light)
+            target_speed_kmh = self._traffic_light_stop_target_speed_kmh(
+                active_light,
+                current_speed_mps=current_speed_mps,
+            )
         elif lead_vehicle is not None and not self.config.ignore_vehicles and self._overtake_state == "idle":
             should_overtake = (
                 self.config.allow_overtake
