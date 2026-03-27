@@ -3,7 +3,7 @@
   "town": "Town01",
   "weather": "ClearNoon",
   "goal_tolerance_m": 10.0,
-  "max_stop_seconds": 45.0,
+  "max_stop_seconds": 180.0,
   "stationary_speed_threshold_mps": 0.5,
   "max_seconds": 120.0,
   "npc_vehicles": [],
@@ -16,5 +16,5 @@
   },
   "traffic_light_overrides": [],
   "traffic_light_schedules": [],
-  "description": "Short 120-second baseline environment with deterministic traffic light group cycles for checking all-intersections Town01 route-loop camera/output settings."
+  "description": "Short 120-second baseline environment with deterministic traffic light group cycles for checking all-intersections Town01 route-loop camera/output settings without early stall termination."
 }
