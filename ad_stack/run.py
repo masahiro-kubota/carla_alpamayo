@@ -30,7 +30,7 @@ from libs.carla_utils import (
     wait_for_image,
 )
 from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree
-from libs.schemas import EgoStateSample, EpisodeRecord, RouteLoopMcapWriter, append_jsonl
+from libs.schemas import EgoStateSample, EpisodeRecord, RotatingRouteLoopMcapWriter, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 
 RunMode = Literal["evaluate", "interactive"]
@@ -145,6 +145,7 @@ class ArtifactSpec:
     video_fps: float | None = None
     record_mcap: bool = True
     mcap_jpeg_quality: int = 85
+    mcap_segment_seconds: float = 600.0
     record_hz: float = 10.0
     mcap_map_scope: McapMapScope = "full"
 
@@ -687,7 +688,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
     manifest_path = episode_dir / "manifest.jsonl"
     summary_path = episode_dir / "summary.json"
-    mcap_path = episode_dir / "telemetry.mcap"
+    mcap_dir = episode_dir / "telemetry"
+    mcap_index_path = mcap_dir / "index.json"
     episode_dir.mkdir(parents=True, exist_ok=True)
     temp_image_dir_handle: tempfile.TemporaryDirectory[str] | None = None
     image_dir: Path | None = None
@@ -719,7 +721,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     video_path: Path | None = None
     video_error: str | None = None
     mcap_error: str | None = None
-    mcap_writer: RouteLoopMcapWriter | None = None
+    mcap_writer: RotatingRouteLoopMcapWriter | None = None
     traffic_light_stop_count = 0
     traffic_light_resume_count = 0
     traffic_light_violation_count = 0
@@ -743,8 +745,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
     try:
         if artifacts.record_mcap:
-            mcap_writer = RouteLoopMcapWriter(
-                path=mcap_path,
+            mcap_writer = RotatingRouteLoopMcapWriter(
+                root_dir=mcap_dir,
                 episode_id=episode_id,
                 route_name=route_config.name,
                 town=route_config.town,
@@ -752,6 +754,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 camera_width=runtime.camera_width,
                 camera_height=runtime.camera_height,
                 jpeg_quality=artifacts.mcap_jpeg_quality,
+                segment_seconds=artifacts.mcap_segment_seconds,
             )
 
         vehicle_blueprint = require_blueprint(world, runtime.vehicle_filter, rng=random_seed)
@@ -948,6 +951,45 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     image_path = image_dir / f"{recorded_frame_index:06d}.png"
                     current_image.save_to_disk(str(image_path))
 
+                mcap_segment_index: int | None = None
+                mcap_segment_path: str | None = None
+
+                if mcap_writer is not None:
+                    mcap_segment = mcap_writer.write_frame(
+                        current_rgb=current_rgb,
+                        ego_state=EgoStateSample(
+                            episode_id=episode_id,
+                            frame_id=frame_index - 1,
+                            timestamp_s=current_image.timestamp,
+                            elapsed_seconds=elapsed_seconds,
+                            speed_mps=current_speed,
+                            behavior=behavior,
+                            route_completion_ratio=current_completion_ratio,
+                            distance_to_goal_m=distance_to_goal_m,
+                            planner_state=planning_decision.planner_state,
+                            traffic_light_state=planning_debug.get("traffic_light_state"),
+                            lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
+                            overtake_state=planning_debug.get("overtake_state"),
+                            target_lane_id=planning_debug.get("target_lane_id"),
+                            min_ttc=planning_debug.get("min_ttc"),
+                            pose={
+                                "x": float(vehicle_location.x),
+                                "y": float(vehicle_location.y),
+                                "z": float(vehicle_location.z),
+                                "yaw_deg": float(vehicle_transform.rotation.yaw),
+                                "pitch_deg": float(vehicle_transform.rotation.pitch),
+                                "roll_deg": float(vehicle_transform.rotation.roll),
+                            },
+                            control={
+                                "steer": float(decision.command.steer),
+                                "throttle": float(decision.command.throttle),
+                                "brake": float(decision.command.brake),
+                            },
+                        ),
+                    )
+                    mcap_segment_index = mcap_segment.segment_index
+                    mcap_segment_path = relative_to_project(mcap_segment.path)
+
                 record = EpisodeRecord(
                     episode_id=episode_id,
                     frame_id=frame_index - 1,
@@ -983,42 +1025,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     overtake_state=planning_debug.get("overtake_state"),
                     target_lane_id=planning_debug.get("target_lane_id"),
                     min_ttc=planning_debug.get("min_ttc"),
+                    mcap_segment_index=mcap_segment_index,
+                    mcap_segment_path=mcap_segment_path,
                 )
                 append_jsonl(manifest_path, record)
-
-                if mcap_writer is not None:
-                    mcap_writer.write_frame(
-                        current_rgb=current_rgb,
-                        ego_state=EgoStateSample(
-                            episode_id=episode_id,
-                            frame_id=frame_index - 1,
-                            timestamp_s=current_image.timestamp,
-                            elapsed_seconds=elapsed_seconds,
-                            speed_mps=current_speed,
-                            behavior=behavior,
-                            route_completion_ratio=current_completion_ratio,
-                            distance_to_goal_m=distance_to_goal_m,
-                            planner_state=planning_decision.planner_state,
-                            traffic_light_state=planning_debug.get("traffic_light_state"),
-                            lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
-                            overtake_state=planning_debug.get("overtake_state"),
-                            target_lane_id=planning_debug.get("target_lane_id"),
-                            min_ttc=planning_debug.get("min_ttc"),
-                            pose={
-                                "x": float(vehicle_location.x),
-                                "y": float(vehicle_location.y),
-                                "z": float(vehicle_location.z),
-                                "yaw_deg": float(vehicle_transform.rotation.yaw),
-                                "pitch_deg": float(vehicle_transform.rotation.pitch),
-                                "roll_deg": float(vehicle_transform.rotation.roll),
-                            },
-                            control={
-                                "steer": float(decision.command.steer),
-                                "throttle": float(decision.command.throttle),
-                                "brake": float(decision.command.brake),
-                            },
-                        ),
-                    )
 
                 recorded_frame_index += 1
                 while next_record_elapsed_s <= elapsed_seconds + 1e-9:
@@ -1083,7 +1093,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 failure_reason = "success_criteria_failed"
         if mcap_writer is not None:
             mcap_writer.close()
-            mcap_writer = None
     finally:
         if mcap_writer is not None:
             try:
@@ -1118,6 +1127,24 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             if temp_image_dir_handle is not None:
                 temp_image_dir_handle.cleanup()
                 temp_image_dir_handle = None
+
+    mcap_segments = []
+    if artifacts.record_mcap and mcap_writer is not None:
+        mcap_segments = [
+            {
+                "segment_index": segment.segment_index,
+                "path": relative_to_project(segment.path),
+                "start_elapsed_seconds": round(segment.start_elapsed_seconds, 3),
+                "end_elapsed_seconds": (
+                    round(segment.end_elapsed_seconds, 3)
+                    if segment.end_elapsed_seconds is not None
+                    else None
+                ),
+                "frame_count": segment.frame_count,
+            }
+            for segment in mcap_writer.segments
+        ]
+    first_mcap_segment_path = mcap_segments[0]["path"] if mcap_segments else None
 
     base_summary = {
         "episode_id": episode_id,
@@ -1170,7 +1197,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "video_fps": round(video_fps, 3) if video_path is not None else None,
         "video_crf": artifacts.video_crf if video_path is not None else None,
         "video_error": video_error,
-        "mcap_path": _relative_or_none(mcap_path if artifacts.record_mcap else None),
+        "mcap_path": first_mcap_segment_path,
+        "mcap_dir": _relative_or_none(mcap_dir if artifacts.record_mcap else None),
+        "mcap_index_path": _relative_or_none(mcap_index_path if artifacts.record_mcap else None),
+        "mcap_segment_seconds": artifacts.mcap_segment_seconds if artifacts.record_mcap else None,
+        "mcap_segments": mcap_segments,
         "mcap_error": mcap_error,
         "manifest_path": relative_to_project(manifest_path),
     }
@@ -1218,7 +1249,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         summary_path=summary_path,
         manifest_path=manifest_path,
         video_path=video_path,
-        mcap_path=mcap_path if artifacts.record_mcap else None,
+        mcap_path=(Path(PROJECT_ROOT / first_mcap_segment_path).resolve() if first_mcap_segment_path is not None else None),
         frame_count=frame_index,
         elapsed_seconds=elapsed_seconds,
     )

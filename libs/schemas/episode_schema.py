@@ -38,6 +38,8 @@ class EpisodeRecord:
     overtake_state: str | None = None
     target_lane_id: str | None = None
     min_ttc: float | None = None
+    mcap_segment_index: int | None = None
+    mcap_segment_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

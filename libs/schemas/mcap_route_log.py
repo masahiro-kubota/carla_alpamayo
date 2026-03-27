@@ -324,6 +324,15 @@ class EgoStateSample:
     control: dict[str, float]
 
 
+@dataclass(slots=True)
+class McapSegmentInfo:
+    segment_index: int
+    path: Path
+    start_elapsed_seconds: float
+    end_elapsed_seconds: float | None = None
+    frame_count: int = 0
+
+
 def _foxglove_time(timestamp_s: float) -> dict[str, int]:
     sec = int(timestamp_s)
     nsec = int(round((timestamp_s - sec) * 1_000_000_000))
@@ -675,3 +684,173 @@ class RouteLoopMcapWriter:
         self._closed = True
         self._writer.finish()
         self._stream.close()
+
+
+class RotatingRouteLoopMcapWriter:
+    def __init__(
+        self,
+        *,
+        root_dir: Path,
+        episode_id: str,
+        route_name: str,
+        town: str,
+        weather: str,
+        camera_width: int,
+        camera_height: int,
+        jpeg_quality: int = 85,
+        segment_seconds: float = 600.0,
+    ) -> None:
+        self.root_dir = root_dir
+        self.root_dir.mkdir(parents=True, exist_ok=True)
+        self.index_path = self.root_dir / "index.json"
+        self._episode_id = episode_id
+        self._route_name = route_name
+        self._town = town
+        self._weather = weather
+        self._camera_width = camera_width
+        self._camera_height = camera_height
+        self._jpeg_quality = jpeg_quality
+        self._segment_seconds = max(0.0, float(segment_seconds))
+        self._static_scene_timestamp_s: float | None = None
+        self._static_scene_route_points: list[tuple[float, float, float]] | None = None
+        self._static_scene_lane_centerlines: list[list[tuple[float, float, float]]] | None = None
+        self._current_segment_index: int | None = None
+        self._current_writer: RouteLoopMcapWriter | None = None
+        self._segments: list[McapSegmentInfo] = []
+        self._closed = False
+        self._write_index()
+
+    @property
+    def segment_seconds(self) -> float:
+        return self._segment_seconds
+
+    @property
+    def segments(self) -> list[McapSegmentInfo]:
+        return list(self._segments)
+
+    @property
+    def current_segment(self) -> McapSegmentInfo | None:
+        if self._current_segment_index is None:
+            return None
+        return self._segments[self._current_segment_index]
+
+    def _segment_index_for_elapsed_seconds(self, elapsed_seconds: float) -> int:
+        if self._segment_seconds <= 0.0:
+            return 0
+        return max(0, int(float(elapsed_seconds) // self._segment_seconds))
+
+    def _segment_path(self, segment_index: int) -> Path:
+        return self.root_dir / f"segment_{segment_index:04d}.mcap"
+
+    def _write_index(self) -> None:
+        payload = {
+            "episode_id": self._episode_id,
+            "route_name": self._route_name,
+            "town": self._town,
+            "weather": self._weather,
+            "segment_seconds": self._segment_seconds,
+            "segments": [
+                {
+                    "segment_index": segment.segment_index,
+                    "path": segment.path.name,
+                    "start_elapsed_seconds": round(segment.start_elapsed_seconds, 3),
+                    "end_elapsed_seconds": (
+                        round(segment.end_elapsed_seconds, 3)
+                        if segment.end_elapsed_seconds is not None
+                        else None
+                    ),
+                    "frame_count": segment.frame_count,
+                }
+                for segment in self._segments
+            ],
+        }
+        self.index_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    def _open_segment(self, *, segment_index: int, timestamp_s: float, elapsed_seconds: float) -> None:
+        path = self._segment_path(segment_index)
+        self._current_writer = RouteLoopMcapWriter(
+            path=path,
+            episode_id=self._episode_id,
+            route_name=self._route_name,
+            town=self._town,
+            weather=self._weather,
+            camera_width=self._camera_width,
+            camera_height=self._camera_height,
+            jpeg_quality=self._jpeg_quality,
+        )
+        self._current_segment_index = segment_index
+        segment_info = McapSegmentInfo(
+            segment_index=segment_index,
+            path=path,
+            start_elapsed_seconds=float(elapsed_seconds),
+        )
+        self._segments.append(segment_info)
+        if (
+            self._static_scene_timestamp_s is not None
+            and self._static_scene_route_points is not None
+            and self._static_scene_lane_centerlines is not None
+        ):
+            self._current_writer.write_static_scene(
+                timestamp_s=timestamp_s,
+                route_name=self._route_name,
+                route_points=self._static_scene_route_points,
+                lane_centerlines=self._static_scene_lane_centerlines,
+            )
+        self._write_index()
+
+    def _close_current_segment(self) -> None:
+        if self._current_writer is None or self._current_segment_index is None:
+            return
+        self._current_writer.close()
+        self._current_writer = None
+        self._current_segment_index = None
+        self._write_index()
+
+    def write_static_scene(
+        self,
+        *,
+        timestamp_s: float,
+        route_name: str,
+        route_points: list[tuple[float, float, float]],
+        lane_centerlines: list[list[tuple[float, float, float]]],
+    ) -> None:
+        self._static_scene_timestamp_s = float(timestamp_s)
+        self._static_scene_route_points = route_points
+        self._static_scene_lane_centerlines = lane_centerlines
+        if self._current_writer is not None:
+            self._current_writer.write_static_scene(
+                timestamp_s=timestamp_s,
+                route_name=route_name,
+                route_points=route_points,
+                lane_centerlines=lane_centerlines,
+            )
+
+    def write_frame(
+        self,
+        *,
+        current_rgb: Any,
+        ego_state: EgoStateSample,
+    ) -> McapSegmentInfo:
+        segment_index = self._segment_index_for_elapsed_seconds(ego_state.elapsed_seconds)
+        if self._current_segment_index != segment_index:
+            self._close_current_segment()
+            self._open_segment(
+                segment_index=segment_index,
+                timestamp_s=ego_state.timestamp_s,
+                elapsed_seconds=ego_state.elapsed_seconds,
+            )
+
+        assert self._current_writer is not None
+        assert self._current_segment_index is not None
+        self._current_writer.write_frame(current_rgb=current_rgb, ego_state=ego_state)
+        segment = self._segments[self._current_segment_index]
+        segment.end_elapsed_seconds = float(ego_state.elapsed_seconds)
+        segment.frame_count += 1
+        return segment
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._close_current_segment()
+        self._write_index()

@@ -110,6 +110,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
     )
     parser.add_argument("--mcap-jpeg-quality", type=int, default=85)
+    parser.add_argument("--mcap-segment-seconds", type=float, default=600.0)
     parser.add_argument("--mcap-map-scope", choices=("full", "near_route"), default="full")
     parser.add_argument(
         "--show-front-camera",
@@ -207,6 +208,7 @@ def main() -> None:
                 video_crf=args.video_crf,
                 record_mcap=args.record_mcap,
                 mcap_jpeg_quality=args.mcap_jpeg_quality,
+                mcap_segment_seconds=args.mcap_segment_seconds,
                 record_hz=args.record_hz,
                 mcap_map_scope=args.mcap_map_scope,
             ),
