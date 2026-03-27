@@ -1,6 +1,6 @@
 {
   "target_speed_kmh": 30.0,
-  "traffic_light_stop_buffer_m": 3.0,
+  "traffic_light_stop_buffer_m": 0.0,
   "follow_headway_seconds": 1.8,
   "yellow_stop_margin_seconds": 1.0,
   "preferred_deceleration_mps2": 4.0,
