@@ -1,0 +1,61 @@
+{
+  "name": "town01_intersection_weave_ten_npc_120s",
+  "town": "Town01",
+  "weather": "ClearNoon",
+  "max_seconds": 120.0,
+  "npc_vehicles": [
+    {
+      "spawn_index": 74,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 75,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 77,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 82,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 83,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 88,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 104,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 110,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 111,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "spawn_index": 112,
+      "target_speed_kmh": 20.0,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "traffic_light_schedules": [],
+  "description": "Two-minute Town01 interior weave environment with ten autopilot NPC vehicles at a fixed 20 km/h for front-camera traffic visibility checks."
+}
