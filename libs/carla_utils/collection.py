@@ -58,10 +58,12 @@ def setup_world(
     client: "carla.Client",
     town: str,
     fixed_delta_seconds: float,
+    *,
+    reload_world: bool = False,
 ) -> tuple["carla.World", "carla.WorldSettings"]:
     world = client.get_world()
     active_town = world.get_map().name.split("/")[-1]
-    if active_town != town:
+    if reload_world or active_town != town:
         world = client.load_world(town)
 
     original_settings = world.get_settings()

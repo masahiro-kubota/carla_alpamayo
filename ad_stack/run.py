@@ -648,7 +648,14 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     client = carla.Client(runtime.host, runtime.port)
     client.set_timeout(30.0)
 
-    world, original_settings = setup_world(client, route_config.town, runtime.fixed_delta_seconds)
+    # Route-loop runs reload the town every time so traffic light phases start from
+    # a deterministic baseline instead of inheriting the previous run's world state.
+    world, original_settings = setup_world(
+        client,
+        route_config.town,
+        runtime.fixed_delta_seconds,
+        reload_world=True,
+    )
     world.set_weather(_resolve_weather(carla, scenario.weather))
 
     frame_events = FrameEventTracker()
