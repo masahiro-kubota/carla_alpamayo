@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from base64 import b64encode
 from dataclasses import asdict, dataclass
 import io
 import json
+from math import cos, radians, sin
 from pathlib import Path
 from typing import Any
 
@@ -10,12 +12,74 @@ from mcap.writer import CompressionType, Writer
 from PIL import Image
 
 
-_EGO_STATE_JSON_SCHEMA = {
+def _foxglove_time_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "sec": {"type": "integer"},
+            "nsec": {"type": "integer"},
+        },
+        "required": ["sec", "nsec"],
+        "additionalProperties": False,
+    }
+
+
+_FOXGLOVE_COMPRESSED_IMAGE_SCHEMA = {
     "type": "object",
     "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "frame_id": {"type": "string"},
+        "data": {"type": "string", "contentEncoding": "base64"},
+        "format": {"type": "string"},
+    },
+    "required": ["timestamp", "frame_id", "data", "format"],
+    "additionalProperties": False,
+}
+
+_FOXGLOVE_POSE_IN_FRAME_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "frame_id": {"type": "string"},
+        "pose": {
+            "type": "object",
+            "properties": {
+                "position": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                        "z": {"type": "number"},
+                    },
+                    "required": ["x", "y", "z"],
+                    "additionalProperties": False,
+                },
+                "orientation": {
+                    "type": "object",
+                    "properties": {
+                        "x": {"type": "number"},
+                        "y": {"type": "number"},
+                        "z": {"type": "number"},
+                        "w": {"type": "number"},
+                    },
+                    "required": ["x", "y", "z", "w"],
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["position", "orientation"],
+            "additionalProperties": False,
+        },
+    },
+    "required": ["timestamp", "frame_id", "pose"],
+    "additionalProperties": False,
+}
+
+_EGO_STATUS_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
         "episode_id": {"type": "string"},
         "frame_id": {"type": "integer"},
-        "timestamp_s": {"type": "number"},
         "elapsed_seconds": {"type": "number"},
         "speed_mps": {"type": "number"},
         "behavior": {"type": ["string", "null"]},
@@ -38,6 +102,7 @@ _EGO_STATE_JSON_SCHEMA = {
                 "roll_deg": {"type": "number"},
             },
             "required": ["x", "y", "z", "yaw_deg", "pitch_deg", "roll_deg"],
+            "additionalProperties": False,
         },
         "control": {
             "type": "object",
@@ -47,12 +112,13 @@ _EGO_STATE_JSON_SCHEMA = {
                 "brake": {"type": "number"},
             },
             "required": ["steer", "throttle", "brake"],
+            "additionalProperties": False,
         },
     },
     "required": [
+        "timestamp",
         "episode_id",
         "frame_id",
-        "timestamp_s",
         "elapsed_seconds",
         "speed_mps",
         "route_completion_ratio",
@@ -60,6 +126,7 @@ _EGO_STATE_JSON_SCHEMA = {
         "pose",
         "control",
     ],
+    "additionalProperties": False,
 }
 
 
@@ -82,8 +149,32 @@ class EgoStateSample:
     pose: dict[str, float]
     control: dict[str, float]
 
-    def to_bytes(self) -> bytes:
-        return json.dumps(asdict(self), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+def _foxglove_time(timestamp_s: float) -> dict[str, int]:
+    sec = int(timestamp_s)
+    nsec = int(round((timestamp_s - sec) * 1_000_000_000))
+    if nsec >= 1_000_000_000:
+        sec += 1
+        nsec -= 1_000_000_000
+    return {"sec": sec, "nsec": nsec}
+
+
+def _euler_degrees_to_quaternion(*, roll_deg: float, pitch_deg: float, yaw_deg: float) -> dict[str, float]:
+    roll = radians(roll_deg)
+    pitch = radians(pitch_deg)
+    yaw = radians(yaw_deg)
+    cy = cos(yaw * 0.5)
+    sy = sin(yaw * 0.5)
+    cp = cos(pitch * 0.5)
+    sp = sin(pitch * 0.5)
+    cr = cos(roll * 0.5)
+    sr = sin(roll * 0.5)
+    return {
+        "x": sr * cp * cy - cr * sp * sy,
+        "y": cr * sp * cy + sr * cp * sy,
+        "z": cr * cp * sy - sr * sp * cy,
+        "w": cr * cp * cy + sr * sp * sy,
+    }
 
 
 class RouteLoopMcapWriter:
@@ -102,28 +193,52 @@ class RouteLoopMcapWriter:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._stream = self.path.open("wb")
-        self._writer = Writer(self._stream, compression=CompressionType.ZSTD)
-        self._writer.start(profile="carla_alpamayo.route_loop", library="carla_alpamayo")
-        ego_schema_id = self._writer.register_schema(
-            name="carla_alpamayo.EgoStateSample",
-            encoding="jsonschema",
-            data=json.dumps(_EGO_STATE_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        self._writer = Writer(
+            self._stream,
+            compression=CompressionType.ZSTD,
+            use_chunking=True,
         )
+        self._writer.start(profile="carla_alpamayo.route_loop", library="carla_alpamayo")
+
+        compressed_image_schema_id = self._writer.register_schema(
+            name="foxglove.CompressedImage",
+            encoding="jsonschema",
+            data=json.dumps(_FOXGLOVE_COMPRESSED_IMAGE_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+        pose_in_frame_schema_id = self._writer.register_schema(
+            name="foxglove.PoseInFrame",
+            encoding="jsonschema",
+            data=json.dumps(_FOXGLOVE_POSE_IN_FRAME_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+        ego_status_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.EgoStatus",
+            encoding="jsonschema",
+            data=json.dumps(_EGO_STATUS_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+
         self._front_rgb_channel_id = self._writer.register_channel(
-            topic="/sensors/front_rgb/compressed",
-            message_encoding="jpeg",
-            schema_id=0,
+            topic="/camera/front/compressed",
+            message_encoding="json",
+            schema_id=compressed_image_schema_id,
             metadata={
+                "frame_id": "ego/front_camera",
                 "camera_width": str(camera_width),
                 "camera_height": str(camera_height),
                 "jpeg_quality": str(jpeg_quality),
             },
         )
-        self._ego_state_channel_id = self._writer.register_channel(
-            topic="/state/ego",
-            message_encoding="jsonschema",
-            schema_id=ego_schema_id,
+        self._ego_pose_channel_id = self._writer.register_channel(
+            topic="/ego/pose",
+            message_encoding="json",
+            schema_id=pose_in_frame_schema_id,
+            metadata={"frame_id": "map"},
         )
+        self._ego_status_channel_id = self._writer.register_channel(
+            topic="/ego/status",
+            message_encoding="json",
+            schema_id=ego_status_schema_id,
+        )
+
         self._writer.add_metadata(
             "episode",
             {
@@ -131,6 +246,7 @@ class RouteLoopMcapWriter:
                 "route_name": route_name,
                 "town": town,
                 "weather": weather,
+                "compression": "zstd_chunked",
             },
         )
         self._jpeg_quality = jpeg_quality
@@ -143,21 +259,57 @@ class RouteLoopMcapWriter:
         ego_state: EgoStateSample,
     ) -> None:
         log_time_ns = int(round(ego_state.timestamp_s * 1_000_000_000))
+        timestamp = _foxglove_time(ego_state.timestamp_s)
+
         jpeg_buffer = io.BytesIO()
         Image.fromarray(current_rgb).save(jpeg_buffer, format="JPEG", quality=self._jpeg_quality)
+        compressed_image = {
+            "timestamp": timestamp,
+            "frame_id": "ego/front_camera",
+            "data": b64encode(jpeg_buffer.getvalue()).decode("ascii"),
+            "format": "jpeg",
+        }
         self._writer.add_message(
             channel_id=self._front_rgb_channel_id,
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=jpeg_buffer.getvalue(),
+            data=json.dumps(compressed_image, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
+
+        pose = ego_state.pose
+        pose_in_frame = {
+            "timestamp": timestamp,
+            "frame_id": "map",
+            "pose": {
+                "position": {
+                    "x": pose["x"],
+                    "y": pose["y"],
+                    "z": pose["z"],
+                },
+                "orientation": _euler_degrees_to_quaternion(
+                    roll_deg=pose["roll_deg"],
+                    pitch_deg=pose["pitch_deg"],
+                    yaw_deg=pose["yaw_deg"],
+                ),
+            },
+        }
         self._writer.add_message(
-            channel_id=self._ego_state_channel_id,
+            channel_id=self._ego_pose_channel_id,
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=ego_state.to_bytes(),
+            data=json.dumps(pose_in_frame, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        ego_status = asdict(ego_state)
+        ego_status["timestamp"] = timestamp
+        self._writer.add_message(
+            channel_id=self._ego_status_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=ego_state.frame_id,
+            data=json.dumps(ego_status, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
     def close(self) -> None:
