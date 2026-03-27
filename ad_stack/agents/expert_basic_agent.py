@@ -333,7 +333,6 @@ class ExpertBasicAgent:
     def _traffic_light_stop_target_speed_kmh(
         self,
         light: TrafficLightStateView | None,
-        current_speed_mps: float,
     ) -> float:
         target_distance = self._traffic_light_stop_target_distance_m(light)
         if target_distance is None or target_distance <= 0.25:
@@ -341,7 +340,7 @@ class ExpertBasicAgent:
         desired_speed_mps = math.sqrt(
             max(0.0, 2.0 * max(self.config.preferred_deceleration_mps2, 1e-3) * target_distance)
         )
-        return min(self.config.target_speed_kmh, min(current_speed_mps, desired_speed_mps) * 3.6)
+        return min(self.config.target_speed_kmh, desired_speed_mps * 3.6)
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
@@ -430,7 +429,7 @@ class ExpertBasicAgent:
         stop_target_distance_m = self._traffic_light_stop_target_distance_m(active_light)
         if stop_for_light and self._overtake_state == "idle":
             planner_state = "traffic_light_stop"
-            target_speed_kmh = self._traffic_light_stop_target_speed_kmh(active_light, current_speed_mps)
+            target_speed_kmh = self._traffic_light_stop_target_speed_kmh(active_light)
         elif lead_vehicle is not None and not self.config.ignore_vehicles and self._overtake_state == "idle":
             should_overtake = (
                 self.config.allow_overtake
