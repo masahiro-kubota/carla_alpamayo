@@ -1,0 +1,11 @@
+{
+  "target_speed_kmh": 30.0,
+  "traffic_light_stop_buffer_m": 0.75,
+  "follow_headway_seconds": 1.8,
+  "yellow_stop_margin_seconds": 1.0,
+  "preferred_deceleration_mps2": 6.0,
+  "reaction_margin_m": 2.0,
+  "ttc_emergency_threshold_s": 0.75,
+  "lead_brake_distance_m": 4.5,
+  "allow_overtake": false
+}
