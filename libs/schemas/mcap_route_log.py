@@ -44,44 +44,6 @@ _FOXGLOVE_COMPRESSED_IMAGE_SCHEMA = {
     "additionalProperties": False,
 }
 
-_FOXGLOVE_POSE_IN_FRAME_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "timestamp": _foxglove_time_schema(),
-        "frame_id": {"type": "string"},
-        "pose": {
-            "type": "object",
-            "properties": {
-                "position": {
-                    "type": "object",
-                    "properties": {
-                        "x": {"type": "number"},
-                        "y": {"type": "number"},
-                        "z": {"type": "number"},
-                    },
-                    "required": ["x", "y", "z"],
-                    "additionalProperties": False,
-                },
-                "orientation": {
-                    "type": "object",
-                    "properties": {
-                        "x": {"type": "number"},
-                        "y": {"type": "number"},
-                        "z": {"type": "number"},
-                        "w": {"type": "number"},
-                    },
-                    "required": ["x", "y", "z", "w"],
-                    "additionalProperties": False,
-                },
-            },
-            "required": ["position", "orientation"],
-            "additionalProperties": False,
-        },
-    },
-    "required": ["timestamp", "frame_id", "pose"],
-    "additionalProperties": False,
-}
-
 _EGO_STATE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -417,11 +379,6 @@ class RouteLoopMcapWriter:
             encoding="jsonschema",
             data=json.dumps(_FOXGLOVE_COMPRESSED_IMAGE_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
-        pose_in_frame_schema_id = self._writer.register_schema(
-            name="foxglove.PoseInFrame",
-            encoding="jsonschema",
-            data=json.dumps(_FOXGLOVE_POSE_IN_FRAME_SCHEMA, ensure_ascii=False).encode("utf-8"),
-        )
         scene_update_schema_id = self._writer.register_schema(
             name="foxglove.SceneUpdate",
             encoding="jsonschema",
@@ -458,12 +415,6 @@ class RouteLoopMcapWriter:
                 "camera_height": str(camera_height),
                 "jpeg_quality": str(jpeg_quality),
             },
-        )
-        self._ego_pose_channel_id = self._writer.register_channel(
-            topic="/ego/pose",
-            message_encoding="json",
-            schema_id=pose_in_frame_schema_id,
-            metadata={"frame_id": "ego/base_link"},
         )
         self._map_scene_channel_id = self._writer.register_channel(
             topic="/map/scene",
@@ -654,31 +605,6 @@ class RouteLoopMcapWriter:
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
             data=json.dumps(frame_transforms, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-        )
-
-        pose_in_frame = {
-            "timestamp": timestamp,
-            "frame_id": "ego/base_link",
-            "pose": {
-                "position": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0,
-                },
-                "orientation": {
-                    "x": 0.0,
-                    "y": 0.0,
-                    "z": 0.0,
-                    "w": 1.0,
-                },
-            },
-        }
-        self._writer.add_message(
-            channel_id=self._ego_pose_channel_id,
-            log_time=log_time_ns,
-            publish_time=log_time_ns,
-            sequence=ego_state.frame_id,
-            data=json.dumps(pose_in_frame, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
         ego_state_message = {
