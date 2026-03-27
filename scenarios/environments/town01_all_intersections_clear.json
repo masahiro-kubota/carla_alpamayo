@@ -7,7 +7,13 @@
   "stationary_speed_threshold_mps": 0.5,
   "max_seconds": 3600.0,
   "npc_vehicles": [],
+  "traffic_light_group_cycle": {
+    "green_seconds": 8.0,
+    "yellow_seconds": 2.0,
+    "red_seconds": 10.0,
+    "reset_groups": true
+  },
   "traffic_light_overrides": [],
   "traffic_light_schedules": [],
-  "description": "Baseline full-map Town01 environment with default traffic lights, no NPC vehicles, and generous timeout for the all-intersections loop."
+  "description": "Baseline full-map Town01 environment with deterministic traffic light group cycles, no NPC vehicles, and generous timeout for the all-intersections loop."
 }

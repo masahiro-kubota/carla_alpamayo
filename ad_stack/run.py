@@ -90,6 +90,14 @@ class TrafficLightScheduleSpec:
 
 
 @dataclass(slots=True)
+class TrafficLightGroupCycleSpec:
+    green_seconds: float
+    yellow_seconds: float
+    red_seconds: float
+    reset_groups: bool = True
+
+
+@dataclass(slots=True)
 class EnvironmentConfigSpec:
     name: str
     town: str
@@ -99,6 +107,7 @@ class EnvironmentConfigSpec:
     stationary_speed_threshold_mps: float | None = None
     max_seconds: float | None = None
     npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
+    traffic_light_group_cycle: TrafficLightGroupCycleSpec | None = None
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
     traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
     description: str = ""
@@ -230,6 +239,7 @@ def _load_npc_profile(profile_id: str) -> NPCProfileSpec:
 
 def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
     raw = _load_json(path)
+    raw_cycle = raw.get("traffic_light_group_cycle")
     return EnvironmentConfigSpec(
         name=str(raw["name"]),
         town=str(raw["town"]),
@@ -252,6 +262,16 @@ def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
             )
             for item in raw.get("npc_vehicles", [])
         ],
+        traffic_light_group_cycle=(
+            TrafficLightGroupCycleSpec(
+                green_seconds=float(raw_cycle["green_seconds"]),
+                yellow_seconds=float(raw_cycle["yellow_seconds"]),
+                red_seconds=float(raw_cycle["red_seconds"]),
+                reset_groups=bool(raw_cycle.get("reset_groups", True)),
+            )
+            if raw_cycle is not None
+            else None
+        ),
         traffic_light_overrides=[
             TrafficLightOverrideSpec(
                 actor_id=int(item["actor_id"]),
@@ -350,6 +370,34 @@ def _apply_traffic_light_overrides(
             state_name=override.state,
             freeze=override.freeze,
         )
+    return lights_by_id
+
+
+def _apply_traffic_light_group_cycle(
+    world: Any,
+    cycle: TrafficLightGroupCycleSpec | None,
+) -> dict[int, Any]:
+    lights_by_id = _traffic_lights_by_id(world)
+    if cycle is None:
+        return lights_by_id
+
+    visited_groups: set[tuple[int, ...]] = set()
+    for traffic_light in lights_by_id.values():
+        group = list(traffic_light.get_group_traffic_lights())
+        if not group:
+            group = [traffic_light]
+        group_key = tuple(sorted(int(actor.id) for actor in group))
+        if group_key in visited_groups:
+            continue
+        visited_groups.add(group_key)
+
+        for actor in group:
+            actor.freeze(False)
+            actor.set_green_time(float(cycle.green_seconds))
+            actor.set_yellow_time(float(cycle.yellow_seconds))
+            actor.set_red_time(float(cycle.red_seconds))
+        if cycle.reset_groups:
+            group[0].reset_group()
     return lights_by_id
 
 
@@ -646,17 +694,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         image_dir = Path(temp_image_dir_handle.name)
 
     client = carla.Client(runtime.host, runtime.port)
-    client.set_timeout(120.0)
-
-    # Route-loop runs reload the town every time so traffic light phases start from
-    # a deterministic baseline instead of inheriting the previous run's world state.
-    world, original_settings = setup_world(
-        client,
-        route_config.town,
-        runtime.fixed_delta_seconds,
-        reload_world=True,
-    )
     client.set_timeout(30.0)
+    world, original_settings = setup_world(client, route_config.town, runtime.fixed_delta_seconds)
     world.set_weather(_resolve_weather(carla, scenario.weather))
 
     frame_events = FrameEventTracker()
@@ -737,6 +776,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         actors.append(lane_sensor)
         lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
 
+        lights_by_id = _apply_traffic_light_group_cycle(
+            world,
+            environment_config.traffic_light_group_cycle if environment_config is not None else None,
+        )
         lights_by_id = _apply_traffic_light_overrides(
             carla,
             world,
