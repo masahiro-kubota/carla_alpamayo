@@ -47,6 +47,7 @@ cd /home/masa/carla_alpamayo
 
 内部では `simulation.pipelines.run_route_loop` が `RunRequest(mode="evaluate", policy.kind="expert", ...)` を作り、`ad_stack.run(...)` を呼びます。
 route は `scenarios/routes/*.json`、周辺環境と stopping 条件は `scenarios/environments/*.json`、ego 側の expert policy 閾値は `ad_stack/configs/expert/*.json` で管理します。
+`run_expert_town01.sh` は fixed wrapper で、任意の追加 CLI 引数は受けません。切り替えは `CARLA_ROUTE_CONFIG`, `CARLA_ENVIRONMENT_CONFIG`, `CARLA_EXPERT_CONFIG` などの環境変数で行います。
 
 主な出力:
 

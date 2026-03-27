@@ -11,6 +11,37 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
+usage() {
+  cat <<'EOF'
+Usage:
+  ./simulation/scripts/run_expert_town01.sh
+
+This wrapper accepts no positional CLI overrides.
+Configure it via environment variables instead:
+  CARLA_HOST
+  CARLA_PORT
+  CARLA_ROUTE_CONFIG
+  CARLA_ENVIRONMENT_CONFIG
+  CARLA_EXPERT_CONFIG
+  CARLA_CAMERA_WIDTH
+  CARLA_CAMERA_HEIGHT
+EOF
+}
+
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unexpected argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+fi
+
 environment_config_args=()
 if [[ -n "${CARLA_ENVIRONMENT_CONFIG:-}" ]]; then
   environment_config_args=(--environment-config "${CARLA_ENVIRONMENT_CONFIG}")
@@ -24,5 +55,4 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --expert-config "${CARLA_EXPERT_CONFIG:-ad_stack/configs/expert/default.json}" \
   "${environment_config_args[@]}" \
   --camera-width "${CARLA_CAMERA_WIDTH:-1280}" \
-  --camera-height "${CARLA_CAMERA_HEIGHT:-720}" \
-  "$@"
+  --camera-height "${CARLA_CAMERA_HEIGHT:-720}"
