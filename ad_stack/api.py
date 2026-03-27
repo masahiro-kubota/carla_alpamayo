@@ -366,7 +366,7 @@ class ExpertCollectorStack(_RouteSceneMixin):
         route_geometry: Any | None = None,
         route_lookahead_m: float = 8.0,
         route_target_normalization_m: float = 20.0,
-        expert_config_overrides: dict[str, Any] | None = None,
+        expert_config: ExpertBasicAgentConfig | None = None,
     ) -> None:
         import carla
 
@@ -385,13 +385,12 @@ class ExpertCollectorStack(_RouteSceneMixin):
         self._agent = ExpertBasicAgent(
             vehicle,
             world_map,
-            config=ExpertBasicAgentConfig(
+            config=expert_config or ExpertBasicAgentConfig(
                 target_speed_kmh=target_speed_kmh,
                 ignore_traffic_lights=ignore_traffic_lights,
                 ignore_stop_signs=ignore_stop_signs,
                 ignore_vehicles=ignore_vehicles,
                 sampling_resolution_m=sampling_resolution_m,
-                **dict(expert_config_overrides or {}),
             ),
         )
         self._agent.set_global_plan(planned_trace)
@@ -442,7 +441,7 @@ class PilotNetEvalStack(_RouteSceneMixin):
         ignore_vehicles: bool,
         sampling_resolution_m: float,
         route_geometry: Any | None = None,
-        expert_config_overrides: dict[str, Any] | None = None,
+        expert_config: ExpertBasicAgentConfig | None = None,
     ) -> None:
         import carla
 
@@ -466,13 +465,12 @@ class PilotNetEvalStack(_RouteSceneMixin):
         self._expert_agent = ExpertBasicAgent(
             vehicle,
             world_map,
-            config=ExpertBasicAgentConfig(
+            config=expert_config or ExpertBasicAgentConfig(
                 target_speed_kmh=target_speed_kmh,
                 ignore_traffic_lights=ignore_traffic_lights,
                 ignore_stop_signs=ignore_stop_signs,
                 ignore_vehicles=ignore_vehicles,
                 sampling_resolution_m=sampling_resolution_m,
-                **dict(expert_config_overrides or {}),
             ),
         )
         self._expert_agent.set_global_plan(planned_trace)

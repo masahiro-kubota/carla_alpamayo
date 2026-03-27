@@ -30,6 +30,7 @@ def _build_resolved_request_payload(request: RunRequest) -> dict[str, object]:
         "policy": {
             "kind": request.policy.kind,
             "checkpoint_path": str(request.policy.checkpoint_path) if request.policy.checkpoint_path else None,
+            "expert_config_path": str(request.policy.expert_config_path) if request.policy.expert_config_path else None,
             "device": request.policy.device,
             "steer_smoothing": request.policy.steer_smoothing,
             "max_steer_delta": request.policy.max_steer_delta,
@@ -83,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
     parser.add_argument("--traffic-setup", default=None)
+    parser.add_argument("--expert-config", default="ad_stack/configs/expert/default.json")
     parser.add_argument("--policy-kind", choices=("expert", "learned"), default=None)
     parser.add_argument("--vehicle-filter", default="vehicle.tesla.model3")
     parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
@@ -202,6 +204,7 @@ def main() -> None:
             policy=PolicySpec(
                 kind=policy_kind,
                 checkpoint_path=Path(args.checkpoint) if args.checkpoint else None,
+                expert_config_path=Path(args.expert_config) if args.expert_config else None,
                 device=args.device,
                 steer_smoothing=args.steer_smoothing,
                 max_steer_delta=args.max_steer_delta,

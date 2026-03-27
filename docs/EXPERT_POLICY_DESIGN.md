@@ -33,8 +33,8 @@ result = run(request)
 expert 専用の tuning knob を大量に public field として増やすのは避ける。
 細かな閾値や挙動調整値は、原則として次のどちらかで扱う。
 
+- `ad_stack/configs/expert/*.json`
 - `ad_stack` 内部の `ExpertPolicyConfig`
-- `traffic_setup` 側の設定値
 
 ### 2.2 低レベル制御は既存資産を最大限再利用する
 
@@ -175,11 +175,13 @@ class RouteLoopScenarioSpec:
 
 expert tuning 用の閾値は、まず `ExpertPolicyConfig` として
 `ad_stack` 内部に閉じるのが自然である。
-必要なら `traffic_setup` から一部 override できるようにする。
+CLI からは `--expert-config` で config file を選び、
+`traffic_setup` には ego 側の tuning を持ち込まない。
 
 初期候補は次:
 
 ```python
+traffic_light_stop_buffer_m: float = 3.0
 follow_headway_seconds: float = 1.8
 yellow_stop_margin_seconds: float = 1.0
 overtake_speed_delta_kmh: float = 8.0

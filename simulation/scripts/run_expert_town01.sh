@@ -21,6 +21,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --host "${CARLA_HOST:-127.0.0.1}" \
   --port "${CARLA_PORT:-2000}" \
   --route-config "${CARLA_ROUTE_CONFIG:-scenarios/routes/town01_pilotnet_loop.json}" \
+  --expert-config "${CARLA_EXPERT_CONFIG:-ad_stack/configs/expert/default.json}" \
   "${traffic_setup_args[@]}" \
   --camera-width "${CARLA_CAMERA_WIDTH:-1280}" \
   --camera-height "${CARLA_CAMERA_HEIGHT:-720}" \

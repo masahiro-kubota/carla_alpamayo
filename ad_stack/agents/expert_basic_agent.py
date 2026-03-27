@@ -29,6 +29,7 @@ class ExpertBasicAgentConfig:
     sampling_resolution_m: float = 2.0
     follow_headway_seconds: float = 1.8
     yellow_stop_margin_seconds: float = 1.0
+    traffic_light_stop_buffer_m: float = 3.0
     overtake_speed_delta_kmh: float = 8.0
     overtake_min_front_gap_m: float = 20.0
     overtake_min_rear_gap_m: float = 15.0
@@ -307,9 +308,10 @@ class ExpertBasicAgent:
         if self.config.ignore_traffic_lights or light is None:
             return False
 
-        stop_distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
-        if stop_distance < 0.5:
+        raw_stop_distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
+        if raw_stop_distance < 0.5:
             return False
+        target_stop_distance = max(0.0, raw_stop_distance - self.config.traffic_light_stop_buffer_m)
 
         if light.state == "red":
             return True
@@ -320,7 +322,26 @@ class ExpertBasicAgent:
             (current_speed_mps * current_speed_mps) / max(2.0 * self.config.preferred_deceleration_mps2, 1e-3)
         )
         margin_distance = current_speed_mps * self.config.yellow_stop_margin_seconds
-        return stop_distance >= (stopping_distance + margin_distance)
+        return target_stop_distance >= (stopping_distance + margin_distance)
+
+    def _traffic_light_stop_target_distance_m(self, light: TrafficLightStateView | None) -> float | None:
+        if light is None:
+            return None
+        stop_distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
+        return max(0.0, stop_distance - self.config.traffic_light_stop_buffer_m)
+
+    def _traffic_light_stop_target_speed_kmh(
+        self,
+        light: TrafficLightStateView | None,
+        current_speed_mps: float,
+    ) -> float:
+        target_distance = self._traffic_light_stop_target_distance_m(light)
+        if target_distance is None or target_distance <= 0.25:
+            return 0.0
+        desired_speed_mps = math.sqrt(
+            max(0.0, 2.0 * max(self.config.preferred_deceleration_mps2, 1e-3) * target_distance)
+        )
+        return min(self.config.target_speed_kmh, min(current_speed_mps, desired_speed_mps) * 3.6)
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
@@ -406,9 +427,10 @@ class ExpertBasicAgent:
                 planner_state = "nominal_cruise"
 
         stop_for_light = self._should_stop_for_light(active_light, current_speed_mps)
+        stop_target_distance_m = self._traffic_light_stop_target_distance_m(active_light)
         if stop_for_light and self._overtake_state == "idle":
             planner_state = "traffic_light_stop"
-            target_speed_kmh = 0.0
+            target_speed_kmh = self._traffic_light_stop_target_speed_kmh(active_light, current_speed_mps)
         elif lead_vehicle is not None and not self.config.ignore_vehicles and self._overtake_state == "idle":
             should_overtake = (
                 self.config.allow_overtake
@@ -471,7 +493,8 @@ class ExpertBasicAgent:
         )
         if planner_state == "traffic_light_stop":
             control.throttle = 0.0
-            control.brake = max(float(control.brake), 0.45)
+            if stop_target_distance_m is None or stop_target_distance_m <= 0.5:
+                control.brake = max(float(control.brake), 0.45)
         if emergency_stop:
             planner_state = "emergency_brake"
             control.throttle = 0.0
@@ -504,6 +527,8 @@ class ExpertBasicAgent:
                 "route_progress_index": route_index,
                 "max_route_index": self._max_route_index,
                 "traffic_light_state": active_light.state if active_light is not None else None,
+                "traffic_light_stop_buffer_m": self.config.traffic_light_stop_buffer_m,
+                "traffic_light_stop_target_distance_m": stop_target_distance_m,
                 "lead_vehicle_id": lead_vehicle.actor_id if lead_vehicle is not None else None,
                 "lead_vehicle_distance_m": lead_distance_m,
                 "overtake_state": self._overtake_state,

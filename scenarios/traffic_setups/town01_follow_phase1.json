@@ -9,8 +9,5 @@
     }
   ],
   "traffic_light_overrides": [],
-  "expert_overrides": {
-    "allow_overtake": false
-  },
   "description": "Phase 1 slow-lead following scenario on the first northbound segment."
 }

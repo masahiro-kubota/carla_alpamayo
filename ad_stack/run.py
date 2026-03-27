@@ -15,6 +15,7 @@ from ad_stack.api import (
     create_pilotnet_eval_stack,
     to_carla_control,
 )
+from ad_stack.expert_config import bind_runtime_overrides, expert_config_to_dict, load_expert_config
 from libs.carla_utils import (
     FrameEventTracker,
     attach_sensor,
@@ -95,7 +96,6 @@ class TrafficSetupSpec:
     npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
     traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
-    expert_overrides: dict[str, Any] = field(default_factory=dict)
     description: str = ""
 
 
@@ -138,6 +138,7 @@ class ArtifactSpec:
 class PolicySpec:
     kind: PolicyKind
     checkpoint_path: Path | None = None
+    expert_config_path: Path | None = None
     device: str | None = None
     steer_smoothing: float = 1.0
     max_steer_delta: float | None = None
@@ -262,7 +263,6 @@ def _load_traffic_setup(path: Path) -> TrafficSetupSpec:
             )
             for item in raw.get("traffic_light_schedules", [])
         ],
-        expert_overrides=dict(raw.get("expert_overrides", {})),
         description=str(raw.get("description", "")),
     )
 
@@ -572,8 +572,16 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         raise ValueError(
             f"traffic_setup town mismatch: route={route_config.town} traffic_setup={traffic_setup.town}"
         )
-    expert_config_overrides = dict(traffic_setup.expert_overrides) if traffic_setup is not None else {}
-    allow_overtake = bool(expert_config_overrides.get("allow_overtake", True))
+    expert_config, expert_config_path = load_expert_config(policy.expert_config_path)
+    effective_expert_config = bind_runtime_overrides(
+        expert_config,
+        target_speed_kmh=runtime.target_speed_kmh,
+        ignore_traffic_lights=policy.ignore_traffic_lights,
+        ignore_stop_signs=policy.ignore_stop_signs,
+        ignore_vehicles=policy.ignore_vehicles,
+        sampling_resolution_m=route_config.sampling_resolution_m,
+    )
+    allow_overtake = bool(effective_expert_config.allow_overtake)
 
     git_commit_id = ensure_clean_git_worktree(action_label="Evaluate route loop")
     eval_suffix = "pilotnet_eval" if policy.kind == "learned" else "expert_eval"
@@ -707,7 +715,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ignore_vehicles=policy.ignore_vehicles,
                 sampling_resolution_m=route_config.sampling_resolution_m,
                 route_geometry=route_geometry,
-                expert_config_overrides=expert_config_overrides,
+                expert_config=effective_expert_config,
             )
             stack_description = stack.describe()
         else:
@@ -725,7 +733,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 ignore_vehicles=policy.ignore_vehicles,
                 sampling_resolution_m=route_config.sampling_resolution_m,
                 route_geometry=route_geometry,
-                expert_config_overrides=expert_config_overrides,
+                expert_config=effective_expert_config,
             )
             stack_description = stack.describe()
 
@@ -1001,7 +1009,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "route_config_path": relative_to_project(route_config_path),
         "traffic_setup_path": _relative_or_none(Path(scenario.traffic_setup_path).resolve() if scenario.traffic_setup_path else None),
         "traffic_setup_name": traffic_setup.name if traffic_setup is not None else None,
-        "expert_config_overrides": expert_config_overrides or None,
+        "expert_config_path": relative_to_project(expert_config_path),
+        "expert_config": expert_config_to_dict(effective_expert_config),
         "npc_vehicle_count": len(npc_actors_summary),
         "npc_vehicles": npc_actors_summary,
         "town": route_config.town,

@@ -14,10 +14,5 @@
     }
   ],
   "traffic_light_overrides": [],
-  "expert_overrides": {
-    "allow_overtake": true,
-    "overtake_trigger_distance_m": 42.0,
-    "overtake_min_front_gap_m": 35.0
-  },
   "description": "Straight road-12 overtake scenario with a close oncoming blocker. The expert should reject the lane change."
 }

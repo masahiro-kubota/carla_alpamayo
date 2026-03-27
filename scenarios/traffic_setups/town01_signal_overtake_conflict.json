@@ -26,9 +26,5 @@
     }
   ],
   "traffic_light_schedules": [],
-  "expert_overrides": {
-    "allow_overtake": true,
-    "overtake_trigger_distance_m": 40.0
-  },
   "description": "Straight eastbound route with a slow lead before a nearby red signal. The expert should suppress overtaking and wait conservatively."
 }

@@ -46,6 +46,7 @@ cd /home/masa/carla_alpamayo
 ```
 
 内部では `simulation.pipelines.run_route_loop` が `RunRequest(mode="evaluate", policy.kind="expert", ...)` を作り、`ad_stack.run(...)` を呼びます。
+ego 側の expert policy 閾値は `ad_stack/configs/expert/*.json` で管理し、`--expert-config` で選びます。
 
 主な出力:
 
@@ -82,13 +83,15 @@ closed-loop 評価:
 cd /home/masa/carla_alpamayo
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --checkpoint outputs/train/<train_run>/best.pt \
-  --route-config scenarios/routes/town01_pilotnet_loop.json
+  --route-config scenarios/routes/town01_pilotnet_loop.json \
+  --expert-config ad_stack/configs/expert/default.json
 ```
 
 `simulation.pipelines.run_route_loop` は clean git worktree が必要です。出力先は `outputs/evaluate/<date>_<time>_<memo>_<commit>/` です。
 default では `telemetry.mcap` を出力し、front camera の JPEG、ego pose / control / route progress、Foxglove `SceneUpdate` の static route / lane centerline を記録します。地図は default で town 全体を出し、重い場合だけ `--mcap-map-scope near_route` で route 近傍に絞れます。不要なら `--no-record-mcap` を使います。`front_rgb/` の連番 PNG は常設せず、`--record-video` のときだけ一時フレームから `front_rgb.mp4` を生成します。
 default の front camera は `1280x720`、artifact 記録レートは `10Hz` です。必要なら `--camera-width`, `--camera-height`, `--record-hz` で上書きできます。
 route-loop 実行時の raw argv は `cli_args.json`、解決済み request は `run_request.json` として出力ディレクトリに保存します。
+expert policy の設定値は `summary.json` に `expert_config_path` と `expert_config` として残ります。
 
 フロントカメラをライブ表示しながら評価したいときは `DISPLAY` を設定して `--show-front-camera` を付けます。
 
@@ -99,6 +102,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --policy-kind expert \
   --route-config scenarios/routes/town01_signal_short.json \
   --traffic-setup scenarios/traffic_setups/town01_signal_resume_phase2.json \
+  --expert-config ad_stack/configs/expert/no_overtake.json \
   --show-front-camera
 ```
 
@@ -126,6 +130,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.interactive_command_drive
 - `ad_stack/`
   - `run(request)` を提供する single entrypoint
   - CARLA world setup, actor/sensor lifecycle, simulation loop, artifact 出力を持つ
+  - `configs/expert/*.json` に ego expert policy の閾値を置く
 - `learning/`
   - `PilotNet` の model / train / inference runtime
 - `libs/`
@@ -136,6 +141,8 @@ PYTHONPATH="" uv run python -m simulation.pipelines.interactive_command_drive
 ```text
 carla_alpamayo/
   ad_stack/
+    configs/
+      expert/
   data/
     manifests/
   docs/
@@ -158,5 +165,7 @@ carla_alpamayo/
     pipelines/
     scripts/
   scenarios/
+    npc_profiles/
     routes/
+    traffic_setups/
 ```

@@ -1,0 +1,21 @@
+{
+  "traffic_light_stop_buffer_m": 3.0,
+  "follow_headway_seconds": 1.8,
+  "yellow_stop_margin_seconds": 1.0,
+  "overtake_speed_delta_kmh": 8.0,
+  "overtake_min_front_gap_m": 20.0,
+  "overtake_min_rear_gap_m": 15.0,
+  "overtake_signal_suppression_distance_m": 35.0,
+  "overtake_trigger_distance_m": 18.0,
+  "overtake_resume_front_gap_m": 12.0,
+  "preferred_deceleration_mps2": 4.0,
+  "reaction_margin_m": 2.0,
+  "ttc_emergency_threshold_s": 0.75,
+  "lead_brake_distance_m": 4.5,
+  "allow_overtake": true,
+  "preferred_overtake_direction": "left_first",
+  "lane_change_same_lane_distance_m": 6.0,
+  "lane_change_distance_m": 14.0,
+  "lane_change_other_lane_distance_m": 22.0,
+  "overtake_hold_distance_m": 30.0
+}

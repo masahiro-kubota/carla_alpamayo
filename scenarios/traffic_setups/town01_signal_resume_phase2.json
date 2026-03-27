@@ -20,8 +20,5 @@
       ]
     }
   ],
-  "expert_overrides": {
-    "allow_overtake": false
-  },
   "description": "Deterministic red-to-green schedule for verifying stop then resume behavior on the short signal route."
 }

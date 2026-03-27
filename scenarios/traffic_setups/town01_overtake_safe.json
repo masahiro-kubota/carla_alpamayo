@@ -9,9 +9,5 @@
     }
   ],
   "traffic_light_overrides": [],
-  "expert_overrides": {
-    "allow_overtake": true,
-    "overtake_trigger_distance_m": 42.0
-  },
   "description": "Straight road-12 overtake scenario without nearby signals. The expert should pass a single slow lead vehicle."
 }
