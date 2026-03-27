@@ -778,7 +778,18 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
         collision_sensor = attach_sensor(world, "sensor.other.collision", carla.Transform(), vehicle)
         actors.append(collision_sensor)
-        collision_sensor.listen(lambda event: frame_events.mark_collision(getattr(event, "other_actor", None)))
+
+        def _handle_collision_event(event: Any) -> None:
+            try:
+                other_actor = getattr(event, "other_actor", None)
+            except RuntimeError as exc:
+                if "destroyed actor" in str(exc):
+                    other_actor = None
+                else:
+                    raise
+            frame_events.mark_collision(other_actor)
+
+        collision_sensor.listen(_handle_collision_event)
 
         lane_sensor = attach_sensor(world, "sensor.other.lane_invasion", carla.Transform(), vehicle)
         actors.append(lane_sensor)
