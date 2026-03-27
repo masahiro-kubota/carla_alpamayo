@@ -222,31 +222,38 @@ class _RouteSceneMixin:
         right_vector = vehicle_transform.get_right_vector()
         tracked_objects: list[DynamicVehicleStateView] = []
         for actor in self._world.get_actors().filter("*vehicle*"):
-            if actor.id == self._vehicle.id:
-                continue
-            actor_transform = actor.get_transform()
-            actor_location = actor_transform.location
-            if actor_location.distance(ego_location) > 60.0:
-                continue
-            target_waypoint = self._map.get_waypoint(actor_location, lane_type=self._carla.LaneType.Driving)
-            dx = actor_location.x - ego_location.x
-            dy = actor_location.y - ego_location.y
-            longitudinal_distance_m = (dx * forward_vector.x) + (dy * forward_vector.y)
-            lateral_distance_m = (dx * right_vector.x) + (dy * right_vector.y)
-            tracked_objects.append(
-                DynamicVehicleStateView(
-                    actor_id=int(actor.id),
-                    x_m=float(actor_location.x),
-                    y_m=float(actor_location.y),
-                    yaw_deg=float(actor_transform.rotation.yaw),
-                    speed_mps=_actor_speed_mps(actor),
-                    lane_id=_lane_id(target_waypoint),
-                    relation=self._lane_relation(ego_waypoint, target_waypoint),
-                    longitudinal_distance_m=float(longitudinal_distance_m),
-                    lateral_distance_m=float(lateral_distance_m),
-                    is_ahead=bool(longitudinal_distance_m > 0.0),
+            try:
+                if actor.id == self._vehicle.id:
+                    continue
+                if hasattr(actor, "is_alive") and not actor.is_alive:
+                    continue
+                actor_transform = actor.get_transform()
+                actor_location = actor_transform.location
+                if actor_location.distance(ego_location) > 60.0:
+                    continue
+                target_waypoint = self._map.get_waypoint(actor_location, lane_type=self._carla.LaneType.Driving)
+                dx = actor_location.x - ego_location.x
+                dy = actor_location.y - ego_location.y
+                longitudinal_distance_m = (dx * forward_vector.x) + (dy * forward_vector.y)
+                lateral_distance_m = (dx * right_vector.x) + (dy * right_vector.y)
+                tracked_objects.append(
+                    DynamicVehicleStateView(
+                        actor_id=int(actor.id),
+                        x_m=float(actor_location.x),
+                        y_m=float(actor_location.y),
+                        yaw_deg=float(actor_transform.rotation.yaw),
+                        speed_mps=_actor_speed_mps(actor),
+                        lane_id=_lane_id(target_waypoint),
+                        relation=self._lane_relation(ego_waypoint, target_waypoint),
+                        longitudinal_distance_m=float(longitudinal_distance_m),
+                        lateral_distance_m=float(lateral_distance_m),
+                        is_ahead=bool(longitudinal_distance_m > 0.0),
+                    )
                 )
-            )
+            except RuntimeError as exc:
+                if "destroyed actor" in str(exc):
+                    continue
+                raise
         return tuple(sorted(tracked_objects, key=lambda actor: abs(actor.longitudinal_distance_m or 0.0)))
 
     def _build_traffic_lights(self, vehicle_transform: Any, ego_waypoint: Any | None) -> tuple[TrafficLightStateView, ...]:
