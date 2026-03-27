@@ -246,6 +246,48 @@ _FOXGLOVE_SCENE_UPDATE_SCHEMA = {
     "additionalProperties": False,
 }
 
+_FOXGLOVE_FRAME_TRANSFORMS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "transforms": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "timestamp": _foxglove_time_schema(),
+                    "parent_frame_id": {"type": "string"},
+                    "child_frame_id": {"type": "string"},
+                    "translation": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z"],
+                        "additionalProperties": False,
+                    },
+                    "rotation": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                            "w": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z", "w"],
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["timestamp", "parent_frame_id", "child_frame_id", "translation", "rotation"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["transforms"],
+    "additionalProperties": False,
+}
+
 
 @dataclass(slots=True)
 class EgoStateSample:
@@ -332,6 +374,11 @@ class RouteLoopMcapWriter:
             encoding="jsonschema",
             data=json.dumps(_FOXGLOVE_SCENE_UPDATE_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
+        frame_transforms_schema_id = self._writer.register_schema(
+            name="foxglove.FrameTransforms",
+            encoding="jsonschema",
+            data=json.dumps(_FOXGLOVE_FRAME_TRANSFORMS_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
         ego_status_schema_id = self._writer.register_schema(
             name="carla_alpamayo.EgoStatus",
             encoding="jsonschema",
@@ -360,6 +407,11 @@ class RouteLoopMcapWriter:
             message_encoding="json",
             schema_id=scene_update_schema_id,
             metadata={"frame_id": "map"},
+        )
+        self._frame_transforms_channel_id = self._writer.register_channel(
+            topic="/tf",
+            message_encoding="json",
+            schema_id=frame_transforms_schema_id,
         )
         self._ego_status_channel_id = self._writer.register_channel(
             topic="/ego/status",
@@ -467,6 +519,7 @@ class RouteLoopMcapWriter:
     ) -> None:
         log_time_ns = int(round(ego_state.timestamp_s * 1_000_000_000))
         timestamp = _foxglove_time(ego_state.timestamp_s)
+        pose = ego_state.pose
 
         jpeg_buffer = io.BytesIO()
         Image.fromarray(current_rgb).save(jpeg_buffer, format="JPEG", quality=self._jpeg_quality)
@@ -484,7 +537,50 @@ class RouteLoopMcapWriter:
             data=json.dumps(compressed_image, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
-        pose = ego_state.pose
+        base_link_orientation = _euler_degrees_to_quaternion(
+            roll_deg=pose["roll_deg"],
+            pitch_deg=pose["pitch_deg"],
+            yaw_deg=pose["yaw_deg"],
+        )
+        frame_transforms = {
+            "transforms": [
+                {
+                    "timestamp": timestamp,
+                    "parent_frame_id": "map",
+                    "child_frame_id": "ego/base_link",
+                    "translation": {
+                        "x": pose["x"],
+                        "y": pose["y"],
+                        "z": pose["z"],
+                    },
+                    "rotation": base_link_orientation,
+                },
+                {
+                    "timestamp": timestamp,
+                    "parent_frame_id": "ego/base_link",
+                    "child_frame_id": "ego/front_camera",
+                    "translation": {
+                        "x": 1.5,
+                        "y": 0.0,
+                        "z": 2.4,
+                    },
+                    "rotation": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0,
+                        "w": 1.0,
+                    },
+                },
+            ]
+        }
+        self._writer.add_message(
+            channel_id=self._frame_transforms_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=ego_state.frame_id,
+            data=json.dumps(frame_transforms, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
         pose_in_frame = {
             "timestamp": timestamp,
             "frame_id": "map",
@@ -494,11 +590,7 @@ class RouteLoopMcapWriter:
                     "y": pose["y"],
                     "z": pose["z"],
                 },
-                "orientation": _euler_degrees_to_quaternion(
-                    roll_deg=pose["roll_deg"],
-                    pitch_deg=pose["pitch_deg"],
-                    yaw_deg=pose["yaw_deg"],
-                ),
+                "orientation": base_link_orientation,
             },
         }
         self._writer.add_message(
