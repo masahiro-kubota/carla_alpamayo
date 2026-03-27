@@ -86,6 +86,19 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
 
 `simulation.pipelines.run_route_loop` は `collect` / `evaluate` の両方で clean git worktree が必要です。`evaluate` の出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` です。
 
+フロントカメラをライブ表示しながら評価したいときは `DISPLAY` を設定して `--show-front-camera` を付けます。
+
+```bash
+cd /home/masa/carla_alpamayo
+export DISPLAY=:1
+PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
+  --mode evaluate \
+  --policy-kind expert \
+  --route-config scenarios/routes/town01_signal_short.json \
+  --traffic-setup scenarios/traffic_setups/town01_signal_resume_phase2.json \
+  --show-front-camera
+```
+
 interactive 試走:
 
 ```bash

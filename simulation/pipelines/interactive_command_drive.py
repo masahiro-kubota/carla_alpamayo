@@ -2,18 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from pathlib import Path
 import select
 import sys
 import termios
 import tty
 
-import numpy as np
-from PIL import Image, ImageTk
-import tkinter as tk
-
 from ad_stack import InteractiveScenarioSpec, PolicySpec, RunRequest, RuntimeSpec, run
+from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
@@ -57,47 +53,6 @@ class RawKeyboardInput:
                 break
             keys.append(chunk)
         return keys
-
-
-class FrontCameraPreview:
-    def __init__(self, *, source_width: int, source_height: int, display_scale: float) -> None:
-        self.root = tk.Tk()
-        self.root.title("CARLA Front Camera")
-        self.root.protocol("WM_DELETE_WINDOW", self.close)
-        self.closed = False
-        self.image_label = tk.Label(self.root)
-        self.image_label.pack()
-        self.status_label = tk.Label(
-            self.root,
-            text="",
-            anchor="w",
-            justify="left",
-            font=("TkFixedFont", 11),
-        )
-        self.status_label.pack(fill="x")
-        self._photo_image: ImageTk.PhotoImage | None = None
-        self.display_width = max(1, int(round(source_width * display_scale)))
-        self.display_height = max(1, int(round(source_height * display_scale)))
-        self.root.update()
-
-    def update(self, rgb_array: np.ndarray, status_text: str) -> None:
-        if self.closed:
-            return
-        image = Image.fromarray(rgb_array)
-        if image.size != (self.display_width, self.display_height):
-            image = image.resize((self.display_width, self.display_height))
-        self._photo_image = ImageTk.PhotoImage(image=image)
-        self.image_label.configure(image=self._photo_image)
-        self.status_label.configure(text=status_text)
-        self.root.update_idletasks()
-        self.root.update()
-
-    def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
-        self.root.destroy()
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -150,7 +105,7 @@ def main() -> None:
 
     preview: FrontCameraPreview | None = None
     preview_enabled = args.show_front_camera
-    if preview_enabled and not os.environ.get("DISPLAY"):
+    if preview_enabled and not has_display():
         print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
         preview_enabled = False
 
@@ -161,6 +116,7 @@ def main() -> None:
                 source_width=args.camera_width,
                 source_height=args.camera_height,
                 display_scale=args.preview_scale,
+                title="CARLA Front Camera",
             )
 
         print_instructions()

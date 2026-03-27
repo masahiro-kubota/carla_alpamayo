@@ -611,6 +611,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
+        preview_sink = policy.preview_sink
         while True:
             _apply_traffic_light_schedules(
                 carla,
@@ -622,13 +623,14 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             current_speed = speed_mps(vehicle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
+            current_rgb = _carla_image_to_rgb_array(current_image) if (policy.kind == "learned" or preview_sink is not None) else None
 
             if policy.kind == "learned":
                 step_result = stack.run_step(
                     timestamp_s=elapsed_seconds,
                     vehicle_transform=vehicle_transform,
                     speed_mps=current_speed,
-                    current_rgb=_carla_image_to_rgb_array(current_image),
+                    current_rgb=current_rgb,
                     steering_smoothing=policy.steer_smoothing,
                     max_steer_delta=policy.max_steer_delta,
                 )
@@ -720,6 +722,17 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 min_ttc=planning_debug.get("min_ttc"),
             )
             append_jsonl(manifest_path, record)
+
+            if preview_sink is not None and current_rgb is not None:
+                behavior_label = behavior or "unknown"
+                status_core = (
+                    f"mode={request.mode:<8} policy={policy.kind:<7} behavior={behavior_label:<12} "
+                    f"speed={current_speed * 3.6:5.1f} km/h progress={current_completion_ratio:5.3f} "
+                    f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
+                )
+                keep_preview = preview_sink(current_rgb, status_core)
+                if keep_preview is False:
+                    preview_sink = None
 
             if collision:
                 failure_reason = "collision"

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from ad_stack import ArtifactSpec, PolicySpec, RouteLoopScenarioSpec, RunRequest, RuntimeSpec, run
+from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
 
 DEFAULT_ROUTE_CONFIG_PATH = Path("scenarios/routes/town01_pilotnet_loop.json")
 
@@ -44,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video-fps", type=float, default=None)
     parser.add_argument("--video-crf", type=int, default=23)
     parser.add_argument(
+        "--show-front-camera",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--preview-scale", type=float, default=2.0)
+    parser.add_argument(
         "--ignore-traffic-lights",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -64,6 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    preview: FrontCameraPreview | None = None
+    preview_enabled = args.show_front_camera
+    if preview_enabled and not has_display():
+        print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
+        preview_enabled = False
 
     policy_kind = args.policy_kind
     if policy_kind is None:
@@ -79,46 +91,68 @@ def main() -> None:
     if policy_kind == "expert" and args.mode == "collect" and args.checkpoint:
         parser.error("--checkpoint is only valid for learned evaluation")
 
-    request = RunRequest(
-        mode=args.mode,
-        scenario=RouteLoopScenarioSpec(
-            route_config_path=Path(args.route_config),
-            weather=args.weather,
-            goal_tolerance_m=args.goal_tolerance_m,
-            max_stop_seconds=args.max_stop_seconds,
-            stationary_speed_threshold_mps=args.stationary_speed_threshold_mps,
-            max_seconds=args.max_seconds,
-            traffic_setup_path=Path(args.traffic_setup) if args.traffic_setup else None,
-        ),
-        runtime=RuntimeSpec(
-            host=args.host,
-            port=args.port,
-            vehicle_filter=args.vehicle_filter,
-            fixed_delta_seconds=args.fixed_delta_seconds,
-            sensor_timeout=args.sensor_timeout,
-            camera_width=args.camera_width,
-            camera_height=args.camera_height,
-            camera_fov=args.camera_fov,
-            target_speed_kmh=args.target_speed_kmh,
-            seed=args.seed,
-        ),
-        policy=PolicySpec(
-            kind=policy_kind,
-            checkpoint_path=Path(args.checkpoint) if args.checkpoint else None,
-            device=args.device,
-            steer_smoothing=args.steer_smoothing,
-            max_steer_delta=args.max_steer_delta,
-            ignore_traffic_lights=args.ignore_traffic_lights,
-            ignore_stop_signs=args.ignore_stop_signs,
-            ignore_vehicles=args.ignore_vehicles,
-        ),
-        artifacts=ArtifactSpec(
-            record_video=args.record_video,
-            video_fps=args.video_fps,
-            video_crf=args.video_crf,
-        ),
-    )
-    result = run(request)
+    try:
+        if preview_enabled:
+            preview = FrontCameraPreview(
+                source_width=args.camera_width,
+                source_height=args.camera_height,
+                display_scale=args.preview_scale,
+                title="CARLA Front Camera (Route Loop)",
+            )
+
+        def preview_sink(rgb_array, status_text: str) -> bool | None:
+            if preview is not None and not preview.closed:
+                preview.update(rgb_array, status_text)
+                return True
+            if preview is not None and preview.closed:
+                return False
+            return True
+
+        request = RunRequest(
+            mode=args.mode,
+            scenario=RouteLoopScenarioSpec(
+                route_config_path=Path(args.route_config),
+                weather=args.weather,
+                goal_tolerance_m=args.goal_tolerance_m,
+                max_stop_seconds=args.max_stop_seconds,
+                stationary_speed_threshold_mps=args.stationary_speed_threshold_mps,
+                max_seconds=args.max_seconds,
+                traffic_setup_path=Path(args.traffic_setup) if args.traffic_setup else None,
+            ),
+            runtime=RuntimeSpec(
+                host=args.host,
+                port=args.port,
+                vehicle_filter=args.vehicle_filter,
+                fixed_delta_seconds=args.fixed_delta_seconds,
+                sensor_timeout=args.sensor_timeout,
+                camera_width=args.camera_width,
+                camera_height=args.camera_height,
+                camera_fov=args.camera_fov,
+                target_speed_kmh=args.target_speed_kmh,
+                seed=args.seed,
+            ),
+            policy=PolicySpec(
+                kind=policy_kind,
+                checkpoint_path=Path(args.checkpoint) if args.checkpoint else None,
+                device=args.device,
+                steer_smoothing=args.steer_smoothing,
+                max_steer_delta=args.max_steer_delta,
+                ignore_traffic_lights=args.ignore_traffic_lights,
+                ignore_stop_signs=args.ignore_stop_signs,
+                ignore_vehicles=args.ignore_vehicles,
+                preview_sink=preview_sink if preview_enabled else None,
+            ),
+            artifacts=ArtifactSpec(
+                record_video=args.record_video,
+                video_fps=args.video_fps,
+                video_crf=args.video_crf,
+            ),
+        )
+        result = run(request)
+    finally:
+        if preview is not None:
+            preview.close()
+
     print(json.dumps(result.summary, indent=2))
 
 
