@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from base64 import b64encode
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import io
 import json
 from math import cos, radians, sin
@@ -82,7 +82,7 @@ _FOXGLOVE_POSE_IN_FRAME_SCHEMA = {
     "additionalProperties": False,
 }
 
-_EGO_STATUS_JSON_SCHEMA = {
+_EGO_STATE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "timestamp": _foxglove_time_schema(),
@@ -90,15 +90,8 @@ _EGO_STATUS_JSON_SCHEMA = {
         "frame_id": {"type": "integer"},
         "elapsed_seconds": {"type": "number"},
         "speed_mps": {"type": "number"},
-        "behavior": {"type": ["string", "null"]},
         "route_completion_ratio": {"type": "number"},
         "distance_to_goal_m": {"type": "number"},
-        "planner_state": {"type": ["string", "null"]},
-        "traffic_light_state": {"type": ["string", "null"]},
-        "lead_vehicle_distance_m": {"type": ["number", "null"]},
-        "overtake_state": {"type": ["string", "null"]},
-        "target_lane_id": {"type": ["string", "null"]},
-        "min_ttc": {"type": ["number", "null"]},
         "pose": {
             "type": "object",
             "properties": {
@@ -133,6 +126,58 @@ _EGO_STATUS_JSON_SCHEMA = {
         "distance_to_goal_m",
         "pose",
         "control",
+    ],
+    "additionalProperties": False,
+}
+
+_EGO_CONTROL_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "episode_id": {"type": "string"},
+        "frame_id": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"},
+        "steer": {"type": "number"},
+        "throttle": {"type": "number"},
+        "brake": {"type": "number"},
+    },
+    "required": [
+        "timestamp",
+        "episode_id",
+        "frame_id",
+        "elapsed_seconds",
+        "steer",
+        "throttle",
+        "brake",
+    ],
+    "additionalProperties": False,
+}
+
+_EGO_PLANNING_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "episode_id": {"type": "string"},
+        "frame_id": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"},
+        "behavior": {"type": ["string", "null"]},
+        "planner_state": {"type": ["string", "null"]},
+        "traffic_light_state": {"type": ["string", "null"]},
+        "overtake_state": {"type": ["string", "null"]},
+        "target_lane_id": {"type": ["string", "null"]},
+        "min_ttc": {"type": ["number", "null"]},
+    },
+    "required": [
+        "timestamp",
+        "episode_id",
+        "frame_id",
+        "elapsed_seconds",
+        "behavior",
+        "planner_state",
+        "traffic_light_state",
+        "overtake_state",
+        "target_lane_id",
+        "min_ttc",
     ],
     "additionalProperties": False,
 }
@@ -387,10 +432,20 @@ class RouteLoopMcapWriter:
             encoding="jsonschema",
             data=json.dumps(_FOXGLOVE_FRAME_TRANSFORMS_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
-        ego_status_schema_id = self._writer.register_schema(
-            name="carla_alpamayo.EgoStatus",
+        ego_state_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.EgoState",
             encoding="jsonschema",
-            data=json.dumps(_EGO_STATUS_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+            data=json.dumps(_EGO_STATE_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+        ego_control_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.EgoControl",
+            encoding="jsonschema",
+            data=json.dumps(_EGO_CONTROL_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+        ego_planning_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.EgoPlanning",
+            encoding="jsonschema",
+            data=json.dumps(_EGO_PLANNING_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
 
         self._front_rgb_channel_id = self._writer.register_channel(
@@ -421,10 +476,20 @@ class RouteLoopMcapWriter:
             message_encoding="json",
             schema_id=frame_transforms_schema_id,
         )
-        self._ego_status_channel_id = self._writer.register_channel(
-            topic="/ego/status",
+        self._ego_state_channel_id = self._writer.register_channel(
+            topic="/ego/state",
             message_encoding="json",
-            schema_id=ego_status_schema_id,
+            schema_id=ego_state_schema_id,
+        )
+        self._ego_control_channel_id = self._writer.register_channel(
+            topic="/ego/control",
+            message_encoding="json",
+            schema_id=ego_control_schema_id,
+        )
+        self._ego_planning_channel_id = self._writer.register_channel(
+            topic="/ego/planning",
+            message_encoding="json",
+            schema_id=ego_planning_schema_id,
         )
 
         self._writer.add_metadata(
@@ -616,22 +681,66 @@ class RouteLoopMcapWriter:
             data=json.dumps(pose_in_frame, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
-        ego_status = asdict(ego_state)
-        ego_status["timestamp"] = timestamp
-        ego_status["pose"] = {
-            "x": foxglove_position["x"],
-            "y": foxglove_position["y"],
-            "z": foxglove_position["z"],
-            "yaw_deg": foxglove_yaw_deg,
-            "pitch_deg": foxglove_pitch_deg,
-            "roll_deg": foxglove_roll_deg,
+        ego_state_message = {
+            "timestamp": timestamp,
+            "episode_id": ego_state.episode_id,
+            "frame_id": ego_state.frame_id,
+            "elapsed_seconds": ego_state.elapsed_seconds,
+            "speed_mps": ego_state.speed_mps,
+            "route_completion_ratio": ego_state.route_completion_ratio,
+            "distance_to_goal_m": ego_state.distance_to_goal_m,
+            "pose": {
+                "x": foxglove_position["x"],
+                "y": foxglove_position["y"],
+                "z": foxglove_position["z"],
+                "yaw_deg": foxglove_yaw_deg,
+                "pitch_deg": foxglove_pitch_deg,
+                "roll_deg": foxglove_roll_deg,
+            },
         }
         self._writer.add_message(
-            channel_id=self._ego_status_channel_id,
+            channel_id=self._ego_state_channel_id,
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(ego_status, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(ego_state_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        ego_control_message = {
+            "timestamp": timestamp,
+            "episode_id": ego_state.episode_id,
+            "frame_id": ego_state.frame_id,
+            "elapsed_seconds": ego_state.elapsed_seconds,
+            "steer": float(ego_state.control["steer"]),
+            "throttle": float(ego_state.control["throttle"]),
+            "brake": float(ego_state.control["brake"]),
+        }
+        self._writer.add_message(
+            channel_id=self._ego_control_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=ego_state.frame_id,
+            data=json.dumps(ego_control_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        ego_planning_message = {
+            "timestamp": timestamp,
+            "episode_id": ego_state.episode_id,
+            "frame_id": ego_state.frame_id,
+            "elapsed_seconds": ego_state.elapsed_seconds,
+            "behavior": ego_state.behavior,
+            "planner_state": ego_state.planner_state,
+            "traffic_light_state": ego_state.traffic_light_state,
+            "overtake_state": ego_state.overtake_state,
+            "target_lane_id": ego_state.target_lane_id,
+            "min_ttc": ego_state.min_ttc,
+        }
+        self._writer.add_message(
+            channel_id=self._ego_planning_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=ego_state.frame_id,
+            data=json.dumps(ego_planning_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
     def close(self) -> None:
