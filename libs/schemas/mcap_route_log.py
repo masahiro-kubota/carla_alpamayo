@@ -11,6 +11,8 @@ from typing import Any
 from mcap.writer import CompressionType, Writer
 from PIL import Image
 
+from libs.carla_utils.map_raster import TopdownMapAsset
+
 
 def _carla_point_to_foxglove(*, x: float, y: float, z: float) -> dict[str, float]:
     return {"x": float(x), "y": float(-y), "z": float(z)}
@@ -41,6 +43,23 @@ _FOXGLOVE_COMPRESSED_IMAGE_SCHEMA = {
         "format": {"type": "string"},
     },
     "required": ["timestamp", "frame_id", "data", "format"],
+    "additionalProperties": False,
+}
+
+_FOXGLOVE_CAMERA_CALIBRATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "frame_id": {"type": "string"},
+        "width": {"type": "integer"},
+        "height": {"type": "integer"},
+        "distortion_model": {"type": "string"},
+        "D": {"type": "array", "items": {"type": "number"}},
+        "K": {"type": "array", "items": {"type": "number"}, "minItems": 9, "maxItems": 9},
+        "R": {"type": "array", "items": {"type": "number"}, "minItems": 9, "maxItems": 9},
+        "P": {"type": "array", "items": {"type": "number"}, "minItems": 12, "maxItems": 12},
+    },
+    "required": ["timestamp", "frame_id", "width", "height", "distortion_model", "D", "K", "R", "P"],
     "additionalProperties": False,
 }
 
@@ -372,6 +391,7 @@ class RouteLoopMcapWriter:
         camera_width: int,
         camera_height: int,
         jpeg_quality: int = 85,
+        topdown_map_asset: TopdownMapAsset | None = None,
     ) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -392,6 +412,11 @@ class RouteLoopMcapWriter:
             name="foxglove.SceneUpdate",
             encoding="jsonschema",
             data=json.dumps(_FOXGLOVE_SCENE_UPDATE_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+        camera_calibration_schema_id = self._writer.register_schema(
+            name="foxglove.CameraCalibration",
+            encoding="jsonschema",
+            data=json.dumps(_FOXGLOVE_CAMERA_CALIBRATION_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
         frame_transforms_schema_id = self._writer.register_schema(
             name="foxglove.FrameTransforms",
@@ -431,6 +456,16 @@ class RouteLoopMcapWriter:
             schema_id=scene_update_schema_id,
             metadata={"frame_id": "map"},
         )
+        self._topdown_image_channel_id = self._writer.register_channel(
+            topic="/map/topdown/compressed",
+            message_encoding="json",
+            schema_id=compressed_image_schema_id,
+        )
+        self._topdown_calibration_channel_id = self._writer.register_channel(
+            topic="/map/topdown/camera_info",
+            message_encoding="json",
+            schema_id=camera_calibration_schema_id,
+        )
         self._frame_transforms_channel_id = self._writer.register_channel(
             topic="/tf",
             message_encoding="json",
@@ -463,6 +498,7 @@ class RouteLoopMcapWriter:
             },
         )
         self._jpeg_quality = jpeg_quality
+        self._topdown_map_asset = topdown_map_asset
         self._closed = False
 
     def write_static_scene(
@@ -542,6 +578,81 @@ class RouteLoopMcapWriter:
             publish_time=log_time_ns,
             sequence=0,
             data=json.dumps(scene_update, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        if self._topdown_map_asset is not None:
+            self._write_topdown_map_static(timestamp_s=timestamp_s)
+
+    def _write_topdown_map_static(self, *, timestamp_s: float) -> None:
+        assert self._topdown_map_asset is not None
+        asset = self._topdown_map_asset
+        log_time_ns = int(round(timestamp_s * 1_000_000_000))
+        timestamp = _foxglove_time(timestamp_s)
+        png_bytes = asset.image_path.read_bytes()
+
+        image_message = {
+            "timestamp": timestamp,
+            "frame_id": asset.frame_id,
+            "data": b64encode(png_bytes).decode("ascii"),
+            "format": "png",
+        }
+        self._writer.add_message(
+            channel_id=self._topdown_image_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=0,
+            data=json.dumps(image_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        fx = asset.camera_height_m * asset.width / max(1e-6, asset.max_x - asset.min_x)
+        fy = asset.camera_height_m * asset.height / max(1e-6, asset.max_y - asset.min_y)
+        cx = asset.width / 2.0
+        cy = asset.height / 2.0
+        calibration_message = {
+            "timestamp": timestamp,
+            "frame_id": asset.frame_id,
+            "width": asset.width,
+            "height": asset.height,
+            "distortion_model": "plumb_bob",
+            "D": [0.0, 0.0, 0.0, 0.0, 0.0],
+            "K": [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0],
+            "R": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            "P": [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0],
+        }
+        self._writer.add_message(
+            channel_id=self._topdown_calibration_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=0,
+            data=json.dumps(calibration_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
+
+        topdown_transform = {
+            "transforms": [
+                {
+                    "timestamp": timestamp,
+                    "parent_frame_id": "map",
+                    "child_frame_id": asset.frame_id,
+                    "translation": {
+                        "x": asset.center_x,
+                        "y": asset.center_y,
+                        "z": asset.camera_height_m,
+                    },
+                    "rotation": {
+                        "x": 1.0,
+                        "y": 0.0,
+                        "z": 0.0,
+                        "w": 0.0,
+                    },
+                }
+            ]
+        }
+        self._writer.add_message(
+            channel_id=self._frame_transforms_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=0,
+            data=json.dumps(topdown_transform, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
     def write_frame(
@@ -699,6 +810,7 @@ class RotatingRouteLoopMcapWriter:
         camera_height: int,
         jpeg_quality: int = 85,
         segment_seconds: float = 600.0,
+        topdown_map_asset: TopdownMapAsset | None = None,
     ) -> None:
         self.root_dir = root_dir
         self.root_dir.mkdir(parents=True, exist_ok=True)
@@ -711,6 +823,7 @@ class RotatingRouteLoopMcapWriter:
         self._camera_height = camera_height
         self._jpeg_quality = jpeg_quality
         self._segment_seconds = max(0.0, float(segment_seconds))
+        self._topdown_map_asset = topdown_map_asset
         self._static_scene_timestamp_s: float | None = None
         self._static_scene_route_points: list[tuple[float, float, float]] | None = None
         self._static_scene_lane_centerlines: list[list[tuple[float, float, float]]] | None = None
@@ -777,6 +890,7 @@ class RotatingRouteLoopMcapWriter:
             camera_width=self._camera_width,
             camera_height=self._camera_height,
             jpeg_quality=self._jpeg_quality,
+            topdown_map_asset=self._topdown_map_asset,
         )
         self._current_segment_index = segment_index
         segment_info = McapSegmentInfo(

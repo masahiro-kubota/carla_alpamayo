@@ -1,0 +1,18 @@
+{
+  "town": "Town01",
+  "image_path": "scenarios/maps/town01_topdown.png",
+  "metadata_path": "scenarios/maps/town01_topdown.json",
+  "frame_id": "map/topdown_camera",
+  "width": 1754,
+  "height": 1491,
+  "min_x": -22.06,
+  "max_x": 416.379,
+  "min_y": -350.61,
+  "max_y": 22.05,
+  "center_x": 197.16,
+  "center_y": -164.28,
+  "pixels_per_meter": 4.0,
+  "padding_m": 20.0,
+  "lane_sampling_m": 2.0,
+  "camera_height_m": 1000.0
+}

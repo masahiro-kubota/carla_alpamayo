@@ -20,6 +20,7 @@ from libs.carla_utils import (
     FrameEventTracker,
     attach_sensor,
     build_planned_route,
+    load_default_topdown_map_asset,
     destroy_actors,
     load_route_config,
     relative_to_project,
@@ -737,6 +738,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     traffic_light_phase_indices: dict[int, int] = {}
 
     planned_route = build_planned_route(world.get_map(), route_config)
+    topdown_map_asset = load_default_topdown_map_asset(route_config.town)
     route_geometry = route_geometry_from_planned_route(planned_route)
     goal_location = planned_route.trace[-1][0].transform.location
     success_criteria = _route_success_criteria(scenario)
@@ -755,6 +757,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 camera_height=runtime.camera_height,
                 jpeg_quality=artifacts.mcap_jpeg_quality,
                 segment_seconds=artifacts.mcap_segment_seconds,
+                topdown_map_asset=topdown_map_asset,
             )
 
         vehicle_blueprint = require_blueprint(world, runtime.vehicle_filter, rng=random_seed)
@@ -1201,6 +1204,16 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "mcap_dir": _relative_or_none(mcap_dir if artifacts.record_mcap else None),
         "mcap_index_path": _relative_or_none(mcap_index_path if artifacts.record_mcap else None),
         "mcap_segment_seconds": artifacts.mcap_segment_seconds if artifacts.record_mcap else None,
+        "topdown_map_asset_path": (
+            _relative_or_none(topdown_map_asset.image_path)
+            if artifacts.record_mcap and topdown_map_asset is not None
+            else None
+        ),
+        "topdown_map_metadata_path": (
+            _relative_or_none(topdown_map_asset.metadata_path)
+            if artifacts.record_mcap and topdown_map_asset is not None
+            else None
+        ),
         "mcap_segments": mcap_segments,
         "mcap_error": mcap_error,
         "manifest_path": relative_to_project(manifest_path),

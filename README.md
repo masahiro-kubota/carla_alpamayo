@@ -109,6 +109,15 @@ PYTHONPATH="" uv run python -m simulation.pipelines.plot_route_map \
 
 出力先は `scenarios/routes/previews/<route_name>.png` です。
 
+Town 全体の top-down map asset を更新するときは:
+
+```bash
+cd /home/masa/carla_alpamayo
+PYTHONPATH="" uv run python -m simulation.pipelines.render_town_topdown_asset --town Town01
+```
+
+出力先は `scenarios/maps/town01_topdown.png` と `scenarios/maps/town01_topdown.json` です。
+
 ## 学習
 
 `PilotNet` 系の学習:
@@ -140,7 +149,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
 ```
 
 `simulation.pipelines.run_route_loop` は clean git worktree が必要です。出力先は `outputs/evaluate/<date>_<time>_<memo>_<commit>/` です。
-default では `telemetry/segment_0000.mcap` から始まる segmented MCAP を出力し、front camera の JPEG、`/ego/state`, `/ego/control`, `/ego/planning`, `/tf`、Foxglove `SceneUpdate` の static route / lane centerline を記録します。segment 一覧は `telemetry/index.json` に残り、default の split 間隔は `600s` です。必要なら `--mcap-segment-seconds` で変えられます。地図は default で town 全体を出し、重い場合だけ `--mcap-map-scope near_route` で route 近傍に絞れます。不要なら `--no-record-mcap` を使います。`front_rgb/` の連番 PNG は常設せず、`--record-video` のときだけ一時フレームから `front_rgb.mp4` を生成します。
+default では `telemetry/segment_0000.mcap` から始まる segmented MCAP を出力し、front camera の JPEG、`/ego/state`, `/ego/control`, `/ego/planning`, `/tf`、Foxglove `SceneUpdate` の static route / lane centerline を記録します。Town ごとの top-down asset が `scenarios/maps/` にある場合は `/map/topdown/compressed` と `/map/topdown/camera_info` も各 segment 先頭に入ります。segment 一覧は `telemetry/index.json` に残り、default の split 間隔は `600s` です。必要なら `--mcap-segment-seconds` で変えられます。地図は default で town 全体を出し、重い場合だけ `--mcap-map-scope near_route` で route 近傍に絞れます。不要なら `--no-record-mcap` を使います。`front_rgb/` の連番 PNG は常設せず、`--record-video` のときだけ一時フレームから `front_rgb.mp4` を生成します。
 default の front camera は `1280x720`、artifact 記録レートは `10Hz` です。必要なら `--camera-width`, `--camera-height`, `--record-hz` で上書きできます。
 route-loop 実行時の raw argv は `cli_args.json`、解決済み request は `run_request.json` として出力ディレクトリに保存します。
 expert policy の設定値は `summary.json` に `expert_config_path` と `expert_config` として残ります。
