@@ -839,7 +839,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     route_id=route_config.name,
                     weather_id=scenario.weather,
                     timestamp=current_image.timestamp,
-                    front_rgb_path=relative_to_project(image_path) if image_path is not None else None,
+                    front_rgb_path=None,
                     speed=current_speed,
                     command=behavior,
                     steer=decision.command.steer,
