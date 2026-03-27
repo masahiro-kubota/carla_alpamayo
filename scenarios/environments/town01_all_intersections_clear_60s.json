@@ -1,0 +1,13 @@
+{
+  "name": "town01_all_intersections_clear_60s",
+  "town": "Town01",
+  "weather": "ClearNoon",
+  "goal_tolerance_m": 10.0,
+  "max_stop_seconds": 45.0,
+  "stationary_speed_threshold_mps": 0.5,
+  "max_seconds": 60.0,
+  "npc_vehicles": [],
+  "traffic_light_overrides": [],
+  "traffic_light_schedules": [],
+  "description": "Short 60-second baseline environment for checking all-intersections Town01 route-loop camera/output settings."
+}
