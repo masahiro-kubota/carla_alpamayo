@@ -34,6 +34,7 @@ from libs.utils import render_png_sequence_to_mp4
 
 RunMode = Literal["collect", "evaluate", "interactive"]
 PolicyKind = Literal["expert", "learned", "interactive"]
+McapMapScope = Literal["full", "near_route"]
 InteractiveCommandProvider = Callable[[str], tuple[str, bool]]
 InteractiveStatusSink = Callable[[str], None]
 InteractivePreviewSink = Callable[[Any, str], bool | None]
@@ -130,6 +131,7 @@ class ArtifactSpec:
     record_mcap: bool = True
     mcap_jpeg_quality: int = 85
     record_hz: float = 10.0
+    mcap_map_scope: McapMapScope = "full"
 
 
 @dataclass(slots=True)
@@ -498,6 +500,38 @@ def _lane_centerlines_near_route(
     return centerlines
 
 
+def _lane_centerlines_all_map(
+    world_map: Any,
+    *,
+    lane_sampling_m: float = 5.0,
+    z_offset_m: float = 0.05,
+) -> list[list[tuple[float, float, float]]]:
+    grouped: dict[tuple[int, int, int], list[tuple[float, float, float, float]]] = {}
+    for waypoint in world_map.generate_waypoints(lane_sampling_m):
+        location = waypoint.transform.location
+        lane_key = (int(waypoint.road_id), int(waypoint.section_id), int(waypoint.lane_id))
+        grouped.setdefault(lane_key, []).append(
+            (
+                float(getattr(waypoint, "s", 0.0)),
+                round(float(location.x), 3),
+                round(float(location.y), 3),
+                round(float(location.z + z_offset_m), 3),
+            )
+        )
+
+    centerlines: list[list[tuple[float, float, float]]] = []
+    for _, samples in sorted(grouped.items()):
+        samples.sort(key=lambda item: item[0])
+        points: list[tuple[float, float, float]] = []
+        for _s, x, y, z in samples:
+            point = (x, y, z)
+            if not points or point != points[-1]:
+                points.append(point)
+        if len(points) >= 2:
+            centerlines.append(points)
+    return centerlines
+
+
 def _validate_route_loop_request(request: RunRequest) -> RouteLoopScenarioSpec:
     if not isinstance(request.scenario, RouteLoopScenarioSpec):
         raise TypeError(f"Mode {request.mode!r} requires RouteLoopScenarioSpec.")
@@ -702,11 +736,16 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
         if mcap_writer is not None:
+            lane_centerlines = (
+                _lane_centerlines_all_map(world.get_map())
+                if artifacts.mcap_map_scope == "full"
+                else _lane_centerlines_near_route(world.get_map(), planned_route.trace)
+            )
             mcap_writer.write_static_scene(
                 timestamp_s=current_image.timestamp,
                 route_name=route_config.name,
                 route_points=_route_trace_xyz(planned_route.trace),
-                lane_centerlines=_lane_centerlines_near_route(world.get_map(), planned_route.trace),
+                lane_centerlines=lane_centerlines,
             )
         preview_sink = policy.preview_sink
         while True:
