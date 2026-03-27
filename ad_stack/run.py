@@ -115,8 +115,8 @@ class RuntimeSpec:
     vehicle_filter: str = "vehicle.tesla.model3"
     fixed_delta_seconds: float = 0.05
     sensor_timeout: float = 2.0
-    camera_width: int = 320
-    camera_height: int = 180
+    camera_width: int = 1280
+    camera_height: int = 720
     camera_fov: int = 90
     target_speed_kmh: float = 30.0
     seed: int = 7
@@ -129,6 +129,7 @@ class ArtifactSpec:
     video_fps: float | None = None
     record_mcap: bool = True
     mcap_jpeg_quality: int = 85
+    record_hz: float = 10.0
 
 
 @dataclass(slots=True)
@@ -570,6 +571,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
     elapsed_seconds = 0.0
     frame_index = 0
+    recorded_frame_index = 0
     max_stationary_seconds = 0.0
     current_stationary_seconds = 0.0
     average_speed_mps = 0.0
@@ -601,6 +603,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     route_geometry = route_geometry_from_planned_route(planned_route)
     goal_location = planned_route.trace[-1][0].transform.location
     success_criteria = _route_success_criteria(scenario)
+    record_period_s = runtime.fixed_delta_seconds if artifacts.record_hz <= 0 else max(runtime.fixed_delta_seconds, 1.0 / artifacts.record_hz)
+    next_record_elapsed_s = runtime.fixed_delta_seconds
 
     try:
         if artifacts.record_mcap:
@@ -716,11 +720,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             current_speed = speed_mps(vehicle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
-            current_rgb = (
-                _carla_image_to_rgb_array(current_image)
-                if (policy.kind == "learned" or preview_sink is not None or mcap_writer is not None)
-                else None
-            )
+            current_rgb = _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
 
             if policy.kind == "learned":
                 step_result = stack.run_step(
@@ -742,9 +742,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             control = to_carla_control(carla, decision.command)
             vehicle.apply_control(control)
 
-            image_path = image_dir / f"{frame_index:06d}.png"
-            current_image.save_to_disk(str(image_path))
-
             collision, lane_invasion = frame_events.consume_frame_flags()
             speed_sum += current_speed
             frame_index += 1
@@ -764,6 +761,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             behavior = step_result.behavior or decision.behavior
             planning_decision = step_result.expert_decision or decision
             planning_debug = dict(planning_decision.debug or {})
+            should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
 
             traffic_light_stop_count += int(bool(planning_debug.get("event_traffic_light_stop")))
             traffic_light_resume_count += int(bool(planning_debug.get("event_traffic_light_resume")))
@@ -782,79 +780,92 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             if planning_debug.get("lead_vehicle_distance_m") is not None:
                 min_lead_distance_m = min(min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"]))
 
-            record = EpisodeRecord(
-                episode_id=episode_id,
-                frame_id=frame_index - 1,
-                town_id=route_config.town,
-                route_id=route_config.name,
-                weather_id=scenario.weather,
-                timestamp=current_image.timestamp,
-                front_rgb_path=relative_to_project(image_path),
-                speed=current_speed,
-                command=behavior,
-                steer=decision.command.steer,
-                throttle=decision.command.throttle,
-                brake=decision.command.brake,
-                collision=collision,
-                lane_invasion=lane_invasion,
-                success=not collision and not failure_reason,
-                vehicle_x=vehicle_location.x,
-                vehicle_y=vehicle_location.y,
-                vehicle_z=vehicle_location.z,
-                vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                route_completion_ratio=current_completion_ratio,
-                distance_to_goal_m=distance_to_goal_m,
-                expert_steer=(
-                    step_result.expert_decision.command.steer
-                    if step_result.expert_decision is not None
-                    else None
-                ),
-                route_target_x=route_point[0] if route_point is not None else None,
-                route_target_y=route_point[1] if route_point is not None else None,
-                planner_state=planning_decision.planner_state,
-                traffic_light_state=planning_debug.get("traffic_light_state"),
-                lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
-                overtake_state=planning_debug.get("overtake_state"),
-                target_lane_id=planning_debug.get("target_lane_id"),
-                min_ttc=planning_debug.get("min_ttc"),
-            )
-            append_jsonl(manifest_path, record)
+            if should_record:
+                if current_rgb is None:
+                    current_rgb = _carla_image_to_rgb_array(current_image)
 
-            if mcap_writer is not None and current_rgb is not None:
-                mcap_writer.write_frame(
-                    current_rgb=current_rgb,
-                    ego_state=EgoStateSample(
-                        episode_id=episode_id,
-                        frame_id=frame_index - 1,
-                        timestamp_s=current_image.timestamp,
-                        elapsed_seconds=elapsed_seconds,
-                        speed_mps=current_speed,
-                        behavior=behavior,
-                        route_completion_ratio=current_completion_ratio,
-                        distance_to_goal_m=distance_to_goal_m,
-                        planner_state=planning_decision.planner_state,
-                        traffic_light_state=planning_debug.get("traffic_light_state"),
-                        lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
-                        overtake_state=planning_debug.get("overtake_state"),
-                        target_lane_id=planning_debug.get("target_lane_id"),
-                        min_ttc=planning_debug.get("min_ttc"),
-                        pose={
-                            "x": float(vehicle_location.x),
-                            "y": float(vehicle_location.y),
-                            "z": float(vehicle_location.z),
-                            "yaw_deg": float(vehicle_transform.rotation.yaw),
-                            "pitch_deg": float(vehicle_transform.rotation.pitch),
-                            "roll_deg": float(vehicle_transform.rotation.roll),
-                        },
-                        control={
-                            "steer": float(decision.command.steer),
-                            "throttle": float(decision.command.throttle),
-                            "brake": float(decision.command.brake),
-                        },
+                image_path = image_dir / f"{recorded_frame_index:06d}.png"
+                current_image.save_to_disk(str(image_path))
+
+                record = EpisodeRecord(
+                    episode_id=episode_id,
+                    frame_id=frame_index - 1,
+                    town_id=route_config.town,
+                    route_id=route_config.name,
+                    weather_id=scenario.weather,
+                    timestamp=current_image.timestamp,
+                    front_rgb_path=relative_to_project(image_path),
+                    speed=current_speed,
+                    command=behavior,
+                    steer=decision.command.steer,
+                    throttle=decision.command.throttle,
+                    brake=decision.command.brake,
+                    collision=collision,
+                    lane_invasion=lane_invasion,
+                    success=not collision and not failure_reason,
+                    vehicle_x=vehicle_location.x,
+                    vehicle_y=vehicle_location.y,
+                    vehicle_z=vehicle_location.z,
+                    vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                    route_completion_ratio=current_completion_ratio,
+                    distance_to_goal_m=distance_to_goal_m,
+                    expert_steer=(
+                        step_result.expert_decision.command.steer
+                        if step_result.expert_decision is not None
+                        else None
                     ),
+                    route_target_x=route_point[0] if route_point is not None else None,
+                    route_target_y=route_point[1] if route_point is not None else None,
+                    planner_state=planning_decision.planner_state,
+                    traffic_light_state=planning_debug.get("traffic_light_state"),
+                    lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
+                    overtake_state=planning_debug.get("overtake_state"),
+                    target_lane_id=planning_debug.get("target_lane_id"),
+                    min_ttc=planning_debug.get("min_ttc"),
                 )
+                append_jsonl(manifest_path, record)
 
-            if preview_sink is not None and current_rgb is not None:
+                if mcap_writer is not None:
+                    mcap_writer.write_frame(
+                        current_rgb=current_rgb,
+                        ego_state=EgoStateSample(
+                            episode_id=episode_id,
+                            frame_id=frame_index - 1,
+                            timestamp_s=current_image.timestamp,
+                            elapsed_seconds=elapsed_seconds,
+                            speed_mps=current_speed,
+                            behavior=behavior,
+                            route_completion_ratio=current_completion_ratio,
+                            distance_to_goal_m=distance_to_goal_m,
+                            planner_state=planning_decision.planner_state,
+                            traffic_light_state=planning_debug.get("traffic_light_state"),
+                            lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
+                            overtake_state=planning_debug.get("overtake_state"),
+                            target_lane_id=planning_debug.get("target_lane_id"),
+                            min_ttc=planning_debug.get("min_ttc"),
+                            pose={
+                                "x": float(vehicle_location.x),
+                                "y": float(vehicle_location.y),
+                                "z": float(vehicle_location.z),
+                                "yaw_deg": float(vehicle_transform.rotation.yaw),
+                                "pitch_deg": float(vehicle_transform.rotation.pitch),
+                                "roll_deg": float(vehicle_transform.rotation.roll),
+                            },
+                            control={
+                                "steer": float(decision.command.steer),
+                                "throttle": float(decision.command.throttle),
+                                "brake": float(decision.command.brake),
+                            },
+                        ),
+                    )
+
+                recorded_frame_index += 1
+                while next_record_elapsed_s <= elapsed_seconds + 1e-9:
+                    next_record_elapsed_s += record_period_s
+
+            if preview_sink is not None:
+                if current_rgb is None:
+                    current_rgb = _carla_image_to_rgb_array(current_image)
                 behavior_label = behavior or "unknown"
                 status_core = (
                     f"mode={request.mode:<8} policy={policy.kind:<7} behavior={behavior_label:<12} "
@@ -932,7 +943,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         world.apply_settings(original_settings)
         destroy_actors(reversed(actors))
 
-    video_fps = artifacts.video_fps or (1.0 / runtime.fixed_delta_seconds)
+    video_fps = artifacts.video_fps or artifacts.record_hz
     if artifacts.record_video:
         try:
             video_path = render_png_sequence_to_mp4(
@@ -956,9 +967,13 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "town": route_config.town,
         "weather": scenario.weather,
         "frame_count": frame_index,
+        "recorded_frame_count": recorded_frame_index,
         "elapsed_seconds": round(elapsed_seconds, 2),
         "lap_time_seconds": round(elapsed_seconds, 2),
         "target_speed_kmh": runtime.target_speed_kmh,
+        "camera_width": runtime.camera_width,
+        "camera_height": runtime.camera_height,
+        "record_hz": artifacts.record_hz,
         "average_speed_kmh": round(average_speed_mps * 3.6, 2),
         "collision_count": frame_events.collision_count,
         "last_collision_actor_id": frame_events.last_collision_actor_id,

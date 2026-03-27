@@ -25,8 +25,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
     parser.add_argument("--sensor-timeout", type=float, default=2.0)
     parser.add_argument("--target-speed-kmh", type=float, default=30.0)
-    parser.add_argument("--camera-width", type=int, default=320)
-    parser.add_argument("--camera-height", type=int, default=180)
+    parser.add_argument("--camera-width", type=int, default=1280)
+    parser.add_argument("--camera-height", type=int, default=720)
     parser.add_argument("--camera-fov", type=int, default=90)
     parser.add_argument("--goal-tolerance-m", type=float, default=10.0)
     parser.add_argument("--max-stop-seconds", type=float, default=10.0)
@@ -44,6 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--video-fps", type=float, default=None)
     parser.add_argument("--video-crf", type=int, default=23)
+    parser.add_argument("--record-hz", type=float, default=10.0)
     parser.add_argument(
         "--record-mcap",
         action=argparse.BooleanOptionalAction,
@@ -55,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=False,
     )
-    parser.add_argument("--preview-scale", type=float, default=2.0)
+    parser.add_argument("--preview-scale", type=float, default=1.0)
     parser.add_argument(
         "--ignore-traffic-lights",
         action=argparse.BooleanOptionalAction,
@@ -154,6 +155,7 @@ def main() -> None:
                 video_crf=args.video_crf,
                 record_mcap=args.record_mcap,
                 mcap_jpeg_quality=args.mcap_jpeg_quality,
+                record_hz=args.record_hz,
             ),
         )
         result = run(request)

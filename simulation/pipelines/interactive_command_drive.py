@@ -67,15 +67,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
     parser.add_argument("--sensor-timeout", type=float, default=2.0)
     parser.add_argument("--target-speed-kmh", type=float, default=20.0)
-    parser.add_argument("--camera-width", type=int, default=320)
-    parser.add_argument("--camera-height", type=int, default=180)
+    parser.add_argument("--camera-width", type=int, default=1280)
+    parser.add_argument("--camera-height", type=int, default=720)
     parser.add_argument("--camera-fov", type=int, default=90)
     parser.add_argument(
         "--show-front-camera",
         action=argparse.BooleanOptionalAction,
         default=True,
     )
-    parser.add_argument("--preview-scale", type=float, default=2.0)
+    parser.add_argument("--preview-scale", type=float, default=1.0)
     parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
