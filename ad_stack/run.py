@@ -28,7 +28,7 @@ from libs.carla_utils import (
     wait_for_image,
 )
 from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree
-from libs.schemas import EpisodeRecord, append_jsonl
+from libs.schemas import EgoStateSample, EpisodeRecord, RouteLoopMcapWriter, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 
 RunMode = Literal["collect", "evaluate", "interactive"]
@@ -126,6 +126,8 @@ class ArtifactSpec:
     record_video: bool = True
     video_crf: int = 23
     video_fps: float | None = None
+    record_mcap: bool = True
+    mcap_jpeg_quality: int = 85
 
 
 @dataclass(slots=True)
@@ -163,6 +165,7 @@ class RunResult:
     summary_path: Path | None = None
     manifest_path: Path | None = None
     video_path: Path | None = None
+    mcap_path: Path | None = None
     frame_count: int = 0
     elapsed_seconds: float = 0.0
 
@@ -483,6 +486,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         manifest_path = PROJECT_ROOT / "data" / "manifests" / "episodes" / f"{episode_id}.jsonl"
     image_dir = episode_dir / "front_rgb"
     summary_path = episode_dir / "summary.json"
+    mcap_path = episode_dir / "telemetry.mcap"
     episode_dir.mkdir(parents=True, exist_ok=True)
     image_dir.mkdir(parents=True, exist_ok=True)
 
@@ -509,6 +513,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     distance_to_goal_m = 0.0
     video_path: Path | None = None
     video_error: str | None = None
+    mcap_error: str | None = None
+    mcap_writer: RouteLoopMcapWriter | None = None
     traffic_light_stop_count = 0
     traffic_light_resume_count = 0
     traffic_light_violation_count = 0
@@ -529,6 +535,18 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     success_criteria = _route_success_criteria(scenario)
 
     try:
+        if artifacts.record_mcap:
+            mcap_writer = RouteLoopMcapWriter(
+                path=mcap_path,
+                episode_id=episode_id,
+                route_name=route_config.name,
+                town=route_config.town,
+                weather=scenario.weather,
+                camera_width=runtime.camera_width,
+                camera_height=runtime.camera_height,
+                jpeg_quality=artifacts.mcap_jpeg_quality,
+            )
+
         vehicle_blueprint = require_blueprint(world, runtime.vehicle_filter, rng=random_seed)
         vehicle_blueprint.set_attribute("role_name", "hero")
         vehicle = world.try_spawn_actor(vehicle_blueprint, planned_route.anchor_transforms[0])
@@ -623,7 +641,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             current_speed = speed_mps(vehicle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
-            current_rgb = _carla_image_to_rgb_array(current_image) if (policy.kind == "learned" or preview_sink is not None) else None
+            current_rgb = (
+                _carla_image_to_rgb_array(current_image)
+                if (policy.kind == "learned" or preview_sink is not None or mcap_writer is not None)
+                else None
+            )
 
             if policy.kind == "learned":
                 step_result = stack.run_step(
@@ -723,6 +745,40 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
             append_jsonl(manifest_path, record)
 
+            if mcap_writer is not None and current_rgb is not None:
+                mcap_writer.write_frame(
+                    current_rgb=current_rgb,
+                    ego_state=EgoStateSample(
+                        episode_id=episode_id,
+                        frame_id=frame_index - 1,
+                        timestamp_s=current_image.timestamp,
+                        elapsed_seconds=elapsed_seconds,
+                        speed_mps=current_speed,
+                        behavior=behavior,
+                        route_completion_ratio=current_completion_ratio,
+                        distance_to_goal_m=distance_to_goal_m,
+                        planner_state=planning_decision.planner_state,
+                        traffic_light_state=planning_debug.get("traffic_light_state"),
+                        lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
+                        overtake_state=planning_debug.get("overtake_state"),
+                        target_lane_id=planning_debug.get("target_lane_id"),
+                        min_ttc=planning_debug.get("min_ttc"),
+                        pose={
+                            "x": float(vehicle_location.x),
+                            "y": float(vehicle_location.y),
+                            "z": float(vehicle_location.z),
+                            "yaw_deg": float(vehicle_transform.rotation.yaw),
+                            "pitch_deg": float(vehicle_transform.rotation.pitch),
+                            "roll_deg": float(vehicle_transform.rotation.roll),
+                        },
+                        control={
+                            "steer": float(decision.command.steer),
+                            "throttle": float(decision.command.throttle),
+                            "brake": float(decision.command.brake),
+                        },
+                    ),
+                )
+
             if preview_sink is not None and current_rgb is not None:
                 behavior_label = behavior or "unknown"
                 status_core = (
@@ -779,7 +835,15 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 failure_reason = "goal_tolerance_exceeded"
             else:
                 failure_reason = "success_criteria_failed"
+        if mcap_writer is not None:
+            mcap_writer.close()
+            mcap_writer = None
     finally:
+        if mcap_writer is not None:
+            try:
+                mcap_writer.close()
+            except Exception as exc:  # pragma: no cover - depends on runtime environment
+                mcap_error = str(exc)
         if traffic_setup is not None:
             scheduled_or_overridden_ids = {
                 override.actor_id for override in traffic_setup.traffic_light_overrides
@@ -851,6 +915,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "video_fps": round(video_fps, 3) if video_path is not None else None,
         "video_crf": artifacts.video_crf if video_path is not None else None,
         "video_error": video_error,
+        "mcap_path": _relative_or_none(mcap_path if artifacts.record_mcap else None),
+        "mcap_error": mcap_error,
         "manifest_path": relative_to_project(manifest_path),
     }
 
@@ -906,6 +972,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         summary_path=summary_path,
         manifest_path=manifest_path,
         video_path=video_path,
+        mcap_path=mcap_path if artifacts.record_mcap else None,
         frame_count=frame_index,
         elapsed_seconds=elapsed_seconds,
     )

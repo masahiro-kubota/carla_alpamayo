@@ -45,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video-fps", type=float, default=None)
     parser.add_argument("--video-crf", type=int, default=23)
     parser.add_argument(
+        "--record-mcap",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--mcap-jpeg-quality", type=int, default=85)
+    parser.add_argument(
         "--show-front-camera",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -146,6 +152,8 @@ def main() -> None:
                 record_video=args.record_video,
                 video_fps=args.video_fps,
                 video_crf=args.video_crf,
+                record_mcap=args.record_mcap,
+                mcap_jpeg_quality=args.mcap_jpeg_quality,
             ),
         )
         result = run(request)
