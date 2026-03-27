@@ -165,8 +165,8 @@ class RunResult:
 
 残すもの:
 
-- collect 用 CLI 引数
-- `RunRequest(mode="collect", ...)` の組み立て
+- expert route-loop 用 CLI 引数
+- `RunRequest(mode="evaluate", policy.kind="expert", ...)` の組み立て
 - `ad_stack.run(request)` 呼び出し
 
 削るもの:
@@ -183,7 +183,7 @@ class RunResult:
 残すもの:
 
 - eval 用 CLI 引数
-- `RunRequest(mode="evaluate", ...)` の組み立て
+- `RunRequest(mode="evaluate", policy.kind="learned" | "expert", ...)` の組み立て
 - `ad_stack.run(request)` 呼び出し
 
 interactive も同様に:
@@ -253,10 +253,9 @@ collect と evaluate の違いは、
 いま `collect_route_loop.py` と `evaluate_pilotnet_loop.py` にある
 共通 simulation loop を `ad_stack.run(...)` に移す。
 
-最初は mode 分岐でよい。
+最初は route-loop と interactive の 2 分岐でよい。
 
-- `mode="collect"`
-- `mode="evaluate"`
+- `mode="evaluate"` with `policy.kind="expert" | "learned"`
 - `mode="interactive"`
 
 ### Step 3

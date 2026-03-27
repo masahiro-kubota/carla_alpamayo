@@ -76,9 +76,8 @@ def _write_run_metadata(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the Town01 fixed loop in collect or evaluate mode via ad_stack.run(request)."
+        description="Run the Town01 fixed loop via ad_stack.run(request)."
     )
-    parser.add_argument("--mode", choices=("collect", "evaluate"), default="collect")
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
@@ -151,17 +150,12 @@ def main() -> None:
 
     policy_kind = args.policy_kind
     if policy_kind is None:
-        if args.mode == "collect":
-            policy_kind = "expert"
-        else:
-            policy_kind = "learned" if args.checkpoint else "expert"
+        policy_kind = "learned" if args.checkpoint else "expert"
     args.policy_kind = policy_kind
 
-    if args.mode == "collect" and policy_kind != "expert":
-        parser.error("--mode=collect only supports --policy-kind=expert")
     if policy_kind == "learned" and not args.checkpoint:
         parser.error("--checkpoint is required when --policy-kind=learned")
-    if policy_kind == "expert" and args.mode == "collect" and args.checkpoint:
+    if policy_kind == "expert" and args.checkpoint:
         parser.error("--checkpoint is only valid for learned evaluation")
 
     try:
@@ -183,7 +177,7 @@ def main() -> None:
             return True
 
         request = RunRequest(
-            mode=args.mode,
+            mode="evaluate",
             scenario=RouteLoopScenarioSpec(
                 route_config_path=Path(args.route_config),
                 weather=args.weather,

@@ -17,13 +17,13 @@ if [[ -n "${CARLA_TRAFFIC_SETUP:-}" ]]; then
 fi
 
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
-  --mode collect \
+  --policy-kind expert \
   --host "${CARLA_HOST:-127.0.0.1}" \
   --port "${CARLA_PORT:-2000}" \
   --route-config "${CARLA_ROUTE_CONFIG:-scenarios/routes/town01_pilotnet_loop.json}" \
   "${traffic_setup_args[@]}" \
-  --camera-width "${CARLA_CAMERA_WIDTH:-320}" \
-  --camera-height "${CARLA_CAMERA_HEIGHT:-180}" \
+  --camera-width "${CARLA_CAMERA_WIDTH:-1280}" \
+  --camera-height "${CARLA_CAMERA_HEIGHT:-720}" \
   --target-speed-kmh "${CARLA_TARGET_SPEED_KMH:-30}" \
   --weather "${CARLA_WEATHER:-ClearNoon}" \
   --max-seconds "${CARLA_MAX_SECONDS:-600}" \

@@ -107,10 +107,8 @@ flowchart LR
 
 外側が `ad_stack` に渡す interface は `RunRequest` だけです。
 
-- route-loop collect:
-  - `RunRequest(mode="collect", ...)`
-- route-loop evaluate:
-  - `RunRequest(mode="evaluate", ...)`
+- route-loop:
+  - `RunRequest(mode="evaluate", policy.kind="expert" | "learned", ...)`
 - interactive:
   - `RunRequest(mode="interactive", ...)`
 

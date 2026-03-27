@@ -18,7 +18,6 @@ from ad_stack.api import (
 from libs.carla_utils import (
     FrameEventTracker,
     attach_sensor,
-    build_episode_id,
     build_planned_route,
     destroy_actors,
     load_route_config,
@@ -33,7 +32,7 @@ from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_
 from libs.schemas import EgoStateSample, EpisodeRecord, RouteLoopMcapWriter, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 
-RunMode = Literal["collect", "evaluate", "interactive"]
+RunMode = Literal["evaluate", "interactive"]
 PolicyKind = Literal["expert", "learned", "interactive"]
 McapMapScope = Literal["full", "near_route"]
 InteractiveCommandProvider = Callable[[str], tuple[str, bool]]
@@ -558,8 +557,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     policy = request.policy
     artifacts = request.artifacts
 
-    if request.mode == "collect" and policy.kind != "expert":
-        raise ValueError("Collect mode currently requires policy.kind='expert'.")
     if policy.kind == "learned" and policy.checkpoint_path is None:
         raise ValueError("Learned policy requires checkpoint_path.")
 
@@ -578,16 +575,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     expert_config_overrides = dict(traffic_setup.expert_overrides) if traffic_setup is not None else {}
     allow_overtake = bool(expert_config_overrides.get("allow_overtake", True))
 
-    git_commit_id = ensure_clean_git_worktree(action_label=f"{request.mode.capitalize()} route loop")
-    if request.mode == "evaluate":
-        eval_suffix = "pilotnet_eval" if policy.kind == "learned" else "expert_eval"
-        episode_id = build_versioned_run_id(f"{route_config.name}_{eval_suffix}", commit_id=git_commit_id)
-        episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
-        manifest_path = episode_dir / "manifest.jsonl"
-    else:
-        episode_id = build_episode_id(route_config.name)
-        episode_dir = PROJECT_ROOT / "outputs" / "collect" / episode_id
-        manifest_path = PROJECT_ROOT / "data" / "manifests" / "episodes" / f"{episode_id}.jsonl"
+    git_commit_id = ensure_clean_git_worktree(action_label="Evaluate route loop")
+    eval_suffix = "pilotnet_eval" if policy.kind == "learned" else "expert_eval"
+    episode_id = build_versioned_run_id(f"{route_config.name}_{eval_suffix}", commit_id=git_commit_id)
+    episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
+    manifest_path = episode_dir / "manifest.jsonl"
     summary_path = episode_dir / "summary.json"
     mcap_path = episode_dir / "telemetry.mcap"
     episode_dir.mkdir(parents=True, exist_ok=True)
@@ -913,7 +905,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     current_rgb = _carla_image_to_rgb_array(current_image)
                 behavior_label = behavior or "unknown"
                 status_core = (
-                    f"mode={request.mode:<8} policy={policy.kind:<7} behavior={behavior_label:<12} "
+                    f"policy={policy.kind:<7} behavior={behavior_label:<12} "
                     f"speed={current_speed * 3.6:5.1f} km/h progress={current_completion_ratio:5.3f} "
                     f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
                 )
@@ -925,13 +917,12 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 failure_reason = "collision"
                 break
 
-            if request.mode == "evaluate":
-                reached_success_goal = (
-                    current_completion_ratio >= success_criteria["route_completion_ratio_min"]
-                    and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
-                )
-                if reached_success_goal:
-                    break
+            reached_success_goal = (
+                current_completion_ratio >= success_criteria["route_completion_ratio_min"]
+                and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
+            )
+            if reached_success_goal:
+                break
 
             if max_stationary_seconds >= scenario.max_stop_seconds:
                 failure_reason = "stalled"
@@ -1059,16 +1050,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "manifest_path": relative_to_project(manifest_path),
     }
 
-    if request.mode == "collect":
-        summary = {
-            **base_summary,
-            "policy_type": "expert_demonstration",
-            "control_source": "ad_stack.run(expert_collect)",
-            "route_intent_source": "global_route_planner",
-            "lateral_control_source": "carla_local_planner_pid_via_ad_stack_expert_route_policy",
-            "is_camera_e2e_policy": False,
-        }
-    elif policy.kind == "expert":
+    if policy.kind == "expert":
         summary = {
             **base_summary,
             "policy_type": "expert_route_policy",

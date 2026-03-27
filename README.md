@@ -2,7 +2,7 @@
 
 `CARLA` 上で
 
-- expert データ収集
+- expert route-loop 実行
 - `PilotNet` 系の学習
 - 学習済み checkpoint の closed-loop 評価
 - 手動 command 付き interactive 試走
@@ -36,24 +36,25 @@ export DISPLAY=:1
 ./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound
 ```
 
-## 収集
+## Expert Route Loop
 
-fixed loop の expert 収集:
+fixed loop の expert 実行:
 
 ```bash
 cd /home/masa/carla_alpamayo
-./simulation/scripts/run_collect_town01.sh
+./simulation/scripts/run_expert_town01.sh
 ```
 
-内部では `simulation.pipelines.run_route_loop` が `RunRequest(mode="collect", ...)` を作り、`ad_stack.run(...)` を呼びます。
+内部では `simulation.pipelines.run_route_loop` が `RunRequest(mode="evaluate", policy.kind="expert", ...)` を作り、`ad_stack.run(...)` を呼びます。
 
 主な出力:
 
-- manifest: `data/manifests/episodes/<episode_id>.jsonl`
-- 画像: `outputs/collect/<episode_id>/front_rgb/*.png`
-- summary: `outputs/collect/<episode_id>/summary.json`
-- video: `outputs/collect/<episode_id>/front_rgb.mp4`
-- mcap: `outputs/collect/<episode_id>/telemetry.mcap`
+- manifest: `outputs/evaluate/<run_id>/manifest.jsonl`
+- summary: `outputs/evaluate/<run_id>/summary.json`
+- video: `outputs/evaluate/<run_id>/front_rgb.mp4`
+- mcap: `outputs/evaluate/<run_id>/telemetry.mcap`
+- raw argv: `outputs/evaluate/<run_id>/cli_args.json`
+- resolved request: `outputs/evaluate/<run_id>/run_request.json`
 
 ## 学習
 
@@ -80,12 +81,11 @@ closed-loop 評価:
 ```bash
 cd /home/masa/carla_alpamayo
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
-  --mode evaluate \
   --checkpoint outputs/train/<train_run>/best.pt \
   --route-config scenarios/routes/town01_pilotnet_loop.json
 ```
 
-`simulation.pipelines.run_route_loop` は `collect` / `evaluate` の両方で clean git worktree が必要です。`evaluate` の出力先は `outputs/evaluate/<date>_<time>_<memo>_<commit>/` です。
+`simulation.pipelines.run_route_loop` は clean git worktree が必要です。出力先は `outputs/evaluate/<date>_<time>_<memo>_<commit>/` です。
 default では `telemetry.mcap` を出力し、front camera の JPEG、ego pose / control / route progress、Foxglove `SceneUpdate` の static route / lane centerline を記録します。地図は default で town 全体を出し、重い場合だけ `--mcap-map-scope near_route` で route 近傍に絞れます。不要なら `--no-record-mcap` を使います。`front_rgb/` の連番 PNG は常設せず、`--record-video` のときだけ一時フレームから `front_rgb.mp4` を生成します。
 default の front camera は `1280x720`、artifact 記録レートは `10Hz` です。必要なら `--camera-width`, `--camera-height`, `--record-hz` で上書きできます。
 route-loop 実行時の raw argv は `cli_args.json`、解決済み request は `run_request.json` として出力ディレクトリに保存します。
@@ -96,7 +96,6 @@ route-loop 実行時の raw argv は `cli_args.json`、解決済み request は 
 cd /home/masa/carla_alpamayo
 export DISPLAY=:1
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
-  --mode evaluate \
   --policy-kind expert \
   --route-config scenarios/routes/town01_signal_short.json \
   --traffic-setup scenarios/traffic_setups/town01_signal_resume_phase2.json \
