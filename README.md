@@ -88,6 +88,27 @@ route は `scenarios/routes/*.json`、周辺環境と stopping 条件は `scenar
 - raw argv: `outputs/evaluate/<run_id>/cli_args.json`
 - resolved request: `outputs/evaluate/<run_id>/run_request.json`
 
+## Route Preview
+
+`scenarios/routes/*.json` は anchor index の列だけだと人間には分かりにくいので、route JSON と同名の preview PNG を `scenarios/routes/previews/` に併せて管理します。
+
+route preview を全部更新するときは:
+
+```bash
+cd /home/masa/carla_alpamayo
+PYTHONPATH="" uv run python -m simulation.pipelines.plot_route_map --all
+```
+
+個別 route だけ更新するときは:
+
+```bash
+cd /home/masa/carla_alpamayo
+PYTHONPATH="" uv run python -m simulation.pipelines.plot_route_map \
+  --route-config scenarios/routes/town01_perimeter_cw.json
+```
+
+出力先は `scenarios/routes/previews/<route_name>.png` です。
+
 ## 学習
 
 `PilotNet` 系の学習:
