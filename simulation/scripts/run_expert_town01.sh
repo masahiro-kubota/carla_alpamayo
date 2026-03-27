@@ -21,7 +21,7 @@ Configure it via environment variables instead:
   CARLA_HOST
   CARLA_PORT
   CARLA_ROUTE_CONFIG
-  CARLA_ENVIRONMENT_CONFIG
+  CARLA_ENVIRONMENT_CONFIG  (required)
   CARLA_EXPERT_CONFIG
   CARLA_CAMERA_WIDTH
   CARLA_CAMERA_HEIGHT
@@ -42,9 +42,10 @@ if [[ $# -gt 0 ]]; then
   esac
 fi
 
-environment_config_args=()
-if [[ -n "${CARLA_ENVIRONMENT_CONFIG:-}" ]]; then
-  environment_config_args=(--environment-config "${CARLA_ENVIRONMENT_CONFIG}")
+if [[ -z "${CARLA_ENVIRONMENT_CONFIG:-}" ]]; then
+  echo "CARLA_ENVIRONMENT_CONFIG is required." >&2
+  usage >&2
+  exit 2
 fi
 
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
@@ -52,7 +53,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --host "${CARLA_HOST:-127.0.0.1}" \
   --port "${CARLA_PORT:-2000}" \
   --route-config "${CARLA_ROUTE_CONFIG:-scenarios/routes/town01_pilotnet_loop.json}" \
+  --environment-config "${CARLA_ENVIRONMENT_CONFIG}" \
   --expert-config "${CARLA_EXPERT_CONFIG:-ad_stack/configs/expert/default.json}" \
-  "${environment_config_args[@]}" \
   --camera-width "${CARLA_CAMERA_WIDTH:-1280}" \
   --camera-height "${CARLA_CAMERA_HEIGHT:-720}"
