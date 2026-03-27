@@ -117,6 +117,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.render_town_topdown_asset --
 ```
 
 出力先は `scenarios/maps/town01_topdown.png` と `scenarios/maps/town01_topdown.json` です。
+この `town01_topdown.png` はレーン図ではなく、Town 全体を真上から撮った RGB の俯瞰画像です。
 
 ## 学習
 

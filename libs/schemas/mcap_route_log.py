@@ -4,7 +4,7 @@ from base64 import b64encode
 from dataclasses import dataclass
 import io
 import json
-from math import cos, radians, sin
+from math import cos, radians, sin, tan
 from pathlib import Path
 from typing import Any
 
@@ -604,8 +604,12 @@ class RouteLoopMcapWriter:
             data=json.dumps(image_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
-        fx = asset.camera_height_m * asset.width / max(1e-6, asset.max_x - asset.min_x)
-        fy = asset.camera_height_m * asset.height / max(1e-6, asset.max_y - asset.min_y)
+        if asset.camera_fov_deg > 0.0:
+            fx = asset.width / max(1e-6, 2.0 * tan(radians(asset.camera_fov_deg) / 2.0))
+            fy = fx
+        else:
+            fx = asset.camera_height_m * asset.width / max(1e-6, asset.max_x - asset.min_x)
+            fy = asset.camera_height_m * asset.height / max(1e-6, asset.max_y - asset.min_y)
         cx = asset.width / 2.0
         cy = asset.height / 2.0
         calibration_message = {

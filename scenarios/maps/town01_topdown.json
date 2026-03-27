@@ -14,5 +14,6 @@
   "pixels_per_meter": 4.0,
   "padding_m": 20.0,
   "lane_sampling_m": 2.0,
-  "camera_height_m": 1000.0
+  "camera_height_m": 1000.0,
+  "camera_fov_deg": 24.72951337469814
 }

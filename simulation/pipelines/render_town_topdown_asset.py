@@ -8,7 +8,7 @@ from libs.carla_utils import build_topdown_map_asset, require_carla
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Render a CARLA town into a repo-managed top-down PNG + metadata pair."
+        description="Capture a CARLA town into a repo-managed top-down RGB PNG + metadata pair."
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
@@ -50,7 +50,7 @@ def main() -> None:
     )
 
     asset = build_topdown_map_asset(
-        world.get_map(),
+        world,
         output_image_path=output_image.resolve(),
         output_metadata_path=output_metadata.resolve(),
         pixels_per_meter=args.pixels_per_meter,
