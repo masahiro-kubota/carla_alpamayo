@@ -84,7 +84,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --route-config scenarios/routes/town01_pilotnet_loop.json
 ```
 
-評価は clean git worktree でのみ実行できます。出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` です。
+`simulation.pipelines.run_route_loop` は `collect` / `evaluate` の両方で clean git worktree が必要です。`evaluate` の出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` です。
 
 interactive 試走:
 

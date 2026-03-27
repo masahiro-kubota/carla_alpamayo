@@ -27,7 +27,7 @@ from libs.carla_utils import (
     speed_mps,
     wait_for_image,
 )
-from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree_for_evaluation
+from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree
 from libs.schemas import EpisodeRecord, append_jsonl
 from libs.utils import render_png_sequence_to_mp4
 
@@ -471,9 +471,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     expert_config_overrides = dict(traffic_setup.expert_overrides) if traffic_setup is not None else {}
     allow_overtake = bool(expert_config_overrides.get("allow_overtake", True))
 
-    git_commit_id: str | None = None
+    git_commit_id = ensure_clean_git_worktree(action_label=f"{request.mode.capitalize()} route loop")
     if request.mode == "evaluate":
-        git_commit_id = ensure_clean_git_worktree_for_evaluation()
         eval_suffix = "pilotnet_eval" if policy.kind == "learned" else "expert_eval"
         episode_id = build_versioned_run_id(f"{route_config.name}_{eval_suffix}", commit_id=git_commit_id)
         episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
@@ -548,7 +547,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
         collision_sensor = attach_sensor(world, "sensor.other.collision", carla.Transform(), vehicle)
         actors.append(collision_sensor)
-        collision_sensor.listen(lambda _event: frame_events.mark_collision())
+        collision_sensor.listen(lambda event: frame_events.mark_collision(getattr(event, "other_actor", None)))
 
         lane_sensor = attach_sensor(world, "sensor.other.lane_invasion", carla.Transform(), vehicle)
         actors.append(lane_sensor)
@@ -810,6 +809,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "target_speed_kmh": runtime.target_speed_kmh,
         "average_speed_kmh": round(average_speed_mps * 3.6, 2),
         "collision_count": frame_events.collision_count,
+        "last_collision_actor_id": frame_events.last_collision_actor_id,
+        "last_collision_actor_type_id": frame_events.last_collision_actor_type_id,
         "lane_invasion_count": frame_events.lane_invasion_count,
         "traffic_light_stop_count": traffic_light_stop_count,
         "traffic_light_resume_count": traffic_light_resume_count,

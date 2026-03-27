@@ -131,6 +131,8 @@ class _SpeedController:
 
 
 class _RouteSceneMixin:
+    _MAX_ACTIVE_TRAFFIC_LIGHT_DISTANCE_M = 45.0
+
     def __init__(
         self,
         *,
@@ -275,8 +277,8 @@ class _RouteSceneMixin:
                     80.0,
                     [0, 90],
                 ):
-                    affects_ego = True
                     stop_line_distance_m = float(trigger_waypoint.transform.location.distance(ego_location))
+                    affects_ego = stop_line_distance_m <= self._MAX_ACTIVE_TRAFFIC_LIGHT_DISTANCE_M
 
             state_name = str(traffic_light.state).split(".")[-1].lower()
             if state_name not in {"red", "yellow", "green"}:

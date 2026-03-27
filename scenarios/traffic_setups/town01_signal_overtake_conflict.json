@@ -4,13 +4,23 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "slow_lead_profile_v1",
-      "spawn_index": 225,
+      "spawn_index": 116,
       "lane_behavior": "keep_lane"
     }
   ],
   "traffic_light_overrides": [
     {
-      "actor_id": 33,
+      "actor_id": 57,
+      "state": "red",
+      "freeze": true
+    },
+    {
+      "actor_id": 58,
+      "state": "red",
+      "freeze": true
+    },
+    {
+      "actor_id": 59,
       "state": "red",
       "freeze": true
     }
@@ -18,7 +28,7 @@
   "traffic_light_schedules": [],
   "expert_overrides": {
     "allow_overtake": true,
-    "overtake_trigger_distance_m": 26.0
+    "overtake_trigger_distance_m": 40.0
   },
-  "description": "Slow lead vehicle before a nearby red signal. The expert should suppress overtaking and wait conservatively."
+  "description": "Straight eastbound route with a slow lead before a nearby red signal. The expert should suppress overtaking and wait conservatively."
 }

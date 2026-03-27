@@ -19,10 +19,15 @@ class FrameEventTracker:
     lane_invasion_count: int = 0
     _collision_this_frame: bool = False
     _lane_invasion_this_frame: bool = False
+    last_collision_actor_id: int | None = None
+    last_collision_actor_type_id: str | None = None
 
-    def mark_collision(self) -> None:
+    def mark_collision(self, other_actor=None) -> None:
         self.collision_count += 1
         self._collision_this_frame = True
+        if other_actor is not None:
+            self.last_collision_actor_id = int(getattr(other_actor, "id", 0)) or None
+            self.last_collision_actor_type_id = getattr(other_actor, "type_id", None)
 
     def mark_lane_invasion(self) -> None:
         self.lane_invasion_count += 1

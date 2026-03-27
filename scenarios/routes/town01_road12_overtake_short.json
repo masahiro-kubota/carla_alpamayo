@@ -1,0 +1,8 @@
+{
+  "name": "town01_road12_overtake_short",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [24, 76],
+  "description": "Straight westbound road-12 segment in Town01 used for overtaking acceptance without nearby traffic lights."
+}

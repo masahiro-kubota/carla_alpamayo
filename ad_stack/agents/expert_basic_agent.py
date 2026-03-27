@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from collections import deque
 from typing import Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
@@ -43,6 +44,7 @@ class ExpertBasicAgentConfig:
     lane_change_same_lane_distance_m: float = 6.0
     lane_change_distance_m: float = 14.0
     lane_change_other_lane_distance_m: float = 22.0
+    overtake_hold_distance_m: float = 30.0
 
 
 class ExpertBasicAgent:
@@ -59,6 +61,7 @@ class ExpertBasicAgent:
     ) -> None:
         ensure_carla_agents_on_path()
         from agents.navigation.basic_agent import BasicAgent
+        from agents.navigation.controller import VehiclePIDController
 
         self.config = config or ExpertBasicAgentConfig()
         self._vehicle = vehicle
@@ -77,6 +80,14 @@ class ExpertBasicAgent:
             },
             map_inst=world_map,
         )
+        self._overtake_controller = VehiclePIDController(
+            vehicle,
+            args_lateral={"K_P": 1.95, "K_I": 0.05, "K_D": 0.2, "dt": 1.0 / 20.0},
+            args_longitudinal={"K_P": 1.0, "K_I": 0.05, "K_D": 0.0, "dt": 1.0 / 20.0},
+            max_throttle=0.75,
+            max_brake=0.5,
+            max_steering=0.8,
+        )
         self._base_trace: list[tuple[Any, Any]] = []
         self._route_point_to_trace_index: list[int] = []
         self._max_route_index: int = 0
@@ -85,6 +96,7 @@ class ExpertBasicAgent:
         self._overtake_origin_lane_id: str | None = None
         self._overtake_target_lane_id: str | None = None
         self._overtake_aborted = False
+        self._overtake_waypoints: deque[Any] = deque()
         self._car_follow_active = False
         self._waiting_on_light = False
 
@@ -116,6 +128,7 @@ class ExpertBasicAgent:
         self._overtake_origin_lane_id = None
         self._overtake_target_lane_id = None
         self._overtake_aborted = False
+        self._overtake_waypoints.clear()
         self._car_follow_active = False
         self._waiting_on_light = False
 
@@ -131,11 +144,24 @@ class ExpertBasicAgent:
         if not self._base_trace:
             return
         trace_index = min(self._route_trace_index(route_index) + 8, len(self._base_trace) - 1)
+        rejoin_plan = self._base_trace[trace_index:]
         self._agent.set_global_plan(
-            self._base_trace[trace_index:],
+            rejoin_plan,
             stop_waypoint_creation=True,
             clean_queue=True,
         )
+        self._overtake_waypoints = deque(waypoint for waypoint, _option in rejoin_plan)
+
+    def _consume_overtake_waypoint(self) -> Any | None:
+        if not self._overtake_waypoints:
+            return None
+        vehicle_location = self._vehicle.get_location()
+        while len(self._overtake_waypoints) > 1:
+            next_waypoint = self._overtake_waypoints[0]
+            if vehicle_location.distance(next_waypoint.transform.location) > max(self.config.sampling_resolution_m, 3.0):
+                break
+            self._overtake_waypoints.popleft()
+        return self._overtake_waypoints[0]
 
     def _start_overtake(self, direction: Literal["left", "right"], route_index: int | None) -> bool:
         if not self._base_trace:
@@ -156,15 +182,38 @@ class ExpertBasicAgent:
         if not lane_change_path:
             return False
 
-        trace_index = min(self._route_trace_index(route_index) + 8, len(self._base_trace) - 1)
         combined_plan = list(lane_change_path)
+        hold_waypoint = lane_change_path[-1][0]
+        hold_option = lane_change_path[-1][1]
+        hold_lane_id = _lane_id(hold_waypoint)
+        remaining_hold_distance_m = self.config.overtake_hold_distance_m
+        while remaining_hold_distance_m > 1e-3:
+            next_waypoints = hold_waypoint.next(min(self.config.sampling_resolution_m, remaining_hold_distance_m))
+            if not next_waypoints:
+                break
+            preferred_waypoint = next(
+                (waypoint for waypoint in next_waypoints if _lane_id(waypoint) == hold_lane_id),
+                next_waypoints[0],
+            )
+            if preferred_waypoint.transform.location.distance(hold_waypoint.transform.location) <= 0.05:
+                break
+            combined_plan.append((preferred_waypoint, hold_option))
+            remaining_hold_distance_m -= preferred_waypoint.transform.location.distance(hold_waypoint.transform.location)
+            hold_waypoint = preferred_waypoint
+
+        trace_index = min(
+            self._route_trace_index(route_index)
+            + 8
+            + int(math.ceil(self.config.overtake_hold_distance_m / max(self.config.sampling_resolution_m, 0.1))),
+            len(self._base_trace) - 1,
+        )
         for waypoint, option in self._base_trace[trace_index:]:
             if combined_plan:
                 tail_location = combined_plan[-1][0].transform.location
                 if tail_location.distance(waypoint.transform.location) <= 0.5:
                     continue
             combined_plan.append((waypoint, option))
-        self._agent.set_global_plan(combined_plan, stop_waypoint_creation=True, clean_queue=True)
+        self._overtake_waypoints = deque(waypoint for waypoint, _option in combined_plan)
         return True
 
     @staticmethod
@@ -324,7 +373,11 @@ class ExpertBasicAgent:
                 planner_state = self._overtake_state
 
             if self._overtake_state in {"lane_change_out", "abort_return"}:
-                target_speed_kmh = min(target_speed_kmh, follow_target_speed_kmh)
+                lane_change_target_speed_kmh = min(
+                    self.config.target_speed_kmh,
+                    max(follow_target_speed_kmh, lead_speed_kmh + self.config.overtake_speed_delta_kmh),
+                )
+                target_speed_kmh = min(target_speed_kmh, lane_change_target_speed_kmh)
 
             if self._overtake_state in {"lane_change_out", "pass_vehicle"} and self._should_stop_for_light(
                 active_light,
@@ -349,6 +402,7 @@ class ExpertBasicAgent:
                 self._overtake_origin_lane_id = None
                 self._overtake_target_lane_id = None
                 self._overtake_aborted = False
+                self._overtake_waypoints.clear()
                 planner_state = "nominal_cruise"
 
         stop_for_light = self._should_stop_for_light(active_light, current_speed_mps)
@@ -401,7 +455,11 @@ class ExpertBasicAgent:
         self._waiting_on_light = planner_state == "traffic_light_stop"
 
         self._agent.set_target_speed(max(0.0, target_speed_kmh))
-        control = self._agent.run_step()
+        target_waypoint = self._consume_overtake_waypoint() if self._overtake_state != "idle" else None
+        if target_waypoint is not None:
+            control = self._overtake_controller.run_step(max(0.0, target_speed_kmh), target_waypoint)
+        else:
+            control = self._agent.run_step()
 
         emergency_stop = (
             not self.config.ignore_vehicles

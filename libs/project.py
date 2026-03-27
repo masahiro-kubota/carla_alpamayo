@@ -23,7 +23,7 @@ def current_git_commit_short(length: int = 12) -> str:
     return completed.stdout.strip()
 
 
-def ensure_clean_git_worktree_for_evaluation() -> str:
+def ensure_clean_git_worktree(*, action_label: str = "Run") -> str:
     completed = subprocess.run(
         ["git", "status", "--porcelain=v1"],
         cwd=PROJECT_ROOT,
@@ -37,10 +37,14 @@ def ensure_clean_git_worktree_for_evaluation() -> str:
         if len(status_lines) > 20:
             preview = f"{preview}\n..."
         raise SystemExit(
-            "Evaluation requires a clean git worktree. Commit or stash your changes before running.\n"
+            f"{action_label} requires a clean git worktree. Commit or stash your changes before running.\n"
             f"Pending changes:\n{preview}"
         )
     return current_git_commit_short()
+
+
+def ensure_clean_git_worktree_for_evaluation() -> str:
+    return ensure_clean_git_worktree(action_label="Evaluation")
 
 
 def build_versioned_run_id(prefix: str, *, commit_id: str) -> str:

@@ -4,14 +4,14 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "slow_lead_profile_v1",
-      "spawn_index": 213,
+      "spawn_index": 46,
       "lane_behavior": "keep_lane"
     }
   ],
   "traffic_light_overrides": [],
   "expert_overrides": {
     "allow_overtake": true,
-    "overtake_trigger_distance_m": 24.0
+    "overtake_trigger_distance_m": 42.0
   },
-  "description": "Single slow lead vehicle with no close oncoming blocker so the expert can overtake."
+  "description": "Straight road-12 overtake scenario without nearby signals. The expert should pass a single slow lead vehicle."
 }

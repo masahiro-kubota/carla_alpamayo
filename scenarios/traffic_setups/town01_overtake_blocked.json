@@ -4,19 +4,20 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "slow_lead_profile_v1",
-      "spawn_index": 213,
+      "spawn_index": 46,
       "lane_behavior": "keep_lane"
     },
     {
       "npc_profile_id": "oncoming_profile_v1",
-      "spawn_index": 212,
+      "spawn_index": 45,
       "lane_behavior": "keep_lane"
     }
   ],
   "traffic_light_overrides": [],
   "expert_overrides": {
     "allow_overtake": true,
-    "overtake_trigger_distance_m": 24.0
+    "overtake_trigger_distance_m": 42.0,
+    "overtake_min_front_gap_m": 35.0
   },
-  "description": "Slow lead vehicle with a close oncoming blocker in the adjacent lane to force overtake rejection."
+  "description": "Straight road-12 overtake scenario with a close oncoming blocker. The expert should reject the lane change."
 }
