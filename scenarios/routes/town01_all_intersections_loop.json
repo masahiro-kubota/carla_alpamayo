@@ -1,0 +1,8 @@
+{
+  "name": "town01_all_intersections_loop",
+  "town": "Town01",
+  "closed_loop": true,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [107, 74, 113, 110, 83, 104, 88, 77, 82, 75, 111, 112],
+  "description": "Closed loop that visits all 12 Town01 junctions by threading representative spawn anchors through each intersection."
+}
