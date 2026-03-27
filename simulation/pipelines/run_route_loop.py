@@ -1,13 +1,77 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
+import sys
 
 from ad_stack import ArtifactSpec, PolicySpec, RouteLoopScenarioSpec, RunRequest, RuntimeSpec, run
 from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
 
 DEFAULT_ROUTE_CONFIG_PATH = Path("scenarios/routes/town01_pilotnet_loop.json")
+
+
+def _jsonable(value):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    return value
+
+
+def _build_resolved_request_payload(request: RunRequest) -> dict[str, object]:
+    return {
+        "mode": request.mode,
+        "scenario": _jsonable(asdict(request.scenario)),
+        "runtime": _jsonable(asdict(request.runtime)),
+        "policy": {
+            "kind": request.policy.kind,
+            "checkpoint_path": str(request.policy.checkpoint_path) if request.policy.checkpoint_path else None,
+            "device": request.policy.device,
+            "steer_smoothing": request.policy.steer_smoothing,
+            "max_steer_delta": request.policy.max_steer_delta,
+            "ignore_traffic_lights": request.policy.ignore_traffic_lights,
+            "ignore_stop_signs": request.policy.ignore_stop_signs,
+            "ignore_vehicles": request.policy.ignore_vehicles,
+            "preview_enabled": request.policy.preview_sink is not None,
+        },
+        "artifacts": _jsonable(asdict(request.artifacts)),
+    }
+
+
+def _write_run_metadata(
+    *,
+    output_dir: Path,
+    args: argparse.Namespace,
+    request: RunRequest,
+    summary_path: Path | None,
+) -> tuple[Path, Path]:
+    cli_args_path = output_dir / "cli_args.json"
+    run_request_path = output_dir / "run_request.json"
+
+    cli_args_payload = {
+        "entrypoint": "simulation.pipelines.run_route_loop",
+        "argv": sys.argv[1:],
+        "parsed_args": _jsonable(vars(args)),
+    }
+    with cli_args_path.open("w", encoding="utf-8") as handle:
+        json.dump(cli_args_payload, handle, indent=2)
+        handle.write("\n")
+
+    with run_request_path.open("w", encoding="utf-8") as handle:
+        json.dump(_build_resolved_request_payload(request), handle, indent=2)
+        handle.write("\n")
+
+    if summary_path is not None and summary_path.exists():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["cli_args_path"] = str(cli_args_path.relative_to(output_dir.parent.parent.parent))
+        summary["run_request_path"] = str(run_request_path.relative_to(output_dir.parent.parent.parent))
+        summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    return cli_args_path, run_request_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -91,6 +155,7 @@ def main() -> None:
             policy_kind = "expert"
         else:
             policy_kind = "learned" if args.checkpoint else "expert"
+    args.policy_kind = policy_kind
 
     if args.mode == "collect" and policy_kind != "expert":
         parser.error("--mode=collect only supports --policy-kind=expert")
@@ -107,6 +172,7 @@ def main() -> None:
                 display_scale=args.preview_scale,
                 title="CARLA Front Camera (Route Loop)",
             )
+        args.show_front_camera = preview_enabled
 
         def preview_sink(rgb_array, status_text: str) -> bool | None:
             if preview is not None and not preview.closed:
@@ -161,6 +227,15 @@ def main() -> None:
             ),
         )
         result = run(request)
+        if result.output_dir is not None:
+            cli_args_path, run_request_path = _write_run_metadata(
+                output_dir=result.output_dir,
+                args=args,
+                request=request,
+                summary_path=result.summary_path,
+            )
+            result.summary["cli_args_path"] = str(cli_args_path.relative_to(result.output_dir.parent.parent.parent))
+            result.summary["run_request_path"] = str(run_request_path.relative_to(result.output_dir.parent.parent.parent))
     finally:
         if preview is not None:
             preview.close()
