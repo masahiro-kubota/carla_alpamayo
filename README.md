@@ -86,7 +86,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
 ```
 
 `simulation.pipelines.run_route_loop` は `collect` / `evaluate` の両方で clean git worktree が必要です。`evaluate` の出力先は `outputs/evaluate/<route>_<timestamp>_<commit>/` です。
-default では `telemetry.mcap` も出力し、`front_rgb` の JPEG と ego pose / control / route progress を記録します。不要なら `--no-record-mcap` を使います。
+default では `telemetry.mcap` も出力し、`front_rgb` の JPEG、ego pose / control / route progress、Foxglove `SceneUpdate` の static route / lane centerline を記録します。不要なら `--no-record-mcap` を使います。
 
 フロントカメラをライブ表示しながら評価したいときは `DISPLAY` を設定して `--show-front-camera` を付けます。
 

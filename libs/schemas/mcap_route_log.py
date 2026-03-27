@@ -129,6 +129,123 @@ _EGO_STATUS_JSON_SCHEMA = {
     "additionalProperties": False,
 }
 
+_FOXGLOVE_SCENE_UPDATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "deletions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "timestamp": _foxglove_time_schema(),
+                    "type": {"type": "integer"},
+                    "id": {"type": "string"},
+                },
+                "required": ["timestamp", "type", "id"],
+                "additionalProperties": False,
+            },
+        },
+        "entities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "timestamp": _foxglove_time_schema(),
+                    "frame_id": {"type": "string"},
+                    "id": {"type": "string"},
+                    "lifetime": _foxglove_time_schema(),
+                    "frame_locked": {"type": "boolean"},
+                    "metadata": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "key": {"type": "string"},
+                                "value": {"type": "string"},
+                            },
+                            "required": ["key", "value"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "integer"},
+                                "pose": {
+                                    "type": "object",
+                                    "properties": {
+                                        "position": {
+                                            "type": "object",
+                                            "properties": {
+                                                "x": {"type": "number"},
+                                                "y": {"type": "number"},
+                                                "z": {"type": "number"},
+                                            },
+                                            "required": ["x", "y", "z"],
+                                            "additionalProperties": False,
+                                        },
+                                        "orientation": {
+                                            "type": "object",
+                                            "properties": {
+                                                "x": {"type": "number"},
+                                                "y": {"type": "number"},
+                                                "z": {"type": "number"},
+                                                "w": {"type": "number"},
+                                            },
+                                            "required": ["x", "y", "z", "w"],
+                                            "additionalProperties": False,
+                                        },
+                                    },
+                                    "required": ["position", "orientation"],
+                                    "additionalProperties": False,
+                                },
+                                "thickness": {"type": "number"},
+                                "scale_invariant": {"type": "boolean"},
+                                "points": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "x": {"type": "number"},
+                                            "y": {"type": "number"},
+                                            "z": {"type": "number"},
+                                        },
+                                        "required": ["x", "y", "z"],
+                                        "additionalProperties": False,
+                                    },
+                                },
+                                "color": {
+                                    "type": "object",
+                                    "properties": {
+                                        "r": {"type": "number"},
+                                        "g": {"type": "number"},
+                                        "b": {"type": "number"},
+                                        "a": {"type": "number"},
+                                    },
+                                    "required": ["r", "g", "b", "a"],
+                                    "additionalProperties": False,
+                                },
+                                "indices": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
+                                },
+                            },
+                            "required": ["type", "pose", "thickness", "scale_invariant", "points", "color"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["timestamp", "frame_id", "id", "lifetime", "frame_locked", "metadata", "lines"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["deletions", "entities"],
+    "additionalProperties": False,
+}
+
 
 @dataclass(slots=True)
 class EgoStateSample:
@@ -210,6 +327,11 @@ class RouteLoopMcapWriter:
             encoding="jsonschema",
             data=json.dumps(_FOXGLOVE_POSE_IN_FRAME_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
+        scene_update_schema_id = self._writer.register_schema(
+            name="foxglove.SceneUpdate",
+            encoding="jsonschema",
+            data=json.dumps(_FOXGLOVE_SCENE_UPDATE_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
         ego_status_schema_id = self._writer.register_schema(
             name="carla_alpamayo.EgoStatus",
             encoding="jsonschema",
@@ -233,6 +355,12 @@ class RouteLoopMcapWriter:
             schema_id=pose_in_frame_schema_id,
             metadata={"frame_id": "map"},
         )
+        self._map_scene_channel_id = self._writer.register_channel(
+            topic="/map/scene",
+            message_encoding="json",
+            schema_id=scene_update_schema_id,
+            metadata={"frame_id": "map"},
+        )
         self._ego_status_channel_id = self._writer.register_channel(
             topic="/ego/status",
             message_encoding="json",
@@ -251,6 +379,85 @@ class RouteLoopMcapWriter:
         )
         self._jpeg_quality = jpeg_quality
         self._closed = False
+
+    def write_static_scene(
+        self,
+        *,
+        timestamp_s: float,
+        route_name: str,
+        route_points: list[tuple[float, float, float]],
+        lane_centerlines: list[list[tuple[float, float, float]]],
+    ) -> None:
+        log_time_ns = int(round(timestamp_s * 1_000_000_000))
+        timestamp = _foxglove_time(timestamp_s)
+        zero_duration = {"sec": 0, "nsec": 0}
+        identity_pose = {
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        }
+
+        lane_lines = [
+            {
+                "type": 0,
+                "pose": identity_pose,
+                "thickness": 0.12,
+                "scale_invariant": False,
+                "points": [{"x": x, "y": y, "z": z} for x, y, z in line],
+                "color": {"r": 0.55, "g": 0.55, "b": 0.55, "a": 0.65},
+                "indices": [],
+            }
+            for line in lane_centerlines
+            if len(line) >= 2
+        ]
+
+        route_lines = [
+            {
+                "type": 0,
+                "pose": identity_pose,
+                "thickness": 0.3,
+                "scale_invariant": False,
+                "points": [{"x": x, "y": y, "z": z} for x, y, z in route_points],
+                "color": {"r": 0.08, "g": 0.72, "b": 1.0, "a": 0.95},
+                "indices": [],
+            }
+        ] if len(route_points) >= 2 else []
+
+        scene_update = {
+            "deletions": [],
+            "entities": [
+                {
+                    "timestamp": timestamp,
+                    "frame_id": "map",
+                    "id": "lane_centerlines",
+                    "lifetime": zero_duration,
+                    "frame_locked": False,
+                    "metadata": [
+                        {"key": "kind", "value": "lane_centerlines"},
+                        {"key": "route_name", "value": route_name},
+                    ],
+                    "lines": lane_lines,
+                },
+                {
+                    "timestamp": timestamp,
+                    "frame_id": "map",
+                    "id": "planned_route",
+                    "lifetime": zero_duration,
+                    "frame_locked": False,
+                    "metadata": [
+                        {"key": "kind", "value": "planned_route"},
+                        {"key": "route_name", "value": route_name},
+                    ],
+                    "lines": route_lines,
+                },
+            ],
+        }
+        self._writer.add_message(
+            channel_id=self._map_scene_channel_id,
+            log_time=log_time_ns,
+            publish_time=log_time_ns,
+            sequence=0,
+            data=json.dumps(scene_update, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        )
 
     def write_frame(
         self,

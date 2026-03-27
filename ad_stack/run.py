@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+from math import inf
 from pathlib import Path
 import queue
 import random
@@ -429,6 +430,73 @@ def _route_success_criteria(scenario: RouteLoopScenarioSpec) -> dict[str, float 
     }
 
 
+def _route_trace_xyz(route_trace: list[tuple[Any, Any]], *, z_offset_m: float = 0.2) -> list[tuple[float, float, float]]:
+    points: list[tuple[float, float, float]] = []
+    for waypoint, _road_option in route_trace:
+        location = waypoint.transform.location
+        point = (round(float(location.x), 3), round(float(location.y), 3), round(float(location.z + z_offset_m), 3))
+        if not points or point != points[-1]:
+            points.append(point)
+    return points
+
+
+def _lane_centerlines_near_route(
+    world_map: Any,
+    route_trace: list[tuple[Any, Any]],
+    *,
+    lane_sampling_m: float = 5.0,
+    corridor_margin_m: float = 35.0,
+    z_offset_m: float = 0.05,
+) -> list[list[tuple[float, float, float]]]:
+    route_locations = [waypoint.transform.location for waypoint, _ in route_trace]
+    if not route_locations:
+        return []
+
+    margin = float(corridor_margin_m)
+    min_x = min(location.x for location in route_locations) - margin
+    max_x = max(location.x for location in route_locations) + margin
+    min_y = min(location.y for location in route_locations) - margin
+    max_y = max(location.y for location in route_locations) + margin
+    max_distance_sq = margin * margin
+
+    grouped: dict[tuple[int, int, int], list[tuple[float, float, float, float]]] = {}
+    for waypoint in world_map.generate_waypoints(lane_sampling_m):
+        location = waypoint.transform.location
+        if location.x < min_x or location.x > max_x or location.y < min_y or location.y > max_y:
+            continue
+        min_route_distance_sq = inf
+        for route_location in route_locations:
+            dx = float(location.x - route_location.x)
+            dy = float(location.y - route_location.y)
+            distance_sq = dx * dx + dy * dy
+            if distance_sq < min_route_distance_sq:
+                min_route_distance_sq = distance_sq
+        if min_route_distance_sq > max_distance_sq:
+            continue
+
+        lane_key = (int(waypoint.road_id), int(waypoint.section_id), int(waypoint.lane_id))
+        grouped.setdefault(lane_key, []).append(
+            (
+                float(getattr(waypoint, "s", 0.0)),
+                round(float(location.x), 3),
+                round(float(location.y), 3),
+                round(float(location.z + z_offset_m), 3),
+            )
+        )
+
+    centerlines: list[list[tuple[float, float, float]]] = []
+    for _, samples in sorted(grouped.items()):
+        samples.sort(key=lambda item: item[0])
+        points: list[tuple[float, float, float]] = []
+        for _s, x, y, z in samples:
+            point = (x, y, z)
+            if not points or point != points[-1]:
+                points.append(point)
+        if len(points) >= 2:
+            centerlines.append(points)
+    return centerlines
+
+
 def _validate_route_loop_request(request: RunRequest) -> RouteLoopScenarioSpec:
     if not isinstance(request.scenario, RouteLoopScenarioSpec):
         raise TypeError(f"Mode {request.mode!r} requires RouteLoopScenarioSpec.")
@@ -629,6 +697,13 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
+        if mcap_writer is not None:
+            mcap_writer.write_static_scene(
+                timestamp_s=current_image.timestamp,
+                route_name=route_config.name,
+                route_points=_route_trace_xyz(planned_route.trace),
+                lane_centerlines=_lane_centerlines_near_route(world.get_map(), planned_route.trace),
+            )
         preview_sink = policy.preview_sink
         while True:
             _apply_traffic_light_schedules(
