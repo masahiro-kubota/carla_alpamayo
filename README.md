@@ -46,7 +46,7 @@ cd /home/masa/carla_alpamayo
 ```
 
 内部では `simulation.pipelines.run_route_loop` が `RunRequest(mode="evaluate", policy.kind="expert", ...)` を作り、`ad_stack.run(...)` を呼びます。
-ego 側の expert policy 閾値は `ad_stack/configs/expert/*.json` で管理し、`--expert-config` で選びます。
+route は `scenarios/routes/*.json`、周辺環境と stopping 条件は `scenarios/environments/*.json`、ego 側の expert policy 閾値は `ad_stack/configs/expert/*.json` で管理します。
 
 主な出力:
 
@@ -101,7 +101,7 @@ export DISPLAY=:1
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --policy-kind expert \
   --route-config scenarios/routes/town01_signal_short.json \
-  --traffic-setup scenarios/traffic_setups/town01_signal_resume_phase2.json \
+  --environment-config scenarios/environments/town01_signal_resume_phase2.json \
   --expert-config ad_stack/configs/expert/no_overtake.json \
   --show-front-camera
 ```
@@ -165,7 +165,7 @@ carla_alpamayo/
     pipelines/
     scripts/
   scenarios/
+    environments/
     npc_profiles/
     routes/
-    traffic_setups/
 ```

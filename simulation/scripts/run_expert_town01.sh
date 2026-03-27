@@ -11,9 +11,9 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-traffic_setup_args=()
-if [[ -n "${CARLA_TRAFFIC_SETUP:-}" ]]; then
-  traffic_setup_args=(--traffic-setup "${CARLA_TRAFFIC_SETUP}")
+environment_config_args=()
+if [[ -n "${CARLA_ENVIRONMENT_CONFIG:-}" ]]; then
+  environment_config_args=(--environment-config "${CARLA_ENVIRONMENT_CONFIG}")
 fi
 
 PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
@@ -22,10 +22,7 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   --port "${CARLA_PORT:-2000}" \
   --route-config "${CARLA_ROUTE_CONFIG:-scenarios/routes/town01_pilotnet_loop.json}" \
   --expert-config "${CARLA_EXPERT_CONFIG:-ad_stack/configs/expert/default.json}" \
-  "${traffic_setup_args[@]}" \
+  "${environment_config_args[@]}" \
   --camera-width "${CARLA_CAMERA_WIDTH:-1280}" \
   --camera-height "${CARLA_CAMERA_HEIGHT:-720}" \
-  --target-speed-kmh "${CARLA_TARGET_SPEED_KMH:-30}" \
-  --weather "${CARLA_WEATHER:-ClearNoon}" \
-  --max-seconds "${CARLA_MAX_SECONDS:-600}" \
   "$@"

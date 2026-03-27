@@ -83,21 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2000)
     parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
-    parser.add_argument("--traffic-setup", default=None)
+    parser.add_argument("--environment-config", default=None)
     parser.add_argument("--expert-config", default="ad_stack/configs/expert/default.json")
     parser.add_argument("--policy-kind", choices=("expert", "learned"), default=None)
     parser.add_argument("--vehicle-filter", default="vehicle.tesla.model3")
     parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
     parser.add_argument("--sensor-timeout", type=float, default=2.0)
-    parser.add_argument("--target-speed-kmh", type=float, default=30.0)
     parser.add_argument("--camera-width", type=int, default=1280)
     parser.add_argument("--camera-height", type=int, default=720)
     parser.add_argument("--camera-fov", type=int, default=90)
-    parser.add_argument("--goal-tolerance-m", type=float, default=10.0)
-    parser.add_argument("--max-stop-seconds", type=float, default=10.0)
-    parser.add_argument("--stationary-speed-threshold-mps", type=float, default=0.5)
-    parser.add_argument("--max-seconds", type=float, default=600.0)
-    parser.add_argument("--weather", default="ClearNoon")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", default=None)
     parser.add_argument("--steer-smoothing", type=float, default=1.0)
@@ -182,12 +176,7 @@ def main() -> None:
             mode="evaluate",
             scenario=RouteLoopScenarioSpec(
                 route_config_path=Path(args.route_config),
-                weather=args.weather,
-                goal_tolerance_m=args.goal_tolerance_m,
-                max_stop_seconds=args.max_stop_seconds,
-                stationary_speed_threshold_mps=args.stationary_speed_threshold_mps,
-                max_seconds=args.max_seconds,
-                traffic_setup_path=Path(args.traffic_setup) if args.traffic_setup else None,
+                environment_config_path=Path(args.environment_config) if args.environment_config else None,
             ),
             runtime=RuntimeSpec(
                 host=args.host,
@@ -198,7 +187,6 @@ def main() -> None:
                 camera_width=args.camera_width,
                 camera_height=args.camera_height,
                 camera_fov=args.camera_fov,
-                target_speed_kmh=args.target_speed_kmh,
                 seed=args.seed,
             ),
             policy=PolicySpec(

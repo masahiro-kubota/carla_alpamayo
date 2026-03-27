@@ -36,20 +36,22 @@ def load_expert_config(path: str | Path | None = None) -> tuple[ExpertBasicAgent
 def bind_runtime_overrides(
     config: ExpertBasicAgentConfig,
     *,
-    target_speed_kmh: float,
+    target_speed_kmh: float | None,
     ignore_traffic_lights: bool,
     ignore_stop_signs: bool,
     ignore_vehicles: bool,
     sampling_resolution_m: float,
 ) -> ExpertBasicAgentConfig:
-    return replace(
+    updated = replace(
         config,
-        target_speed_kmh=target_speed_kmh,
         ignore_traffic_lights=ignore_traffic_lights,
         ignore_stop_signs=ignore_stop_signs,
         ignore_vehicles=ignore_vehicles,
         sampling_resolution_m=sampling_resolution_m,
     )
+    if target_speed_kmh is not None:
+        updated = replace(updated, target_speed_kmh=target_speed_kmh)
+    return updated
 
 
 def expert_config_to_dict(config: ExpertBasicAgentConfig) -> dict[str, Any]:

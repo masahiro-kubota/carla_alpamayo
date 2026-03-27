@@ -1,6 +1,11 @@
 {
   "name": "town01_signal_resume_phase2",
   "town": "Town01",
+  "weather": "ClearNoon",
+  "goal_tolerance_m": 10.0,
+  "max_stop_seconds": 12.0,
+  "stationary_speed_threshold_mps": 0.5,
+  "max_seconds": 15.0,
   "npc_vehicles": [],
   "traffic_light_overrides": [],
   "traffic_light_schedules": [

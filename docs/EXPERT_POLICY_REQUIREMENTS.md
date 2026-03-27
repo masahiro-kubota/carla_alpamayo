@@ -271,7 +271,7 @@ Phase 1 の最初の実装対象は `SR-1` から `SR-3` までとし、
   - summary / manifest への event 反映
 - `scenarios/routes/`
   - route
-- 将来的には `scenarios/traffic_setups/`, `scenarios/npc_profiles/`
+- 将来的には `scenarios/environments/`, `scenarios/npc_profiles/`
   - NPC 配置と速度 profile
 
 ## 10. 段階的マイルストーン

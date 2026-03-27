@@ -49,7 +49,7 @@ class RouteLoopScenarioSpec:
     max_stop_seconds: float = 10.0
     stationary_speed_threshold_mps: float = 0.5
     max_seconds: float = 600.0
-    traffic_setup_path: Path | None = None
+    environment_config_path: Path | None = None
 
 
 @dataclass(slots=True)
@@ -90,9 +90,14 @@ class TrafficLightScheduleSpec:
 
 
 @dataclass(slots=True)
-class TrafficSetupSpec:
+class EnvironmentConfigSpec:
     name: str
     town: str
+    weather: str | None = None
+    goal_tolerance_m: float | None = None
+    max_stop_seconds: float | None = None
+    stationary_speed_threshold_mps: float | None = None
+    max_seconds: float | None = None
     npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
     traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
@@ -119,7 +124,7 @@ class RuntimeSpec:
     camera_width: int = 1280
     camera_height: int = 720
     camera_fov: int = 90
-    target_speed_kmh: float = 30.0
+    target_speed_kmh: float | None = None
     seed: int = 7
 
 
@@ -223,11 +228,20 @@ def _load_npc_profile(profile_id: str) -> NPCProfileSpec:
     )
 
 
-def _load_traffic_setup(path: Path) -> TrafficSetupSpec:
+def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
     raw = _load_json(path)
-    return TrafficSetupSpec(
+    return EnvironmentConfigSpec(
         name=str(raw["name"]),
         town=str(raw["town"]),
+        weather=str(raw["weather"]) if raw.get("weather") is not None else None,
+        goal_tolerance_m=float(raw["goal_tolerance_m"]) if raw.get("goal_tolerance_m") is not None else None,
+        max_stop_seconds=float(raw["max_stop_seconds"]) if raw.get("max_stop_seconds") is not None else None,
+        stationary_speed_threshold_mps=(
+            float(raw["stationary_speed_threshold_mps"])
+            if raw.get("stationary_speed_threshold_mps") is not None
+            else None
+        ),
+        max_seconds=float(raw["max_seconds"]) if raw.get("max_seconds") is not None else None,
         npc_vehicles=[
             NPCVehicleSpec(
                 spawn_index=int(item["spawn_index"]),
@@ -378,11 +392,11 @@ def _spawn_npc_vehicles(
     client: Any,
     world: Any,
     runtime: RuntimeSpec,
-    traffic_setup: TrafficSetupSpec | None,
+    environment_config: EnvironmentConfigSpec | None,
     rng: random.Random,
     actors: list[Any],
 ) -> list[dict[str, Any]]:
-    if traffic_setup is None or not traffic_setup.npc_vehicles:
+    if environment_config is None or not environment_config.npc_vehicles:
         return []
 
     traffic_manager = client.get_trafficmanager(8000)
@@ -390,7 +404,7 @@ def _spawn_npc_vehicles(
     traffic_manager.set_global_distance_to_leading_vehicle(1.5)
     spawn_points = world.get_map().get_spawn_points()
     spawned: list[dict[str, Any]] = []
-    for npc_spec in traffic_setup.npc_vehicles:
+    for npc_spec in environment_config.npc_vehicles:
         if npc_spec.spawn_index < 0 or npc_spec.spawn_index >= len(spawn_points):
             raise RuntimeError(f"NPC spawn_index out of range: {npc_spec.spawn_index}")
         profile = _load_npc_profile(npc_spec.npc_profile_id) if npc_spec.npc_profile_id else None
@@ -431,6 +445,39 @@ def _route_success_criteria(scenario: RouteLoopScenarioSpec) -> dict[str, float 
         "goal_tolerance_m_max": scenario.goal_tolerance_m,
         "manual_interventions_max": 0,
     }
+
+
+def _resolve_route_loop_scenario(
+    scenario: RouteLoopScenarioSpec,
+    environment_config: EnvironmentConfigSpec | None,
+) -> RouteLoopScenarioSpec:
+    if environment_config is None:
+        return scenario
+    return RouteLoopScenarioSpec(
+        route_config_path=scenario.route_config_path,
+        weather=environment_config.weather or scenario.weather,
+        goal_tolerance_m=(
+            float(environment_config.goal_tolerance_m)
+            if environment_config.goal_tolerance_m is not None
+            else scenario.goal_tolerance_m
+        ),
+        max_stop_seconds=(
+            float(environment_config.max_stop_seconds)
+            if environment_config.max_stop_seconds is not None
+            else scenario.max_stop_seconds
+        ),
+        stationary_speed_threshold_mps=(
+            float(environment_config.stationary_speed_threshold_mps)
+            if environment_config.stationary_speed_threshold_mps is not None
+            else scenario.stationary_speed_threshold_mps
+        ),
+        max_seconds=(
+            float(environment_config.max_seconds)
+            if environment_config.max_seconds is not None
+            else scenario.max_seconds
+        ),
+        environment_config_path=scenario.environment_config_path,
+    )
 
 
 def _route_trace_xyz(route_trace: list[tuple[Any, Any]], *, z_offset_m: float = 0.2) -> list[tuple[float, float, float]]:
@@ -563,15 +610,16 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     random_seed = random.Random(runtime.seed)
     route_config_path = Path(scenario.route_config_path).resolve()
     route_config = load_route_config(route_config_path)
-    traffic_setup = (
-        _load_traffic_setup(Path(scenario.traffic_setup_path).resolve())
-        if scenario.traffic_setup_path is not None
+    environment_config = (
+        _load_environment_config(Path(scenario.environment_config_path).resolve())
+        if scenario.environment_config_path is not None
         else None
     )
-    if traffic_setup is not None and traffic_setup.town != route_config.town:
+    if environment_config is not None and environment_config.town != route_config.town:
         raise ValueError(
-            f"traffic_setup town mismatch: route={route_config.town} traffic_setup={traffic_setup.town}"
+            f"environment_config town mismatch: route={route_config.town} environment={environment_config.town}"
         )
+    scenario = _resolve_route_loop_scenario(scenario, environment_config)
     expert_config, expert_config_path = load_expert_config(policy.expert_config_path)
     effective_expert_config = bind_runtime_overrides(
         expert_config,
@@ -684,12 +732,12 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         lights_by_id = _apply_traffic_light_overrides(
             carla,
             world,
-            traffic_setup.traffic_light_overrides if traffic_setup is not None else [],
+            environment_config.traffic_light_overrides if environment_config is not None else [],
         )
         _apply_traffic_light_schedules(
             carla,
             lights_by_id,
-            traffic_setup.traffic_light_schedules if traffic_setup is not None else [],
+            environment_config.traffic_light_schedules if environment_config is not None else [],
             elapsed_seconds=0.0,
             applied_phase_indices=traffic_light_phase_indices,
         )
@@ -697,7 +745,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             client=client,
             world=world,
             runtime=runtime,
-            traffic_setup=traffic_setup,
+            environment_config=environment_config,
             rng=random_seed,
             actors=actors,
         )
@@ -709,7 +757,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 planned_trace=planned_route.trace,
                 route_id=route_config.name,
                 town_id=route_config.town,
-                target_speed_kmh=runtime.target_speed_kmh,
+                target_speed_kmh=effective_expert_config.target_speed_kmh,
                 ignore_traffic_lights=policy.ignore_traffic_lights,
                 ignore_stop_signs=policy.ignore_stop_signs,
                 ignore_vehicles=policy.ignore_vehicles,
@@ -725,7 +773,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 planned_trace=planned_route.trace,
                 route_id=route_config.name,
                 town_id=route_config.town,
-                target_speed_kmh=runtime.target_speed_kmh,
+                target_speed_kmh=effective_expert_config.target_speed_kmh,
                 checkpoint_path=Path(policy.checkpoint_path).resolve(),
                 device=policy.device,
                 ignore_traffic_lights=policy.ignore_traffic_lights,
@@ -756,7 +804,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             _apply_traffic_light_schedules(
                 carla,
                 lights_by_id,
-                traffic_setup.traffic_light_schedules if traffic_setup is not None else [],
+                environment_config.traffic_light_schedules if environment_config is not None else [],
                 elapsed_seconds=elapsed_seconds,
                 applied_phase_indices=traffic_light_phase_indices,
             )
@@ -974,11 +1022,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 mcap_writer.close()
             except Exception as exc:  # pragma: no cover - depends on runtime environment
                 mcap_error = str(exc)
-        if traffic_setup is not None:
+        if environment_config is not None:
             scheduled_or_overridden_ids = {
-                override.actor_id for override in traffic_setup.traffic_light_overrides
+                override.actor_id for override in environment_config.traffic_light_overrides
             } | {
-                schedule.actor_id for schedule in traffic_setup.traffic_light_schedules
+                schedule.actor_id for schedule in environment_config.traffic_light_schedules
             }
             for actor in world.get_actors().filter("*traffic_light*"):
                 if int(actor.id) in scheduled_or_overridden_ids:
@@ -1007,8 +1055,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "episode_id": episode_id,
         "route_name": route_config.name,
         "route_config_path": relative_to_project(route_config_path),
-        "traffic_setup_path": _relative_or_none(Path(scenario.traffic_setup_path).resolve() if scenario.traffic_setup_path else None),
-        "traffic_setup_name": traffic_setup.name if traffic_setup is not None else None,
+        "environment_config_path": _relative_or_none(Path(scenario.environment_config_path).resolve() if scenario.environment_config_path else None),
+        "environment_config_name": environment_config.name if environment_config is not None else None,
         "expert_config_path": relative_to_project(expert_config_path),
         "expert_config": expert_config_to_dict(effective_expert_config),
         "npc_vehicle_count": len(npc_actors_summary),
@@ -1019,7 +1067,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "recorded_frame_count": recorded_frame_index,
         "elapsed_seconds": round(elapsed_seconds, 2),
         "lap_time_seconds": round(elapsed_seconds, 2),
-        "target_speed_kmh": runtime.target_speed_kmh,
+        "target_speed_kmh": effective_expert_config.target_speed_kmh,
         "camera_width": runtime.camera_width,
         "camera_height": runtime.camera_height,
         "record_hz": artifacts.record_hz,
