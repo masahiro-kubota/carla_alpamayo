@@ -30,6 +30,7 @@ class ExpertBasicAgentConfig:
     follow_headway_seconds: float = 1.8
     yellow_stop_margin_seconds: float = 1.0
     traffic_light_stop_buffer_m: float = 3.0
+    traffic_light_red_latch_seconds: float = 0.5
     overtake_speed_delta_kmh: float = 8.0
     overtake_min_front_gap_m: float = 20.0
     overtake_min_rear_gap_m: float = 15.0
@@ -101,6 +102,8 @@ class ExpertBasicAgent:
         self._car_follow_active = False
         self._waiting_on_light = False
         self._traffic_light_speed_error_kmh = 0.0
+        self._latched_red_light: TrafficLightStateView | None = None
+        self._latched_red_until_s: float = -1.0
 
     def set_global_plan(self, trace: list[tuple[Any, Any]]) -> None:
         self._base_trace = list(trace)
@@ -134,6 +137,8 @@ class ExpertBasicAgent:
         self._car_follow_active = False
         self._waiting_on_light = False
         self._traffic_light_speed_error_kmh = 0.0
+        self._latched_red_light = None
+        self._latched_red_until_s = -1.0
 
     def _traffic_light_longitudinal_control(
         self,
@@ -277,6 +282,32 @@ class ExpertBasicAgent:
             ),
         )
 
+    def _resolve_active_light(
+        self,
+        traffic_lights: tuple[TrafficLightStateView, ...],
+        *,
+        timestamp_s: float,
+    ) -> TrafficLightStateView | None:
+        active_light = self._select_active_light(traffic_lights)
+        if active_light is not None:
+            if active_light.state == "red":
+                self._latched_red_light = active_light
+                self._latched_red_until_s = timestamp_s + self.config.traffic_light_red_latch_seconds
+            else:
+                self._latched_red_light = None
+                self._latched_red_until_s = -1.0
+            return active_light
+
+        if (
+            self._latched_red_light is not None
+            and timestamp_s <= self._latched_red_until_s
+        ):
+            return self._latched_red_light
+
+        self._latched_red_light = None
+        self._latched_red_until_s = -1.0
+        return None
+
     @staticmethod
     def _lane_gaps(
         tracked_objects: tuple[DynamicVehicleStateView, ...],
@@ -373,7 +404,10 @@ class ExpertBasicAgent:
         if route_index is not None:
             self._max_route_index = max(self._max_route_index, route_index)
 
-        active_light = self._select_active_light(scene_state.traffic_lights)
+        active_light = self._resolve_active_light(
+            scene_state.traffic_lights,
+            timestamp_s=scene_state.timestamp_s,
+        )
         lead_vehicle = self._nearest_lead(scene_state.tracked_objects, relation="same_lane")
         lead_distance_m = float(lead_vehicle.longitudinal_distance_m) if lead_vehicle and lead_vehicle.longitudinal_distance_m is not None else None
         lead_speed_mps = float(lead_vehicle.speed_mps) if lead_vehicle is not None else 0.0
@@ -572,6 +606,13 @@ class ExpertBasicAgent:
                 "route_progress_index": route_index,
                 "max_route_index": self._max_route_index,
                 "traffic_light_state": active_light.state if active_light is not None else None,
+                "traffic_light_red_latched": bool(
+                    active_light is not None
+                    and self._latched_red_light is not None
+                    and active_light.actor_id == self._latched_red_light.actor_id
+                    and active_light.state == "red"
+                    and scene_state.timestamp_s <= self._latched_red_until_s
+                ),
                 "traffic_light_stop_buffer_m": self.config.traffic_light_stop_buffer_m,
                 "traffic_light_stop_target_distance_m": stop_target_distance_m,
                 "target_speed_kmh": target_speed_kmh,
