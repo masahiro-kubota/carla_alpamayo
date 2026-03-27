@@ -8,11 +8,11 @@
   "max_seconds": 120.0,
   "npc_vehicles": [],
   "traffic_light_group_cycle": {
-    "green_seconds": 8.0,
+    "green_seconds": 10.0,
     "yellow_seconds": 2.0,
-    "red_seconds": 10.0,
+    "red_seconds": 6.0,
     "reset_groups": true,
-    "initial_offset_seconds": 10.0
+    "initial_offset_seconds": 12.0
   },
   "traffic_light_overrides": [],
   "traffic_light_schedules": [],
