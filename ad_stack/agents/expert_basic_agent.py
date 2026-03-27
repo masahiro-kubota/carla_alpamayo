@@ -156,6 +156,11 @@ class ExpertBasicAgent:
         brake = min(0.5, max(0.0, 0.08 * (-error_kmh)))
         return 0.0, brake
 
+    def _stopping_distance_m(self, current_speed_mps: float) -> float:
+        return self.config.reaction_margin_m + (
+            (current_speed_mps * current_speed_mps) / max(2.0 * self.config.preferred_deceleration_mps2, 1e-3)
+        )
+
     def _route_trace_index(self, route_index: int | None) -> int:
         if not self._route_point_to_trace_index:
             return 0
@@ -332,18 +337,15 @@ class ExpertBasicAgent:
             return False
 
         raw_stop_distance = light.stop_line_distance_m if light.stop_line_distance_m is not None else light.distance_m
+        if light.state == "red":
+            return True
         if raw_stop_distance < 0.5:
             return False
         target_stop_distance = max(0.0, raw_stop_distance - self.config.traffic_light_stop_buffer_m)
-
-        if light.state == "red":
-            return True
         if light.state != "yellow":
             return False
 
-        stopping_distance = self.config.reaction_margin_m + (
-            (current_speed_mps * current_speed_mps) / max(2.0 * self.config.preferred_deceleration_mps2, 1e-3)
-        )
+        stopping_distance = self._stopping_distance_m(current_speed_mps)
         margin_distance = current_speed_mps * self.config.yellow_stop_margin_seconds
         return target_stop_distance >= (stopping_distance + margin_distance)
 
@@ -513,11 +515,19 @@ class ExpertBasicAgent:
                 or (math.isfinite(min_ttc) and min_ttc <= self.config.ttc_emergency_threshold_s)
             )
         )
+        imminent_red_light = (
+            planner_state == "traffic_light_stop"
+            and active_light is not None
+            and active_light.state == "red"
+            and active_light.stop_line_distance_m is not None
+            and active_light.stop_line_distance_m <= self._stopping_distance_m(current_speed_mps)
+            and current_speed_mps > 2.0
+        )
         if planner_state == "traffic_light_stop":
             if stop_target_distance_m is None or stop_target_distance_m <= 0.5:
                 self._traffic_light_speed_error_kmh = 0.0
                 control.throttle = 0.0
-                control.brake = max(float(control.brake), 0.45)
+                control.brake = max(float(control.brake), 1.0 if imminent_red_light else 0.45)
             else:
                 traffic_light_throttle, traffic_light_brake = self._traffic_light_longitudinal_control(
                     current_speed_mps=current_speed_mps,
@@ -525,6 +535,9 @@ class ExpertBasicAgent:
                 )
                 control.throttle = traffic_light_throttle
                 control.brake = max(float(control.brake), traffic_light_brake)
+                if imminent_red_light:
+                    control.throttle = 0.0
+                    control.brake = max(float(control.brake), 1.0)
         else:
             self._traffic_light_speed_error_kmh = 0.0
         if emergency_stop:
