@@ -108,4 +108,8 @@ def attach_sensor(
 def destroy_actors(actors: Iterable["carla.Actor"]) -> None:
     for actor in actors:
         if actor is not None:
-            actor.destroy()
+            try:
+                actor.destroy()
+            except RuntimeError as exc:
+                if "destroyed actor" not in str(exc):
+                    raise
