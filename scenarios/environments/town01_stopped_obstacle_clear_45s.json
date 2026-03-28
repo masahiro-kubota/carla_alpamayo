@@ -6,11 +6,11 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "stopped_obstacle_profile_v1",
-      "spawn_index": 205,
+      "spawn_index": 217,
       "lane_behavior": "keep_lane"
     }
   ],
   "traffic_light_overrides": [],
   "traffic_light_schedules": [],
-  "description": "Town01 eastbound stopped-obstacle development scenario. A single stationary vehicle is placed just ahead in ego's lane so the expert immediately evaluates a deterministic bypass while the opposing lane is clear. Use with town01_eastbound_overtake_dev."
+  "description": "Town01 northbound stopped-obstacle development scenario. A single stationary vehicle is placed ahead in ego's lane on the road-15 straight so the expert can evaluate a deterministic bypass while the opposing lane is clear. Use with town01_northbound_overtake_short and stopped_obstacle_dev expert config."
 }
