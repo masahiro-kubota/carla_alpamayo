@@ -16,11 +16,11 @@ for run_config in "${RUN_CONFIGS[@]}"; do
   echo "==> running ${run_config}"
   output="$(PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop "${run_config}")"
   echo "${output}"
-  summary_path="$(printf '%s\n' "${output}" | python - <<'PY'
+  summary_path="$(RUN_OUTPUT="${output}" python - <<'PY'
 import json
-import sys
+import os
 
-payload = json.load(sys.stdin)
+payload = json.loads(os.environ["RUN_OUTPUT"])
 print(payload["summary_path"])
 PY
 )"
