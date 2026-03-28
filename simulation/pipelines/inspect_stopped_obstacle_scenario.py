@@ -48,6 +48,76 @@ def _build_output_path(config_path: Path) -> Path:
     return output_dir / f"{run_id}.json"
 
 
+def _lane_id(waypoint: Any | None) -> str | None:
+    if waypoint is None:
+        return None
+    return f"{waypoint.road_id}:{waypoint.lane_id}"
+
+
+def _distance_ahead_m(*, origin_waypoint: Any | None, target_waypoint: Any | None) -> float | None:
+    if origin_waypoint is None or target_waypoint is None:
+        return None
+    if (
+        int(origin_waypoint.road_id) == int(target_waypoint.road_id)
+        and int(origin_waypoint.lane_id) == int(target_waypoint.lane_id)
+    ):
+        origin_s = getattr(origin_waypoint, "s", None)
+        target_s = getattr(target_waypoint, "s", None)
+        if origin_s is not None and target_s is not None:
+            return float(target_s) - float(origin_s)
+    return float(origin_waypoint.transform.location.distance(target_waypoint.transform.location))
+
+
+def _spawn_candidates_near_start(*, world_map: Any, ego_waypoint: Any, limit: int = 8) -> dict[str, Any]:
+    left_waypoint = ego_waypoint.get_left_lane()
+    right_waypoint = ego_waypoint.get_right_lane()
+    left_lane_id = _lane_id(left_waypoint)
+    right_lane_id = _lane_id(right_waypoint)
+    candidates = {
+        "same_lane_ahead": [],
+        "left_lane": [],
+        "right_lane": [],
+    }
+    for spawn_index, transform in enumerate(world_map.get_spawn_points()):
+        waypoint = world_map.get_waypoint(transform.location)
+        candidate = {
+            "spawn_index": spawn_index,
+            "lane_id": _lane_id(waypoint),
+            "longitudinal_distance_m": _distance_ahead_m(
+                origin_waypoint=ego_waypoint,
+                target_waypoint=waypoint,
+            ),
+            "location": {
+                "x": round(float(transform.location.x), 3),
+                "y": round(float(transform.location.y), 3),
+                "z": round(float(transform.location.z), 3),
+            },
+        }
+        if candidate["lane_id"] == _lane_id(ego_waypoint):
+            longitudinal_distance_m = candidate["longitudinal_distance_m"]
+            if longitudinal_distance_m is not None and longitudinal_distance_m > 0.0:
+                candidates["same_lane_ahead"].append(candidate)
+        if left_lane_id is not None and candidate["lane_id"] == left_lane_id:
+            candidates["left_lane"].append(candidate)
+        if right_lane_id is not None and candidate["lane_id"] == right_lane_id:
+            candidates["right_lane"].append(candidate)
+
+    def _sort_key(item: dict[str, Any]) -> tuple[float, int]:
+        longitudinal = item["longitudinal_distance_m"]
+        if longitudinal is None:
+            return (float("inf"), int(item["spawn_index"]))
+        return (float(longitudinal), int(item["spawn_index"]))
+
+    for key in candidates:
+        candidates[key] = sorted(candidates[key], key=_sort_key)[:limit]
+    return {
+        "ego_lane_id": _lane_id(ego_waypoint),
+        "left_lane_id": left_lane_id,
+        "right_lane_id": right_lane_id,
+        "candidates": candidates,
+    }
+
+
 def _inspect_single_config(config_path: Path) -> dict[str, Any]:
     loaded_config = load_route_loop_run_config(config_path)
     request = loaded_config.request
@@ -96,6 +166,7 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
             spawned_actor_refs=npc_actor_refs,
         )
 
+        ego_waypoint = world.get_map().get_waypoint(vehicle.get_location())
         scenario_validation = build_stopped_obstacle_scenario_validation(
             environment_config=environment_config,
             world_map=world.get_map(),
@@ -103,6 +174,10 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
             ego_vehicle=vehicle,
             npc_actor_refs=npc_actor_refs,
             driving_lane_type=carla.LaneType.Driving,
+        )
+        spawn_candidates = _spawn_candidates_near_start(
+            world_map=world.get_map(),
+            ego_waypoint=ego_waypoint,
         )
     finally:
         world.apply_settings(original_settings)
@@ -123,6 +198,7 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
         },
         "npc_vehicles": npc_actors_summary,
         "scenario_validation": scenario_validation,
+        "spawn_candidates": spawn_candidates,
     }
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     payload["output_path"] = _project_relative_or_absolute(output_path)
