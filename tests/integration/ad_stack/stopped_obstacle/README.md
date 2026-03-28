@@ -31,6 +31,8 @@
 - [rejoin_blocked_then_release.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/rejoin_blocked_then_release.md)
 - [adjacent_lane_closed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/adjacent_lane_closed.md)
 - [double_stopped_obstacle.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_obstacle.md)
+- [double_stopped_separated.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_separated.md)
+- [double_stopped_clustered.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_clustered.md)
 - [curve_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/curve_clear.md)
 - [near_junction_preflight_reject.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/near_junction_preflight_reject.md)
 
@@ -42,7 +44,7 @@
 - `curve_clear`
 - `near_junction_preflight_reject`
 
-は JSON / config まで実装済みです。`adjacent_lane_closed` だけは exact transform の最終確認待ちです。
+は JSON / config まで実装済みです。`double_stopped_obstacle` は legacy な混在 scenario で、今後は `double_stopped_separated` と `double_stopped_clustered` に分けて置き換えます。`adjacent_lane_closed` だけは exact transform の最終確認待ちです。
 
 ## Deferred / Exploratory Scenarios
 

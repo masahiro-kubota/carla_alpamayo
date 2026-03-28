@@ -29,6 +29,7 @@
 - route-aligned lane-change plan の単調性
 - scenario preflight validation の contract 判定
 - target actor visibility の扱い
+- `single_actor / obstacle_cluster` の切替
 
 ここが主戦場。
 
@@ -40,7 +41,7 @@
 
 - `SceneState -> StoppedObstacleContext`
 - route trace -> `RouteLaneSample[]`
-- tracked object -> lead / blocker / rejoin gap 変換
+- tracked object -> lead / blocker / cluster / rejoin gap 変換
 
 ここでは `fake snapshot` を使ってもよい。
 
@@ -53,8 +54,13 @@
 - `clear`
 - `blocked_static`
 - `blocked_oncoming`
+- `double_stopped_separated`
+- `double_stopped_clustered`
 
-数は少なく、smoke に留める。
+ただし gate は段階化する。
+
+- baseline は `clear / blocked_static / blocked_oncoming`
+- 複数停止車両はその後に `separated -> clustered` の順で追加する
 
 ## 2. pure unit test で必ず持つケース
 
@@ -129,6 +135,19 @@
 - 期待: `target_passed = false`
 - 期待: state は `pass_vehicle` 維持
 
+#### `test_cluster_pass_does_not_complete_until_cluster_exit_gap_is_met`
+
+- `target_kind = cluster`
+- 先頭車は抜いたが cluster tail はまだ前方
+- 期待: `target_passed = false`
+
+#### `test_cluster_pass_completes_once_cluster_exit_is_behind_and_resume_gap_is_met`
+
+- `target_kind = cluster`
+- cluster tail が ego 後方
+- `distance_past_target_m >= resume_gap`
+- 期待: `target_passed = true`
+
 ### 2.3 rejoin decision
 
 #### `test_rejoin_rejects_when_origin_front_gap_insufficient`
@@ -154,6 +173,18 @@
 - ego が opposite lane にいる
 - relation label が入れ替わる
 - 期待: origin lane の gap が lane id 基準で正しく取れる
+
+#### `test_separated_double_obstacle_rejoins_then_reacquires_second_target`
+
+- 1 台目と 2 台目の gap が `cluster_merge_gap_m` より大きい
+- 1 台目 pass 完了後は `lane_change_back`
+- origin lane 復帰後に 2 台目を新しい target として再取得
+
+#### `test_clustered_double_obstacle_keeps_pass_vehicle_until_cluster_tail_is_cleared`
+
+- 2 台が `cluster_merge_gap_m` 以下
+- `target_kind = cluster`
+- 途中 rejoin せず `pass_vehicle` を維持
 
 ### 2.4 abort path
 
@@ -233,6 +264,20 @@
 
 #### `test_preflight_rejects_when_route_target_lane_and_origin_lane_conflict`
 
+#### `test_preflight_accepts_double_stopped_separated`
+
+- same-lane に 2 台
+- 相互 gap が merge threshold より大きい
+- `scenario_kind = double_stopped_separated`
+- 期待: valid
+
+#### `test_preflight_accepts_double_stopped_clustered`
+
+- same-lane に 2 台
+- 相互 gap が merge threshold 以下
+- `scenario_kind = double_stopped_clustered`
+- 期待: valid
+
 ## 5. adapter test
 
 adapter test は pure logic へ入る前の shape を保証する。
@@ -246,6 +291,10 @@ adapter test は pure logic へ入る前の shape を保証する。
 #### `test_scene_state_preserves_target_actor_id_after_lane_change`
 
 #### `test_scene_state_marks_target_actor_not_visible_without_dropping_memory`
+
+#### `test_scene_state_builds_cluster_from_nearby_stopped_vehicles`
+
+#### `test_scene_state_keeps_separated_stopped_vehicles_as_independent_targets`
 
 ### 5.2 route projection
 
@@ -300,6 +349,31 @@ run-config:
 - moving oncoming actor に対して reject
 - blocker 通過前は出ない
 
+### 6.4 `double_stopped_separated`
+
+run-config:
+
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_separated_long_expert.json`
+
+見ること:
+
+- 1 台目を抜いたあとに一度 rejoin する
+- その後 2 台目が `lead_vehicle_id` / `overtake_target_actor_id` として再取得される
+- collision 0
+
+### 6.5 `double_stopped_clustered`
+
+run-config:
+
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_clustered_long_expert.json`
+
+見ること:
+
+- 近接した 2 台を 1 つの cluster として扱う
+- cluster tail を抜くまで `pass_vehicle` を維持する
+- 途中で不用意に rejoin しない
+- collision 0
+
 ## 7. telemetry assertions
 
 integration test 後は summary / manifest / MCAP から次を確認する。
@@ -329,6 +403,8 @@ integration test 後は summary / manifest / MCAP から次を確認する。
 - `target_lane_id`
 - `lead_vehicle_id`
 - `overtake_target_actor_id`
+- `overtake_target_kind`
+- `overtake_target_member_actor_ids`
 - `distance_past_target_m`
 - `overtake_reject_reason`
 
@@ -364,6 +440,14 @@ integration test 後は summary / manifest / MCAP から次を確認する。
 
 - `blocked_oncoming` integration 緑
 
+### Gate 6
+
+- `double_stopped_separated` integration 緑
+
+### Gate 7
+
+- `double_stopped_clustered` integration 緑
+
 ## 9. 最初に書くテスト
 
 優先度順はこれ。
@@ -377,5 +461,8 @@ integration test 後は summary / manifest / MCAP から次を確認する。
 7. `test_preflight_rejects_obstacle_not_in_ego_lane`
 8. `test_pass_does_not_complete_after_visibility_timeout_without_actor_reacquisition`
 9. `test_overtake_prefers_right_when_both_sides_are_open_and_right_first`
+10. `test_cluster_pass_does_not_complete_until_cluster_exit_gap_is_met`
+11. `test_separated_double_obstacle_rejoins_then_reacquires_second_target`
+12. `test_clustered_double_obstacle_keeps_pass_vehicle_until_cluster_tail_is_cleared`
 
-この 9 本が通らない限り、CARLA 結合テストへ進まない。
+この 12 本が通らない限り、複数停止車両の CARLA 結合テストへ進まない。

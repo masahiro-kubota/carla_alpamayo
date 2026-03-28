@@ -1,45 +1,30 @@
-# Double Stopped Obstacle Scenario
+# Double Stopped Obstacle Family
 
-同一路上に停止障害物が 2 台連続で存在し、target actor の切り替えと復帰タイミングを確認する scenario です。
+停止障害物が 2 台以上あるケースの family index です。
 
-## Status
+この family は 1 本の scenario にまとめると acceptance が曖昧になるので、今後は次の 2 本に分けます。
 
-- implemented_not_verified
+- [double_stopped_separated.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_separated.md)
+- [double_stopped_clustered.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_clustered.md)
 
-## Planned Run Config
+## Rationale
+
+- `separated`
+  - 1 台目を抜いたら一度 rejoin し、2 台目を別イベントとして再取得する
+- `clustered`
+  - 2 台が近接していて、1 つの `obstacle cluster` として同時に追い越す
+
+この分割により、code path は
+
+- `single_actor`
+- `obstacle_cluster`
+
+の 2 形態だけで維持できる。
+
+## Legacy Asset
+
+現在の legacy run-config はこれです。
 
 - `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_long_expert.json`
 
-## Scenario Contract
-
-- same-lane に停止障害物が 2 台
-- 1 台目と 2 台目の縦距離は、同一 overtake corridor として扱うか迷う程度に近い
-- adjacent lane は clear
-
-## Expectations
-
-### Target Actor
-
-- まず 1 台目を `lead_vehicle_id` として見る
-- 1 台目通過後に 2 台目へ自然に切り替わる
-- target actor が不用意にふらつかない
-
-### Reject / Wait
-
-- 追い越し開始自体は成立する
-
-### Pass / Rejoin
-
-- 1 台目通過直後に早戻りしない
-- 2 台目も含めて corridor を処理できるならそのまま維持
-- そうでなければ一度戻って再度出るが、いずれにせよ actor 切替は一貫している
-
-### Summary Acceptance
-
-- `collision_count = 0`
-- `overtake_attempt_count >= 1`
-- `overtake_target_actor_id` の切替が説明可能
-
-## Why This Matters
-
-- `target actor` 選択と pass 完了判定の robustness を見る
+これは `separated / clustered` を混在させた暫定 asset なので、baseline acceptance には使わない。

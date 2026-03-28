@@ -7,6 +7,7 @@
 - 停止障害物回避を `pure logic` と `CARLA adapter` に分離する
 - `BasicAgent._generate_lane_change_path()` に依存しない route-aligned overtake を定義する
 - `clear / blocked_static / blocked_oncoming` を同じ状態機械で扱えるようにする
+- 複数停止車両を扱っても state machine 自体は単純なまま保つ
 
 関連資料:
 
@@ -45,6 +46,14 @@
 
 は `pure logic` として自前で持つ。
 
+追加方針:
+
+- 複数停止車両を個別 target の無制限列として扱わない
+- adapter 側で `single actor` または `obstacle cluster` に正規化する
+- pure logic は常に `1つの active overtake target` だけを扱う
+
+これにより、複数車両の同時追い越しを可能にしつつ、runtime の状態機械は増やさない。
+
 ## 2. 実装方針
 
 ### 2.1 分離したい層
@@ -61,6 +70,7 @@
 - rejoin 可否判定
 - route-aligned lane-change plan の生成
 - preflight validation
+- 正規化済み `single actor / obstacle cluster` target を共通 contract で扱う
 
 #### CARLA adapter
 
@@ -69,6 +79,7 @@
 責務:
 
 - `SceneState` から lead / blocker / lane gap を拾う
+- same-lane stopped vehicles を `single actor` または `obstacle cluster` にまとめる
 - route trace の future points を lane-aligned samples に変換する
 - pure logic の結果を `ExpertBasicAgent` の control / target waypoint に反映する
 
@@ -99,6 +110,44 @@
 - `relative_speed_mps`
 - `is_stopped`
 
+#### `StoppedObstacleClusterSnapshot`
+
+- `primary_actor_id`
+- `member_actor_ids`
+- `lane_id`
+- `entry_distance_m`
+- `exit_distance_m`
+- `max_member_speed_mps`
+- `all_members_stopped`
+
+定義:
+
+- `entry_distance_m`
+  - route 進行方向で見た cluster 先頭の進入点
+- `exit_distance_m`
+  - route 進行方向で見た cluster 末尾の離脱点
+
+cluster を 1 つの corridor として扱うとき、pass 完了は actor 切替ではなく `exit_distance_m` 基準で判定する。
+
+#### `StoppedObstacleTargetSnapshot`
+
+- `kind`
+  - `single_actor`
+  - `cluster`
+- `primary_actor_id`
+- `member_actor_ids`
+- `lane_id`
+- `entry_distance_m`
+- `exit_distance_m`
+- `speed_mps`
+- `is_stopped`
+
+設計原則:
+
+- pure logic に渡す active target は常に 1 つだけ
+- 近接した複数停止車両は `cluster` として 1 つにまとめる
+- 十分に離れた停止車両は別イベントとして扱い、1 台目の rejoin 後に 2 台目を再取得する
+
 #### `AdjacentLaneGapSnapshot`
 
 - `lane_id`
@@ -123,12 +172,18 @@
 - `target_speed_kmh`
 - `stopped_speed_threshold_mps`
 - `lead`
+- `obstacle_target`
 - `left_lane`
 - `right_lane`
 - `active_signal_state`
 - `signal_stop_distance_m`
 - `allow_overtake`
 - `preferred_direction`
+
+注記:
+
+- `lead` は raw telemetry / backward compatibility 用に残してよい
+- pure logic の判定入力としては `obstacle_target` を正本にする
 
 #### `OvertakeMemory`
 
@@ -141,6 +196,9 @@
 - `target_actor_last_seen_s`
 - `target_actor_last_seen_longitudinal_m`
 - `target_actor_visibility_timeout_s`
+- `target_kind`
+- `target_member_actor_ids`
+- `target_exit_distance_m`
 - `pass_started_s`
 - `pass_started_route_index`
 - `target_passed`
@@ -199,6 +257,19 @@ reject reason は必ず 1 つに落とす。
 - `adjacent_rear_gap_insufficient`
 - `signal_suppressed`
 
+### 4.2.1 single actor と cluster の扱い
+
+trigger / reject の入口は共通にする。
+
+- `single_actor`
+  - `entry_distance_m = lead.distance_m`
+  - `exit_distance_m` は actor 後端ベース
+- `cluster`
+  - `entry_distance_m` は最も近い停止車両の前端
+  - `exit_distance_m` は最も遠い停止車両の後端
+
+複数車両を同時に追い越す必要があるときでも、pure logic は `entry / exit` を持つ 1 つの corridor だけを扱う。
+
 ### 4.3 `lane_change_out`
 
 目的:
@@ -239,10 +310,14 @@ pass 完了は固定 hold distance ではなく actor 基準で決める。
 
 `target_passed = true` の条件:
 
-- target actor が ego より後方に回った
-- かつ `distance_past_target_m >= overtake_resume_front_gap_m`
+- `single_actor` のとき:
+  - target actor が ego より後方に回った
+  - かつ `distance_past_target_m >= overtake_resume_front_gap_m`
+- `cluster` のとき:
+  - cluster の `exit_distance_m` が ego より後方に回った
+  - かつ `distance_past_target_m >= overtake_resume_front_gap_m`
 
-ここで `distance_past_target_m` は、ego の進行方向に対する `-target.longitudinal_distance_m` を使う。
+ここで `distance_past_target_m` は、ego の進行方向に対する `-target_exit_distance_m` を使う。
 
 #### target actor visibility contract
 
@@ -272,6 +347,8 @@ timeout を超えたら
 - `target actor state unknown`
 
 として扱い、`passed = true` は立てない。
+
+`cluster` では `primary_actor_id` が一時的に見えなくなっても、cluster 内の別 member が見えていれば corridor 自体は visible とみなしてよい。
 
 ### 4.5 `lane_change_back`
 
@@ -349,7 +426,51 @@ rejoin はしたいが、安全性の都合で通常 path をやめる状態。
 
 この tie-break は pure logic に置く。
 
-## 6. preflight validation
+## 6. 複数停止車両の設計
+
+### 6.1 基本方針
+
+複数停止車両を扱うときも、code path は次の 2 形態だけに限定する。
+
+- `separated double obstacle`
+  - 1 台目と 2 台目の gap が十分大きい
+  - 1 台目を抜いたら origin lane に戻り、2 台目を別イベントとして再取得する
+- `clustered stopped obstacles`
+  - 車間が小さく、途中 rejoin しないほうが自然
+  - 複数停止車両を 1 つの `obstacle cluster` として同時に追い越す
+
+これ以上の一般化、たとえば「任意個の actor を順次 state machine が持つ」ことはやらない。
+
+### 6.2 cluster 化ルール
+
+同一 lane 上の停止車両を route 進行方向で並べ、隣接車両の gap が `cluster_merge_gap_m` 以下なら同一 cluster にまとめる。
+
+必要な config:
+
+- `cluster_merge_gap_m`
+- `cluster_max_member_speed_mps`
+
+期待値:
+
+- gap が閾値以下なら simultaneous overtake
+- gap が閾値より大きければ separated handling
+
+### 6.3 acceptance contract
+
+#### separated
+
+- 1 台目を抜いたら `lane_change_back` へ入る
+- origin lane へ戻ったあと、2 台目を新しい `single_actor` として取得する
+- `lead_vehicle_id` / `overtake_target_actor_id` は actor 切替が見える
+
+#### clustered
+
+- `pass_vehicle` を cluster 全体に対して維持する
+- cluster の途中で不用意に rejoin しない
+- actor id の切替自体は必須ではない
+- 必須なのは `member_actor_ids` が安定し、cluster tail を抜いたあとにだけ rejoin すること
+
+## 7. preflight validation
 
 run 前に scenario を検証し、結果を summary に残す。
 
@@ -374,6 +495,8 @@ run 前に scenario を検証し、結果を summary に残す。
 - `clear`
 - `blocked_static`
 - `blocked_oncoming`
+- `double_stopped_separated`
+- `double_stopped_clustered`
 
 runtime 中にこの区別が失われないようにする。
 
@@ -396,11 +519,13 @@ runtime 中にこの区別が失われないようにする。
 - moving blocker が opposite lane から接近する
 - front gap insufficiency で reject される
 
-## 7. telemetry / manifest に追加するもの
+## 8. telemetry / manifest に追加するもの
 
 ### 7.1 `/ego/planning_debug`
 
 - `overtake_target_actor_id`
+- `overtake_target_kind`
+- `overtake_target_member_actor_ids`
 - `overtake_origin_lane_id`
 - `target_passed`
 - `distance_past_target_m`
@@ -429,20 +554,22 @@ runtime 中にこの区別が失われないようにする。
 - `first_target_passed_s`
 - `first_rejoin_started_s`
 
-## 8. 実装順
+## 9. 実装順
 
 1. pure logic module を新設する
 2. unit test を先に書く
 3. `ExpertBasicAgent` から trigger / pass / rejoin の判定を pure logic へ寄せる
 4. route-aligned lane-change plan を pure logic で生成する
 5. preflight validation を `run.py` に差し込む
-6. その後で `clear / blocked_static / blocked_oncoming` を CARLA で結合テストする
+6. `single_actor` baseline を `clear / blocked_static / blocked_oncoming` で CARLA 結合テストする
+7. `double_stopped_separated` を追加する
+8. `double_stopped_clustered` を追加する
 
-## 9. 非目標
+## 10. 非目標
 
 この段階ではまだやらない。
 
 - 複雑な junction 内での停止障害物回避
-- 複数障害物の連続回避
 - signal 付き交差点直前での対向 lane 追い越し
 - VLA teacher としての最終 polish
+- 任意個の移動障害物を一般グラフ探索で追い越すこと
