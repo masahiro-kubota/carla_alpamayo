@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from math import cos, radians, sin
-from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING
 
 from libs.project import PROJECT_ROOT
 
 from .routes import PlannedRoute, build_planned_route, load_route_config
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from pathlib import Path
+
+    import carla
 
 
 @dataclass(slots=True)
@@ -25,7 +31,7 @@ def route_config_path_for_route_id(route_id: str) -> Path:
 
 def route_geometry_from_planned_route(planned_route: PlannedRoute) -> RouteGeometry:
     cumulative_lengths_m: list[float] = [0.0]
-    for (x1, y1), (x2, y2) in zip(planned_route.xy_points[:-1], planned_route.xy_points[1:]):
+    for (x1, y1), (x2, y2) in pairwise(planned_route.xy_points):
         cumulative_lengths_m.append(
             cumulative_lengths_m[-1] + (((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5)
         )
@@ -52,11 +58,13 @@ def load_route_geometries_for_ids(
     world = client.get_world()
 
     route_geometries: dict[str, RouteGeometry] = {}
-    town_to_map: dict[str, "carla.Map"] = {}
+    town_to_map: dict[str, carla.Map] = {}
     for route_id in sorted(set(route_ids)):
         config_path = route_config_path_for_route_id(route_id)
         if not config_path.exists():
-            raise FileNotFoundError(f"Route config does not exist for route_id={route_id}: {config_path}")
+            raise FileNotFoundError(
+                f"Route config does not exist for route_id={route_id}: {config_path}"
+            )
         route_config = load_route_config(config_path)
         world_map = town_to_map.get(route_config.town)
         if world_map is None:
@@ -93,7 +101,9 @@ def compute_local_target_point(
         search_window=search_window,
         fallback_distance_m=fallback_distance_m,
     )
-    target_index = advance_route_index(route_geometry, start_index=nearest_index, lookahead_m=lookahead_m)
+    target_index = advance_route_index(
+        route_geometry, start_index=nearest_index, lookahead_m=lookahead_m
+    )
     target_x, target_y = route_geometry.points[target_index]
     local_x, local_y = world_to_local_2d(
         target_x=target_x,
@@ -145,11 +155,15 @@ def global_nearest_route_index(
 ) -> int:
     return min(
         range(len(route_points)),
-        key=lambda index: squared_distance(route_points[index], vehicle_x=vehicle_x, vehicle_y=vehicle_y),
+        key=lambda index: squared_distance(
+            route_points[index], vehicle_x=vehicle_x, vehicle_y=vehicle_y
+        ),
     )
 
 
-def advance_route_index(route_geometry: RouteGeometry, *, start_index: int, lookahead_m: float) -> int:
+def advance_route_index(
+    route_geometry: RouteGeometry, *, start_index: int, lookahead_m: float
+) -> int:
     if lookahead_m <= 0.0:
         return start_index
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import dataclass
-import json
+from itertools import pairwise
 from math import hypot
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from libs.project import PROJECT_ROOT
@@ -14,6 +14,8 @@ from .python_api import ensure_carla_agents_on_path
 DEFAULT_ROUTE_CONFIG_PATH = PROJECT_ROOT / "scenarios" / "routes" / "town01_pilotnet_loop.json"
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import carla
 
 
@@ -60,15 +62,23 @@ def road_option_name(option: Any) -> str:
     return str(option).split(".")[-1].lower()
 
 
-def build_planned_route(world_map: "carla.Map", route_config: RouteConfig) -> PlannedRoute:
+def build_planned_route(world_map: carla.Map, route_config: RouteConfig) -> PlannedRoute:
     ensure_carla_agents_on_path()
     from agents.navigation.global_route_planner import GlobalRoutePlanner
 
     spawn_points = world_map.get_spawn_points()
     anchor_transforms = [spawn_points[index] for index in route_config.anchor_spawn_indices]
-    segment_pairs = list(zip(route_config.anchor_spawn_indices[:-1], route_config.anchor_spawn_indices[1:]))
+    segment_pairs = list(
+        zip(
+            route_config.anchor_spawn_indices[:-1],
+            route_config.anchor_spawn_indices[1:],
+            strict=False,
+        )
+    )
     if route_config.closed_loop:
-        segment_pairs.append((route_config.anchor_spawn_indices[-1], route_config.anchor_spawn_indices[0]))
+        segment_pairs.append(
+            (route_config.anchor_spawn_indices[-1], route_config.anchor_spawn_indices[0])
+        )
 
     planner = GlobalRoutePlanner(world_map, route_config.sampling_resolution_m)
     trace: list[tuple[Any, Any]] = []
@@ -81,7 +91,9 @@ def build_planned_route(world_map: "carla.Map", route_config: RouteConfig) -> Pl
         end_transform = spawn_points[end_index]
         segment_trace = planner.trace_route(start_transform.location, end_transform.location)
         if not segment_trace:
-            raise RuntimeError(f"Planner returned an empty route for segment {start_index} -> {end_index}.")
+            raise RuntimeError(
+                f"Planner returned an empty route for segment {start_index} -> {end_index}."
+            )
 
         if trace and _same_waypoint(trace[-1][0], segment_trace[0][0]):
             segment_trace = segment_trace[1:]
@@ -125,10 +137,7 @@ def waypoint_xy(route_trace: list[tuple[Any, Any]]) -> list[tuple[float, float]]
 
 
 def route_length(points: list[tuple[float, float]]) -> float:
-    return sum(
-        hypot(x2 - x1, y2 - y1)
-        for (x1, y1), (x2, y2) in zip(points[:-1], points[1:])
-    )
+    return sum(hypot(x2 - x1, y2 - y1) for (x1, y1), (x2, y2) in pairwise(points))
 
 
 def _same_waypoint(first: Any, second: Any, tolerance_m: float = 0.05) -> bool:

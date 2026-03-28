@@ -94,7 +94,9 @@ class TrafficLightPhasingTests(unittest.TestCase):
             compute_phase_states(
                 [[10]],
                 elapsed_seconds=0.0,
-                cycle=TrafficLightPhaseCycle(green_seconds=-1.0, yellow_seconds=0.0, all_red_seconds=0.0),
+                cycle=TrafficLightPhaseCycle(
+                    green_seconds=-1.0, yellow_seconds=0.0, all_red_seconds=0.0
+                ),
             )
 
 

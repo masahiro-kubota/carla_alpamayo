@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from PIL import Image
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
 
 
 def preprocess_pil_rgb(
@@ -30,7 +30,11 @@ def preprocess_numpy_rgb(
     if rgb_array.ndim != 3 or rgb_array.shape[2] != 3:
         raise ValueError(f"Expected HxWx3 RGB input, got shape {rgb_array.shape!r}")
 
-    tensor = torch.from_numpy(np.asarray(rgb_array, dtype=np.float32) / 255.0).permute(2, 0, 1).unsqueeze(0)
+    tensor = (
+        torch.from_numpy(np.asarray(rgb_array, dtype=np.float32) / 255.0)
+        .permute(2, 0, 1)
+        .unsqueeze(0)
+    )
     height = tensor.shape[2]
     top = int(height * crop_top_ratio)
     tensor = tensor[:, :, top:, :]

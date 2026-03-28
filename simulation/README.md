@@ -17,7 +17,7 @@ Town01 の信号制御は、CARLA が持っている `raw group` をそのまま
 - ラベル
   - `actor_id / raw group / derived phase`
 
-Town01 では、raw group は 3 actor の組になっていることが多いです。  
+Town01 では、raw group は 3 actor の組になっていることが多いです。
 ただし、これは「3 phase 交差点」という意味ではありません。
 
 現在の整理ルール:

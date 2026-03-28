@@ -1,25 +1,22 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from datetime import datetime
 import json
 import math
-from pathlib import Path
 import random
+from collections import Counter
+from datetime import datetime
 from math import sqrt
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from libs.carla_utils import load_route_geometries_for_ids
-from libs.project import PROJECT_ROOT
 from learning.libs.ml import (
     PilotNet,
     PilotNetDataset,
@@ -30,10 +27,14 @@ from learning.libs.ml import (
     normalize_command,
 )
 from learning.libs.ml.driving_dataset import split_frames
+from libs.carla_utils import load_route_geometries_for_ids
+from libs.project import PROJECT_ROOT
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Train a PilotNet-style front-camera-to-steer model.")
+    parser = argparse.ArgumentParser(
+        description="Train a PilotNet-style front-camera-to-steer model."
+    )
     parser.add_argument(
         "--manifest-glob",
         action="append",
@@ -172,7 +173,9 @@ def load_frames_from_inputs(
         manifest_paths=manifest_paths,
     )
     if not resolved_manifest_paths:
-        raise FileNotFoundError(f"No manifests matched: globs={manifest_globs}, paths={manifest_paths}")
+        raise FileNotFoundError(
+            f"No manifests matched: globs={manifest_globs}, paths={manifest_paths}"
+        )
     frames = load_episode_records(
         resolved_manifest_paths,
         target_steer_field=target_steer_field,
@@ -204,11 +207,15 @@ def split_frames_by_episode(
     return train, val
 
 
-def weighted_mse(prediction: torch.Tensor, target: torch.Tensor, sample_weight: torch.Tensor) -> torch.Tensor:
+def weighted_mse(
+    prediction: torch.Tensor, target: torch.Tensor, sample_weight: torch.Tensor
+) -> torch.Tensor:
     return (((prediction - target) ** 2) * sample_weight).mean()
 
 
-def adapt_state_dict_for_model(model: PilotNet, checkpoint_state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+def adapt_state_dict_for_model(
+    model: PilotNet, checkpoint_state_dict: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
     model_state_dict = model.state_dict()
     adapted_state_dict: dict[str, torch.Tensor] = {}
 
@@ -226,9 +233,16 @@ def adapt_state_dict_for_model(model: PilotNet, checkpoint_state_dict: dict[str,
             if same_kernel:
                 if checkpoint_value.shape[1] < model_value.shape[1]:
                     repeat_factor = math.ceil(model_value.shape[1] / checkpoint_value.shape[1])
-                    candidate_value = checkpoint_value.repeat(1, repeat_factor, 1, 1)[:, : model_value.shape[1], :, :]
-                    candidate_value = candidate_value * (checkpoint_value.shape[1] / model_value.shape[1])
-                elif checkpoint_value.shape[1] > model_value.shape[1] and checkpoint_value.shape[1] % model_value.shape[1] == 0:
+                    candidate_value = checkpoint_value.repeat(1, repeat_factor, 1, 1)[
+                        :, : model_value.shape[1], :, :
+                    ]
+                    candidate_value = candidate_value * (
+                        checkpoint_value.shape[1] / model_value.shape[1]
+                    )
+                elif (
+                    checkpoint_value.shape[1] > model_value.shape[1]
+                    and checkpoint_value.shape[1] % model_value.shape[1] == 0
+                ):
                     reduce_factor = checkpoint_value.shape[1] // model_value.shape[1]
                     candidate_value = checkpoint_value.reshape(
                         checkpoint_value.shape[0],
@@ -242,7 +256,9 @@ def adapt_state_dict_for_model(model: PilotNet, checkpoint_state_dict: dict[str,
     return adapted_state_dict
 
 
-def load_initial_checkpoint(model: PilotNet, checkpoint_path: str | None, device: torch.device) -> dict | None:
+def load_initial_checkpoint(
+    model: PilotNet, checkpoint_path: str | None, device: torch.device
+) -> dict | None:
     if not checkpoint_path:
         return None
     resolved_path = Path(checkpoint_path).resolve()
@@ -252,13 +268,17 @@ def load_initial_checkpoint(model: PilotNet, checkpoint_path: str | None, device
     return checkpoint
 
 
-def configure_trainable_parameters(model: PilotNet, train_command_head_only: list[str] | None) -> list[str] | None:
+def configure_trainable_parameters(
+    model: PilotNet, train_command_head_only: list[str] | None
+) -> list[str] | None:
     if not train_command_head_only:
         return None
     if not model.command_branching or model.command_heads is None:
         raise ValueError("--train-command-head-only requires --command-conditioning branch.")
 
-    normalized_commands = [normalize_command(command_name) for command_name in train_command_head_only]
+    normalized_commands = [
+        normalize_command(command_name) for command_name in train_command_head_only
+    ]
     trainable_commands: list[str] = []
     trainable_indices: list[int] = []
     for command_name in normalized_commands:
@@ -341,7 +361,9 @@ def main() -> None:
     manifest_paths_arg = args.manifest_path or []
     include_commands = None
     if args.include_command:
-        include_commands = {normalize_command(command_name) for command_name in args.include_command}
+        include_commands = {
+            normalize_command(command_name) for command_name in args.include_command
+        }
     manifest_paths, frames = load_frames_from_inputs(
         manifest_globs=manifest_globs,
         manifest_paths=manifest_paths_arg,
@@ -362,11 +384,17 @@ def main() -> None:
             target_normalization_m=args.route_target_normalization_m,
         )
     if args.split_mode == "episode":
-        train_frames, val_frames = split_frames_by_episode(frames, train_ratio=args.train_ratio, seed=args.seed)
+        train_frames, val_frames = split_frames_by_episode(
+            frames, train_ratio=args.train_ratio, seed=args.seed
+        )
     else:
-        train_frames, val_frames = split_frames(frames, train_ratio=args.train_ratio, seed=args.seed)
+        train_frames, val_frames = split_frames(
+            frames, train_ratio=args.train_ratio, seed=args.seed
+        )
     if not train_frames or not val_frames:
-        raise RuntimeError("Train/val split produced an empty partition. Adjust train_ratio or add more data.")
+        raise RuntimeError(
+            "Train/val split produced an empty partition. Adjust train_ratio or add more data."
+        )
 
     command_weight_map = build_command_weight_map(train_frames, enabled=args.rebalance_commands)
 
@@ -445,7 +473,9 @@ def main() -> None:
         model_name = "pilotnet"
     init_checkpoint = load_initial_checkpoint(model, args.init_checkpoint, device)
     trainable_command_heads = configure_trainable_parameters(model, args.train_command_head_only)
-    trainable_parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    trainable_parameters = [
+        parameter for parameter in model.parameters() if parameter.requires_grad
+    ]
     if not trainable_parameters:
         raise RuntimeError("No trainable parameters were selected.")
     optimizer = torch.optim.AdamW(
@@ -467,7 +497,9 @@ def main() -> None:
         "val_episode_ids": sorted({frame.episode_id for frame in val_frames}),
         "route_ids": sorted({frame.route_id for frame in frames}),
         "command_counts": dict(sorted(Counter(frame.command for frame in frames).items())),
-        "train_command_counts": dict(sorted(Counter(frame.command for frame in train_frames).items())),
+        "train_command_counts": dict(
+            sorted(Counter(frame.command for frame in train_frames).items())
+        ),
         "val_command_counts": dict(sorted(Counter(frame.command for frame in val_frames).items())),
         "frame_count": len(frames),
         "train_frame_count": len(train_frames),
@@ -502,7 +534,9 @@ def main() -> None:
         "train_ratio": args.train_ratio,
         "split_mode": args.split_mode,
         "init_checkpoint_path": args.init_checkpoint,
-        "init_checkpoint_model_name": init_checkpoint.get("model_name") if init_checkpoint else None,
+        "init_checkpoint_model_name": init_checkpoint.get("model_name")
+        if init_checkpoint
+        else None,
     }
     with (output_dir / "config.json").open("w", encoding="utf-8") as handle:
         json.dump(run_config, handle, indent=2)
@@ -524,7 +558,9 @@ def main() -> None:
             sample_weight = batch["sample_weight"].to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=device.type == "cuda"):
+            with torch.autocast(
+                device_type=device.type, dtype=torch.float16, enabled=device.type == "cuda"
+            ):
                 prediction = model(image, speed, command_index, route_point)
                 loss = weighted_mse(prediction, target, sample_weight)
                 mse = ((prediction - target) ** 2).mean()
@@ -590,7 +626,9 @@ def main() -> None:
                         "command_conditioning": args.command_conditioning,
                         "command_embedding_dim": args.command_embedding_dim,
                         "command_branching": args.command_conditioning == "branch",
-                        "command_vocab_size": command_vocab_size() if args.command_conditioning in {"embedding", "branch"} else 0,
+                        "command_vocab_size": command_vocab_size()
+                        if args.command_conditioning in {"embedding", "branch"}
+                        else 0,
                     },
                     "train_run_config": run_config,
                     "best_epoch": epoch,
@@ -605,8 +643,16 @@ def main() -> None:
         handle.write("\n")
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot([item["epoch"] for item in history], [item["train_loss"] for item in history], label="train loss")
-    ax.plot([item["epoch"] for item in history], [item["val_loss"] for item in history], label="val loss")
+    ax.plot(
+        [item["epoch"] for item in history],
+        [item["train_loss"] for item in history],
+        label="train loss",
+    )
+    ax.plot(
+        [item["epoch"] for item in history],
+        [item["val_loss"] for item in history],
+        label="val loss",
+    )
     ax.set_xlabel("epoch")
     ax.set_ylabel("weighted MSE")
     ax.set_title("PilotNet training curve")

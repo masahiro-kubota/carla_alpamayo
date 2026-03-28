@@ -42,7 +42,11 @@ def main() -> None:
 
     output_dir = Path("scenarios/maps")
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_image = Path(args.output_image) if args.output_image else output_dir / f"{args.town.lower()}_topdown.png"
+    output_image = (
+        Path(args.output_image)
+        if args.output_image
+        else output_dir / f"{args.town.lower()}_topdown.png"
+    )
     output_metadata = (
         Path(args.output_metadata)
         if args.output_metadata

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-
-import torch
+from typing import TYPE_CHECKING
 
 from learning.libs.ml import PilotNetInferenceRuntime
 from learning.libs.ml import load_pilotnet_runtime as _load_pilotnet_runtime
 from learning.libs.ml import select_device as _select_device
+
+if TYPE_CHECKING:
+    import torch
 
 
 def select_device(explicit_device: str | None) -> torch.device:

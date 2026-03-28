@@ -4,6 +4,7 @@ import argparse
 import json
 from collections import defaultdict
 from dataclasses import asdict, dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +73,9 @@ def _load_world_for_town(client: Any, town: str) -> Any:
     return world
 
 
-def _lane_centerlines_all_map(world_map: Any, *, lane_sampling_m: float) -> list[list[tuple[float, float]]]:
+def _lane_centerlines_all_map(
+    world_map: Any, *, lane_sampling_m: float
+) -> list[list[tuple[float, float]]]:
     grouped: dict[tuple[int, int, int], list[tuple[float, float, float]]] = defaultdict(list)
     for waypoint in world_map.generate_waypoints(lane_sampling_m):
         location = waypoint.transform.location
@@ -101,7 +104,7 @@ def _lane_centerlines_all_map(world_map: Any, *, lane_sampling_m: float) -> list
 def _segments_from_lines(lines: list[list[tuple[float, float]]]) -> list[list[tuple[float, float]]]:
     segments: list[list[tuple[float, float]]] = []
     for line in lines:
-        segments.extend([[start, end] for start, end in zip(line[:-1], line[1:])])
+        segments.extend([[start, end] for start, end in pairwise(line)])
     return segments
 
 
@@ -305,7 +308,15 @@ def _plot_overview(
         ax.set_ylim(min(ys) - 15.0, max(ys) + 15.0)
 
     legend_handles = [
-        Line2D([0], [0], marker="o", color="w", markerfacecolor=PHASE_COLORS[index], markersize=8, label=f"Phase {index + 1}")
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=PHASE_COLORS[index],
+            markersize=8,
+            label=f"Phase {index + 1}",
+        )
         for index in range(min(4, max((actor.phase_index for actor in actors), default=-1) + 1))
     ]
     if legend_handles:

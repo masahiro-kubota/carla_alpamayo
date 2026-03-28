@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.world_model import SceneState
-from learning.libs.ml import PilotNetInferenceRuntime
+
+if TYPE_CHECKING:
+    from learning.libs.ml import PilotNetInferenceRuntime
 
 SteerPolicy = Callable[[SceneState], float]
 LongitudinalPolicy = Callable[[SceneState], tuple[float, float]]
@@ -23,7 +26,9 @@ class PilotNetScenePolicy:
     def __call__(self, scene_state: SceneState) -> float:
         rgb_history = scene_state.metadata.get(self.rgb_history_key)
         if not isinstance(rgb_history, list) or not rgb_history:
-            raise ValueError(f"SceneState.metadata[{self.rgb_history_key!r}] must be a non-empty list of RGB arrays.")
+            raise ValueError(
+                f"SceneState.metadata[{self.rgb_history_key!r}] must be a non-empty list of RGB arrays."
+            )
 
         command = scene_state.metadata.get(self.command_key) or scene_state.route.maneuver
         route_point = scene_state.metadata.get(self.route_point_key)
@@ -70,7 +75,9 @@ class LearnedLateralAgent:
 
     @staticmethod
     def _fallback_longitudinal(scene_state: SceneState) -> tuple[float, float]:
-        target_speed_mps = scene_state.route.target_speed_mps or scene_state.ego.speed_limit_mps or 8.3
+        target_speed_mps = (
+            scene_state.route.target_speed_mps or scene_state.ego.speed_limit_mps or 8.3
+        )
         speed_error = target_speed_mps - scene_state.ego.speed_mps
         if speed_error >= 0.0:
             return min(1.0, speed_error * 0.5), 0.0

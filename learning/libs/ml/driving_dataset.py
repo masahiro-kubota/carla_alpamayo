@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import random
-from typing import Any, Iterable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
-from PIL import Image
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 
 from libs.carla_utils import RouteGeometry, compute_local_target_point
@@ -15,6 +14,10 @@ from libs.project import PROJECT_ROOT
 
 from .commands import command_to_index, normalize_command
 from .preprocessing import preprocess_pil_rgb
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -87,11 +90,21 @@ def load_episode_records(
                         frame_id=int(raw["frame_id"]),
                         route_id=str(raw["route_id"]),
                         command=command_name,
-                        vehicle_x=float(raw["vehicle_x"]) if raw.get("vehicle_x") is not None else None,
-                        vehicle_y=float(raw["vehicle_y"]) if raw.get("vehicle_y") is not None else None,
-                        vehicle_yaw_deg=float(raw["vehicle_yaw_deg"]) if raw.get("vehicle_yaw_deg") is not None else None,
-                        route_target_x=float(raw["route_target_x"]) if raw.get("route_target_x") is not None else None,
-                        route_target_y=float(raw["route_target_y"]) if raw.get("route_target_y") is not None else None,
+                        vehicle_x=float(raw["vehicle_x"])
+                        if raw.get("vehicle_x") is not None
+                        else None,
+                        vehicle_y=float(raw["vehicle_y"])
+                        if raw.get("vehicle_y") is not None
+                        else None,
+                        vehicle_yaw_deg=float(raw["vehicle_yaw_deg"])
+                        if raw.get("vehicle_yaw_deg") is not None
+                        else None,
+                        route_target_x=float(raw["route_target_x"])
+                        if raw.get("route_target_x") is not None
+                        else None,
+                        route_target_y=float(raw["route_target_y"])
+                        if raw.get("route_target_y") is not None
+                        else None,
                     )
                 )
     return frames
@@ -193,7 +206,7 @@ class PilotNetDataset(Dataset[dict[str, Any]]):
         episode_history: dict[str, list[int]] = {}
         for index, frame in enumerate(self.frames):
             history = episode_history.setdefault(frame.episode_id, [])
-            current_stack = (history + [index])[-self.frame_stack :]
+            current_stack = [*history, index][-self.frame_stack :]
             while len(current_stack) < self.frame_stack:
                 current_stack.insert(0, current_stack[0])
             stack_indices.append(current_stack)
@@ -212,14 +225,19 @@ class PilotNetDataset(Dataset[dict[str, Any]]):
     def __getitem__(self, index: int) -> dict[str, Any]:
         frame = self.frames[index]
         image_tensor = torch.cat(
-            [self._load_image_tensor(self.frames[stack_index].image_path) for stack_index in self.stack_indices[index]],
+            [
+                self._load_image_tensor(self.frames[stack_index].image_path)
+                for stack_index in self.stack_indices[index]
+            ],
             dim=0,
         )
         speed_tensor = torch.tensor([frame.speed_mps / self.speed_norm_mps], dtype=torch.float32)
         steer_tensor = torch.tensor([frame.target_steer], dtype=torch.float32)
         command_name = frame.command
         command_weight = self.command_weight_map.get(command_name, 1.0)
-        sample_weight = torch.tensor([(1.0 + 4.0 * abs(frame.target_steer)) * command_weight], dtype=torch.float32)
+        sample_weight = torch.tensor(
+            [(1.0 + 4.0 * abs(frame.target_steer)) * command_weight], dtype=torch.float32
+        )
         route_point_tensor = torch.tensor(
             [
                 frame.route_target_x if frame.route_target_x is not None else 0.0,

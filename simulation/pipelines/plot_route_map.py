@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -167,7 +168,7 @@ def _lane_centerlines_near_route(
 def _segments_from_lines(lines: list[list[tuple[float, float]]]) -> list[list[tuple[float, float]]]:
     segments: list[list[tuple[float, float]]] = []
     for line in lines:
-        segments.extend([[start, end] for start, end in zip(line[:-1], line[1:])])
+        segments.extend([[start, end] for start, end in pairwise(line)])
     return segments
 
 
@@ -221,7 +222,7 @@ def _plot_route(
         )
 
     route_points = list(planned_route.xy_points)
-    route_segments = [[start, end] for start, end in zip(route_points[:-1], route_points[1:])]
+    route_segments = [[start, end] for start, end in pairwise(route_points)]
     if route_segments:
         ax.add_collection(
             LineCollection(
@@ -241,11 +242,15 @@ def _plot_route(
     if anchor_points:
         anchor_xs = [point[0] for point in anchor_points]
         anchor_ys = [point[1] for point in anchor_points]
-        ax.scatter(anchor_xs, anchor_ys, s=32, c="#2563eb", edgecolors="white", linewidths=0.8, zorder=6)
+        ax.scatter(
+            anchor_xs, anchor_ys, s=32, c="#2563eb", edgecolors="white", linewidths=0.8, zorder=6
+        )
         start_x, start_y = anchor_points[0]
-        ax.scatter([start_x], [start_y], s=72, c="#16a34a", edgecolors="white", linewidths=1.0, zorder=7)
+        ax.scatter(
+            [start_x], [start_y], s=72, c="#16a34a", edgecolors="white", linewidths=1.0, zorder=7
+        )
         for anchor_order, ((anchor_x, anchor_y), spawn_index) in enumerate(
-            zip(anchor_points, route_config.anchor_spawn_indices),
+            zip(anchor_points, route_config.anchor_spawn_indices, strict=False),
             start=1,
         ):
             ax.text(

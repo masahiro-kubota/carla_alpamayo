@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime
 from pathlib import Path
-import subprocess
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

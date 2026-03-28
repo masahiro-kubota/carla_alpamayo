@@ -38,7 +38,10 @@ def build_opposing_phase_groups(
     if axis_merge_tolerance_deg < 0.0:
         raise ValueError("axis_merge_tolerance_deg must be non-negative.")
 
-    ordered = sorted(approaches, key=lambda approach: (approach.actor_id, _normalize_heading_deg(approach.heading_deg)))
+    ordered = sorted(
+        approaches,
+        key=lambda approach: (approach.actor_id, _normalize_heading_deg(approach.heading_deg)),
+    )
     axis_clusters: list[tuple[list[float], list[int]]] = []
     for approach in ordered:
         axis_deg = _heading_axis_deg(approach.heading_deg)
@@ -88,7 +91,9 @@ def compute_phase_states(
     if cycle_elapsed_seconds >= len(phase_actor_ids) * phase_window_seconds:
         return {actor_id: "red" for actor_id in all_actor_ids}
 
-    active_phase_index = int(cycle_elapsed_seconds // phase_window_seconds) if phase_window_seconds > 0.0 else 0
+    active_phase_index = (
+        int(cycle_elapsed_seconds // phase_window_seconds) if phase_window_seconds > 0.0 else 0
+    )
     active_phase_elapsed = cycle_elapsed_seconds - (active_phase_index * phase_window_seconds)
     active_state = "green" if active_phase_elapsed < cycle.green_seconds else "yellow"
 

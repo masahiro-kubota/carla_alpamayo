@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
-from math import atan, ceil, degrees
-from pathlib import Path
 import queue
+from dataclasses import asdict, dataclass
+from math import atan, ceil, degrees
 from typing import TYPE_CHECKING, Any
 
 from PIL import Image
@@ -12,6 +11,8 @@ from PIL import Image
 from libs.project import PROJECT_ROOT, relative_to_project
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import carla
 
 
@@ -51,7 +52,7 @@ def _foxglove_xy_to_carla(*, x: float, y: float) -> tuple[float, float]:
 
 
 def _lane_centerlines_all_map(
-    world_map: "carla.Map",
+    world_map: carla.Map,
     *,
     lane_sampling_m: float,
 ) -> list[list[tuple[float, float]]]:
@@ -82,7 +83,7 @@ def _lane_centerlines_all_map(
 
 
 def _compute_topdown_bounds(
-    world_map: "carla.Map",
+    world_map: carla.Map,
     *,
     lane_sampling_m: float,
     padding_m: float,
@@ -99,7 +100,7 @@ def _compute_topdown_bounds(
 
 
 def _capture_rgb_topdown_image(
-    world: "carla.World",
+    world: carla.World,
     *,
     center_x: float,
     center_y: float,
@@ -117,8 +118,8 @@ def _capture_rgb_topdown_image(
     settings.fixed_delta_seconds = original_settings.fixed_delta_seconds or 0.05
     world.apply_settings(settings)
 
-    image_queue: "queue.Queue[carla.Image]" = queue.Queue()
-    sensor: "carla.Sensor | None" = None
+    image_queue: queue.Queue[carla.Image] = queue.Queue()
+    sensor: carla.Sensor | None = None
     try:
         blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
         blueprint.set_attribute("image_size_x", str(width))
@@ -134,7 +135,7 @@ def _capture_rgb_topdown_image(
         sensor = world.spawn_actor(blueprint, transform)
         sensor.listen(image_queue.put)
 
-        image: "carla.Image | None" = None
+        image: carla.Image | None = None
         for _ in range(max(3, warmup_ticks)):
             world.tick()
             image = image_queue.get(timeout=5.0)
@@ -160,7 +161,7 @@ def _capture_rgb_topdown_image(
 
 
 def build_topdown_map_asset(
-    world: "carla.World",
+    world: carla.World,
     *,
     output_image_path: Path,
     output_metadata_path: Path,
@@ -183,7 +184,9 @@ def build_topdown_map_asset(
     span_x = max(1e-6, span_x)
     span_y = max(1e-6, span_y)
     required_fov_x = degrees(2.0 * atan(span_x / (2.0 * camera_height_m)))
-    required_fov_y = degrees(2.0 * atan((span_y * width / max(1, height)) / (2.0 * camera_height_m)))
+    required_fov_y = degrees(
+        2.0 * atan((span_y * width / max(1, height)) / (2.0 * camera_height_m))
+    )
     camera_fov_deg = max(required_fov_x, required_fov_y)
     center_x = (min_x + max_x) / 2.0
     center_y = (min_y + max_y) / 2.0

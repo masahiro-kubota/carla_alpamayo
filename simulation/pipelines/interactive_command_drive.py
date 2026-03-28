@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import select
 import sys
 import termios
 import tty
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ad_stack import InteractiveScenarioSpec, PolicySpec, RunRequest, RuntimeSpec, run
 from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
+
+if TYPE_CHECKING:
+    import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CHECKPOINT_PATH = REPO_ROOT / "outputs" / "train" / "pilotnet_best" / "best.pt"
@@ -28,7 +32,7 @@ class RawKeyboardInput:
         self._fd: int | None = None
         self._old_settings: list | None = None
 
-    def __enter__(self) -> "RawKeyboardInput":
+    def __enter__(self) -> RawKeyboardInput:
         if not sys.stdin.isatty():
             raise SystemExit("interactive_command_drive requires a TTY. Run it from a terminal.")
         self._fd = sys.stdin.fileno()
@@ -53,6 +57,7 @@ class RawKeyboardInput:
                 break
             keys.append(chunk)
         return keys
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -121,6 +126,7 @@ def main() -> None:
 
         print_instructions()
         with RawKeyboardInput() as keyboard:
+
             def command_provider(current_command: str) -> tuple[str, bool]:
                 for key in keyboard.read_keys():
                     normalized_key = key.lower()
@@ -138,9 +144,7 @@ def main() -> None:
                 if preview is not None and not preview.closed:
                     preview.update(rgb_array, status_text)
                     return True
-                if preview is not None and preview.closed:
-                    return False
-                return True
+                return not (preview is not None and preview.closed)
 
             result = run(
                 RunRequest(

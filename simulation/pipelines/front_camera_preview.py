@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
-
-import numpy as np
-from PIL import Image, ImageTk
 import tkinter as tk
+from typing import TYPE_CHECKING
+
+from PIL import Image, ImageTk
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class FrontCameraPreview:

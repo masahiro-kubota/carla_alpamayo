@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from ad_stack.world_model import SceneState
+if TYPE_CHECKING:
+    from ad_stack.world_model import SceneState
 
 
 @dataclass(slots=True)
@@ -14,7 +15,7 @@ class VehicleCommand:
     hand_brake: bool = False
     reverse: bool = False
 
-    def bounded(self) -> "VehicleCommand":
+    def bounded(self) -> VehicleCommand:
         return VehicleCommand(
             steer=max(-1.0, min(1.0, self.steer)),
             throttle=max(0.0, min(1.0, self.throttle)),

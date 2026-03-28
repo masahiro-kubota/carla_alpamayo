@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sys
-
+from pathlib import Path
 
 DEFAULT_CARLA_PYTHONAPI_ROOT = Path("/home/masa/sim/carla-0.9.16/PythonAPI")
 

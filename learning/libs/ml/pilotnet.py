@@ -37,7 +37,9 @@ class PilotNet(nn.Module):
         if image_channels % frame_stack != 0:
             raise ValueError("image_channels must be divisible by frame_stack.")
         self.frame_image_channels = image_channels // frame_stack
-        conv_image_channels = image_channels if temporal_fusion == "flatten" else self.frame_image_channels
+        conv_image_channels = (
+            image_channels if temporal_fusion == "flatten" else self.frame_image_channels
+        )
 
         self.conv = nn.Sequential(
             nn.Conv2d(conv_image_channels, 24, kernel_size=5, stride=2),
@@ -95,7 +97,9 @@ class PilotNet(nn.Module):
             extra_route_dim = 0
         if command_branching:
             if command_vocab_size <= 0:
-                raise ValueError("command_vocab_size must be > 0 when command branching is enabled.")
+                raise ValueError(
+                    "command_vocab_size must be > 0 when command branching is enabled."
+                )
             self.command_embedding = None
             extra_command_dim = 0
         elif command_vocab_size > 0 and command_embedding_dim > 0:
@@ -155,7 +159,12 @@ class PilotNet(nn.Module):
             self.image_width,
         )
         frame_features = self.conv(
-            frame_tensor.reshape(batch_size * self.frame_stack, self.frame_image_channels, self.image_height, self.image_width)
+            frame_tensor.reshape(
+                batch_size * self.frame_stack,
+                self.frame_image_channels,
+                self.image_height,
+                self.image_width,
+            )
         ).flatten(1)
         frame_features = frame_features.reshape(batch_size, self.frame_stack, self.flattened_dim)
         temporal_inputs = self.temporal_input(frame_features)
@@ -187,7 +196,11 @@ class PilotNet(nn.Module):
             if command_index is None:
                 raise ValueError("command_index is required when command branching is enabled.")
             shared_features = self.shared_head(features)
-            outputs = torch.empty((shared_features.shape[0], 1), dtype=shared_features.dtype, device=shared_features.device)
+            outputs = torch.empty(
+                (shared_features.shape[0], 1),
+                dtype=shared_features.dtype,
+                device=shared_features.device,
+            )
             command_ids = command_index.long().view(-1)
             for branch_index, branch_head in enumerate(self.command_heads):
                 mask = command_ids == branch_index
