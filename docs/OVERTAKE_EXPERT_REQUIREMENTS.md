@@ -161,7 +161,96 @@ privileged 情報を完全に捨てる必要はないが、用途を限定する
 - required clear distance
 - reject reason
 
-## 10. 実装順
+## 10. 決める必要があるパラメータ
+
+追い越し expert を実装するには、少なくとも次のパラメータを決める必要がある。
+
+### 10.1 既存 config にすでにあるもの
+
+- `overtake_trigger_distance_m`
+  - 追い越し検討を始める最大距離
+- `overtake_speed_delta_kmh`
+  - 追い越し中にどれだけ速度を上乗せするか
+- `overtake_min_front_gap_m`
+  - 隣接 lane 前方に必要な最小 gap
+- `overtake_min_rear_gap_m`
+  - 隣接 lane 後方に必要な最小 gap
+- `overtake_resume_front_gap_m`
+  - 元 lane に戻るとき、抜いた車に対して必要な前方 gap
+- `overtake_signal_suppression_distance_m`
+  - 信号が近いときに追い越しを抑制する距離
+- `preferred_overtake_direction`
+  - 左優先か右優先か
+- `lane_change_same_lane_distance_m`
+  - lane change 前の準備距離
+- `lane_change_distance_m`
+  - lane change 中の基準距離
+- `lane_change_other_lane_distance_m`
+  - 反対側 lane へ完全に移るための距離
+- `overtake_hold_distance_m`
+  - 抜いた後、すぐ戻らずに保持する距離
+
+### 10.2 追い越し安全判定のために追加で決めるもの
+
+- `overtake_min_lead_speed_kmh`
+  - 追い越し対象とみなす lead vehicle の上限速度
+- `overtake_min_speed_delta_kmh`
+  - ego と lead の速度差がこれ未満なら追い越さない
+- `overtake_max_target_speed_kmh`
+  - 追い越し中でも超えない上限速度
+- `overtake_junction_suppression_distance_m`
+  - junction 近傍では追い越し禁止にする距離
+- `overtake_curve_suppression_curvature`
+  - カーブ区間で追い越し禁止にする閾値
+- `overtake_lane_marking_blocklist`
+  - 追い越しを禁止する lane marking 種別
+
+### 10.3 可視範囲ベース判定のために追加で決めるもの
+
+- `visible_oncoming_corridor_min_m`
+  - 追い越し開始に最低限必要な可視対向 lane 距離
+- `visible_oncoming_corridor_cap_m`
+  - 可視クリア距離の上限
+- `required_clear_distance_margin_m`
+  - 抜き切り距離に上乗せする安全余裕
+- `oncoming_vehicle_time_gap_s`
+  - 対向車が見えているとき、最低限確保したい時間 gap
+- `occlusion_blocking_enabled`
+  - occlusion を見通し不足として扱うかどうか
+- `occlusion_margin_m`
+  - 建物や停止車両の陰をどれだけ保守的に膨らませるか
+
+### 10.4 停止車両回避に特有のもの
+
+- `stopped_obstacle_speed_threshold_mps`
+  - 停止車両とみなす速度閾値
+- `stopped_obstacle_wait_seconds`
+  - 可視条件が満たせないとき、回避を諦めて待つ秒数
+- `stopped_obstacle_bypass_clearance_m`
+  - 停止車両を抜けるときの横余裕
+
+### 10.5 ログに残すべき派生量
+
+- `visible_oncoming_corridor_m`
+- `required_clear_distance_m`
+- `lead_speed_kmh`
+- `relative_speed_kmh`
+- `oncoming_min_distance_m`
+- `oncoming_min_ttc_s`
+- `overtake_reject_reason`
+
+最初の実装では、上の全てを一度に使う必要はない。  
+ただし少なくとも
+
+- `lead が十分遅いか`
+- `信号 / junction が近くないか`
+- `隣接 lane の前後 gap`
+- `visible_oncoming_corridor_m`
+- `required_clear_distance_m`
+
+は決めないと、保守的な追い越し expert にならない。
+
+## 11. 実装順
 
 ### Step 1
 
@@ -184,7 +273,7 @@ privileged 情報を完全に捨てる必要はないが、用途を限定する
 - signal proximity suppression
 - 右左折や交差点近傍を含む保守条件の強化
 
-## 11. 要点
+## 12. 要点
 
 `overtake expert` は
 
