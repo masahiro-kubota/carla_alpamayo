@@ -175,7 +175,7 @@ class RouteLoopScenarioSpec:
 
 expert tuning 用の閾値は、まず `ExpertPolicyConfig` として
 `ad_stack` 内部に閉じるのが自然である。
-CLI からは `--expert-config` で config file を選び、
+run config JSON から `policy.expert_config_path` で config file を選び、
 `environment_config` には ego 側の tuning を持ち込まない。
 
 初期候補は次:

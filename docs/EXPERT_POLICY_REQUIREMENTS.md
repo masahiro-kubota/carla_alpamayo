@@ -251,7 +251,7 @@ Phase 1 の最初の実装対象は `SR-1` から `SR-3` までとし、
 
 ### AC-5: Simulation Integration
 
-- `simulation.pipelines.run_route_loop --policy-kind expert` で expert 実行できる
+- `simulation.pipelines.run_route_loop <run_config.json>` で expert 実行できる
 - 同じ executor を使って benchmark 評価もできる
 - summary に overtake / traffic light 指標が出る
 
