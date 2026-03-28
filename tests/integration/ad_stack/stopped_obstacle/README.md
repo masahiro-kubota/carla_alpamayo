@@ -43,7 +43,7 @@
 - `double_stopped_obstacle`
 - `near_junction_preflight_reject`
 
-は JSON / config まで実装済みです。`double_stopped_obstacle` は legacy な混在 scenario で、`double_stopped_separated` と `double_stopped_clustered` に置き換え済みです。`curve_clear` は runtime 未成立、`adjacent_lane_closed` だけは exact transform の最終確認待ちです。
+は JSON / config まで実装済みです。`double_stopped_obstacle` は legacy な混在 scenario で、`double_stopped_separated` と `double_stopped_clustered` に置き換え済みです。`curve_clear` は runtime 未成立、`adjacent_lane_closed` は scaffold 追加済みで runtime 未確認です。
 
 ## Deferred / Exploratory Scenarios
 
@@ -54,6 +54,8 @@
 
 - [STOPPED_OBSTACLE_LOGIC_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_LOGIC_DESIGN.md)
 - [STOPPED_OBSTACLE_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_TEST_DESIGN.md)
+- [STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md)
+- [STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md)
 
 ## Baseline Regression Set
 
