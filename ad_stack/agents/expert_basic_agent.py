@@ -903,6 +903,11 @@ class ExpertBasicAgent:
                 active_light,
                 current_speed_mps=current_speed_mps,
             )
+            if lead_vehicle is not None and not self.config.ignore_vehicles:
+                # Red-light stopping still needs to respect a stopped or slow lead in the same lane.
+                # Without this cap, the light-stop profile can keep throttle applied until the ego
+                # reaches the stop line even when a stationary obstacle is sitting well before it.
+                target_speed_kmh = min(target_speed_kmh, follow_target_speed_kmh)
         elif (
             lead_vehicle is not None
             and not self.config.ignore_vehicles
