@@ -1,0 +1,20 @@
+{
+  "name": "town01_all_intersections_clear_300s",
+  "town": "Town01",
+  "weather": "ClearNoon",
+  "goal_tolerance_m": 10.0,
+  "max_stop_seconds": 45.0,
+  "stationary_speed_threshold_mps": 0.5,
+  "max_seconds": 300.0,
+  "npc_vehicles": [],
+  "traffic_light_phase_cycle": {
+    "green_seconds": 6.0,
+    "yellow_seconds": 2.0,
+    "all_red_seconds": 1.0,
+    "reset_groups": true,
+    "initial_offset_seconds": 8.0
+  },
+  "traffic_light_overrides": [],
+  "traffic_light_schedules": [],
+  "description": "Five-minute baseline environment with deterministic two-phase traffic lights for Town01 all-intersections smoke and stop-duration checks."
+}
