@@ -12,7 +12,17 @@ PlannerState = Literal[
     "abort_return",
 ]
 PreferredDirection = Literal["left_first", "right_first"]
-ScenarioKind = Literal["clear", "blocked_static", "blocked_oncoming"]
+ScenarioKind = Literal[
+    "clear",
+    "blocked_static",
+    "blocked_oncoming",
+    "signal_suppressed",
+    "rejoin_blocked_then_release",
+    "adjacent_lane_closed",
+    "double_stopped_obstacle",
+    "curve_clear",
+    "near_junction_preflight_reject",
+]
 
 
 @dataclass(slots=True)
@@ -289,12 +299,17 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
         and snapshot.route_target_lane_id != snapshot.ego_lane_id
     ):
         errors.append("route_target_lane_conflict")
-    if snapshot.nearest_signal_distance_m is not None and snapshot.nearest_signal_distance_m < 25.0:
-        warnings.append("signal_nearby")
-    if (
+    signal_nearby = (
+        snapshot.nearest_signal_distance_m is not None
+        and snapshot.nearest_signal_distance_m < 25.0
+    )
+    junction_nearby = (
         snapshot.nearest_junction_distance_m is not None
         and snapshot.nearest_junction_distance_m < 30.0
-    ):
+    )
+    if signal_nearby:
+        warnings.append("signal_nearby")
+    if junction_nearby:
         warnings.append("junction_nearby")
 
     if snapshot.scenario_kind == "blocked_static":
@@ -306,6 +321,16 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
     if snapshot.scenario_kind == "blocked_oncoming":
         if snapshot.blocker_lane_id is None:
             errors.append("oncoming_blocker_missing")
+
+    if snapshot.scenario_kind == "adjacent_lane_closed":
+        if snapshot.left_lane_is_driving or snapshot.right_lane_is_driving:
+            errors.append("adjacent_lane_not_closed")
+
+    if snapshot.scenario_kind == "near_junction_preflight_reject":
+        if signal_nearby:
+            errors.append("signal_nearby")
+        if junction_nearby:
+            errors.append("junction_nearby")
 
     return ScenarioValidationResult(
         scenario_kind=snapshot.scenario_kind,

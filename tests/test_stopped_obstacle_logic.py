@@ -381,6 +381,39 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         self.assertIn("signal_nearby", result.warnings)
         self.assertIn("junction_nearby", result.warnings)
 
+    def test_preflight_rejects_adjacent_lane_closed_when_adjacent_driving_lane_exists(self) -> None:
+        result = validate_preflight(
+            PreflightValidationInput(
+                scenario_kind="adjacent_lane_closed",
+                ego_lane_id="15:-1",
+                obstacle_lane_id="15:-1",
+                ego_to_obstacle_longitudinal_distance_m=20.0,
+                left_lane_is_driving=True,
+                route_target_lane_id="15:-1",
+                route_aligned_adjacent_lane_available=False,
+            )
+        )
+        self.assertFalse(result.is_valid)
+        self.assertIn("adjacent_lane_not_closed", result.errors)
+
+    def test_preflight_invalidates_near_junction_reject_scenario_when_hazard_is_close(self) -> None:
+        result = validate_preflight(
+            PreflightValidationInput(
+                scenario_kind="near_junction_preflight_reject",
+                ego_lane_id="23:-1",
+                obstacle_lane_id="23:-1",
+                ego_to_obstacle_longitudinal_distance_m=20.0,
+                left_lane_is_driving=True,
+                route_target_lane_id="23:-1",
+                nearest_signal_distance_m=18.0,
+                nearest_junction_distance_m=16.0,
+                route_aligned_adjacent_lane_available=True,
+            )
+        )
+        self.assertFalse(result.is_valid)
+        self.assertIn("signal_nearby", result.errors)
+        self.assertIn("junction_nearby", result.errors)
+
 
 if __name__ == "__main__":
     unittest.main()
