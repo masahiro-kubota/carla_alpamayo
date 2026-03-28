@@ -1,0 +1,163 @@
+from __future__ import annotations
+
+import unittest
+from dataclasses import dataclass
+
+from simulation.environment_config import EnvironmentConfigSpec, StoppedObstacleScenarioConfig
+from simulation.stopped_obstacle_scenario_validation import (
+    build_stopped_obstacle_scenario_validation,
+)
+
+
+@dataclass
+class _FakeLocation:
+    x: float
+    y: float
+    z: float = 0.0
+
+    def distance(self, other: "_FakeLocation") -> float:
+        dx = self.x - other.x
+        dy = self.y - other.y
+        dz = self.z - other.z
+        return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+
+@dataclass
+class _FakeRotation:
+    yaw: float = 0.0
+
+
+@dataclass
+class _FakeTransform:
+    location: _FakeLocation
+    rotation: _FakeRotation
+
+
+class _FakeWaypoint:
+    def __init__(
+        self,
+        *,
+        road_id: int,
+        lane_id: int,
+        s: float,
+        location: _FakeLocation,
+        lane_type: str = "Driving",
+        is_junction: bool = False,
+    ) -> None:
+        self.road_id = road_id
+        self.lane_id = lane_id
+        self.s = s
+        self.transform = _FakeTransform(location=location, rotation=_FakeRotation())
+        self.lane_type = lane_type
+        self.is_junction = is_junction
+        self._left_lane: _FakeWaypoint | None = None
+        self._right_lane: _FakeWaypoint | None = None
+
+    def set_left_lane(self, waypoint: "_FakeWaypoint | None") -> None:
+        self._left_lane = waypoint
+
+    def set_right_lane(self, waypoint: "_FakeWaypoint | None") -> None:
+        self._right_lane = waypoint
+
+    def get_left_lane(self) -> "_FakeWaypoint | None":
+        return self._left_lane
+
+    def get_right_lane(self) -> "_FakeWaypoint | None":
+        return self._right_lane
+
+
+class _FakeActor:
+    def __init__(self, actor_id: int, location: _FakeLocation) -> None:
+        self.id = actor_id
+        self._location = location
+
+    def get_location(self) -> _FakeLocation:
+        return self._location
+
+
+class _FakeWorldMap:
+    def __init__(self, mapping: dict[tuple[float, float, float], _FakeWaypoint]) -> None:
+        self._mapping = mapping
+
+    def get_waypoint(self, location: _FakeLocation) -> _FakeWaypoint:
+        return self._mapping[(location.x, location.y, location.z)]
+
+
+class StoppedObstacleScenarioValidationTest(unittest.TestCase):
+    def test_returns_missing_obstacle_actor_when_no_npcs(self) -> None:
+        environment = EnvironmentConfigSpec(
+            name="test",
+            town="Town01",
+            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+        )
+        ego_location = _FakeLocation(0.0, 0.0, 0.0)
+        ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=0.0, location=ego_location)
+        world_map = _FakeWorldMap({(0.0, 0.0, 0.0): ego_waypoint})
+        ego_vehicle = _FakeActor(1, ego_location)
+
+        result = build_stopped_obstacle_scenario_validation(
+            environment_config=environment,
+            world_map=world_map,
+            route_trace=[(ego_waypoint, None)],
+            ego_vehicle=ego_vehicle,
+            npc_actor_refs=[],
+            driving_lane_type="Driving",
+        )
+
+        self.assertEqual(result["errors"], ["obstacle_actor_missing"])
+        self.assertFalse(result["valid"])
+
+    def test_builds_valid_clear_snapshot(self) -> None:
+        ego_location = _FakeLocation(0.0, 0.0, 0.0)
+        obstacle_location = _FakeLocation(10.0, 0.0, 0.0)
+        ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=0.0, location=ego_location)
+        obstacle_waypoint = _FakeWaypoint(
+            road_id=1,
+            lane_id=1,
+            s=10.0,
+            location=obstacle_location,
+        )
+        left_waypoint = _FakeWaypoint(
+            road_id=1,
+            lane_id=-1,
+            s=10.0,
+            location=_FakeLocation(10.0, 3.5, 0.0),
+        )
+        obstacle_waypoint.set_left_lane(left_waypoint)
+        world_map = _FakeWorldMap(
+            {
+                (ego_location.x, ego_location.y, ego_location.z): ego_waypoint,
+                (obstacle_location.x, obstacle_location.y, obstacle_location.z): obstacle_waypoint,
+            }
+        )
+        ego_vehicle = _FakeActor(1, ego_location)
+        obstacle_actor = _FakeActor(201, obstacle_location)
+        environment = EnvironmentConfigSpec(
+            name="clear_case",
+            town="Town01",
+            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+        )
+
+        result = build_stopped_obstacle_scenario_validation(
+            environment_config=environment,
+            world_map=world_map,
+            route_trace=[(ego_waypoint, None), (obstacle_waypoint, None)],
+            ego_vehicle=ego_vehicle,
+            npc_actor_refs=[obstacle_actor],
+            driving_lane_type="Driving",
+        )
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["scenario_kind"], "clear")
+        self.assertEqual(result["snapshot"]["ego_lane_id"], "1:1")
+        self.assertEqual(result["snapshot"]["obstacle_actor_id"], 201)
+        self.assertEqual(result["snapshot"]["obstacle_lane_id"], "1:1")
+        self.assertEqual(result["snapshot"]["route_target_lane_id"], "1:1")
+        self.assertTrue(result["snapshot"]["left_lane_is_driving"])
+        self.assertFalse(result["snapshot"]["right_lane_is_driving"])
+        self.assertAlmostEqual(result["snapshot"]["ego_to_obstacle_longitudinal_distance_m"], 10.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
