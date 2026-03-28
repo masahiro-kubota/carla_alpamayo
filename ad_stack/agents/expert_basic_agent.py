@@ -72,6 +72,7 @@ class ExpertBasicAgentConfig:
     overtake_hold_distance_m: float = 30.0
     overtake_cluster_merge_gap_m: float = 10.0
     overtake_cluster_max_member_speed_mps: float = 0.5
+    stopped_speed_threshold_mps: float = 0.3
 
 
 class ExpertBasicAgent:
