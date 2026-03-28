@@ -98,10 +98,10 @@ class TrafficLightScheduleSpec:
 
 
 @dataclass(slots=True)
-class TrafficLightGroupCycleSpec:
+class TrafficLightPhaseCycleSpec:
     green_seconds: float
     yellow_seconds: float
-    red_seconds: float
+    all_red_seconds: float
     reset_groups: bool = True
     initial_offset_seconds: float = 0.0
 
@@ -122,7 +122,7 @@ class EnvironmentConfigSpec:
     stationary_speed_threshold_mps: float | None = None
     max_seconds: float | None = None
     npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
-    traffic_light_group_cycle: TrafficLightGroupCycleSpec | None = None
+    traffic_light_phase_cycle: TrafficLightPhaseCycleSpec | None = None
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
     traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
     description: str = ""
@@ -255,7 +255,14 @@ def _load_npc_profile(profile_id: str) -> NPCProfileSpec:
 
 def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
     raw = _load_json(path)
-    raw_cycle = raw.get("traffic_light_group_cycle")
+    raw_cycle = raw.get("traffic_light_phase_cycle")
+    if raw_cycle is None:
+        raw_cycle = raw.get("traffic_light_group_cycle")
+    all_red_seconds = None
+    if raw_cycle is not None:
+        all_red_seconds = raw_cycle.get("all_red_seconds")
+        if all_red_seconds is None:
+            all_red_seconds = raw_cycle["red_seconds"]
     return EnvironmentConfigSpec(
         name=str(raw["name"]),
         town=str(raw["town"]),
@@ -278,11 +285,11 @@ def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
             )
             for item in raw.get("npc_vehicles", [])
         ],
-        traffic_light_group_cycle=(
-            TrafficLightGroupCycleSpec(
+        traffic_light_phase_cycle=(
+            TrafficLightPhaseCycleSpec(
                 green_seconds=float(raw_cycle["green_seconds"]),
                 yellow_seconds=float(raw_cycle["yellow_seconds"]),
-                red_seconds=float(raw_cycle["red_seconds"]),
+                all_red_seconds=float(all_red_seconds),
                 reset_groups=bool(raw_cycle.get("reset_groups", True)),
                 initial_offset_seconds=float(raw_cycle.get("initial_offset_seconds", 0.0)),
             )
@@ -392,7 +399,7 @@ def _apply_traffic_light_overrides(
 
 def _apply_traffic_light_group_cycle(
     world: Any,
-    cycle: TrafficLightGroupCycleSpec | None,
+    cycle: TrafficLightPhaseCycleSpec | None,
 ) -> tuple[dict[int, Any], list[TrafficLightPhaseRuntimeGroup]]:
     lights_by_id = _traffic_lights_by_id(world)
     if cycle is None:
@@ -437,7 +444,7 @@ def _apply_derived_traffic_light_group_cycle(
     carla_module: Any,
     lights_by_id: dict[int, Any],
     runtime_groups: list[TrafficLightPhaseRuntimeGroup],
-    cycle: TrafficLightGroupCycleSpec | None,
+    cycle: TrafficLightPhaseCycleSpec | None,
     *,
     elapsed_seconds: float,
     applied_states: dict[int, str],
@@ -449,7 +456,7 @@ def _apply_derived_traffic_light_group_cycle(
     phase_cycle = TrafficLightPhaseCycle(
         green_seconds=float(cycle.green_seconds),
         yellow_seconds=float(cycle.yellow_seconds),
-        red_seconds=float(cycle.red_seconds),
+        all_red_seconds=float(cycle.all_red_seconds),
         initial_offset_seconds=float(cycle.initial_offset_seconds),
     )
     for runtime_group in runtime_groups:
@@ -881,7 +888,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
         lights_by_id, traffic_light_runtime_groups = _apply_traffic_light_group_cycle(
             world,
-            environment_config.traffic_light_group_cycle if environment_config is not None else None,
+            environment_config.traffic_light_phase_cycle if environment_config is not None else None,
         )
         controlled_cycle_actor_ids = {
             actor_id
@@ -892,7 +899,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             carla,
             lights_by_id,
             traffic_light_runtime_groups,
-            environment_config.traffic_light_group_cycle if environment_config is not None else None,
+            environment_config.traffic_light_phase_cycle if environment_config is not None else None,
             elapsed_seconds=0.0,
             applied_states=traffic_light_cycle_states,
             excluded_actor_ids=explicit_traffic_light_actor_ids,
@@ -973,7 +980,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 carla,
                 lights_by_id,
                 traffic_light_runtime_groups,
-                environment_config.traffic_light_group_cycle if environment_config is not None else None,
+                environment_config.traffic_light_phase_cycle if environment_config is not None else None,
                 elapsed_seconds=elapsed_seconds,
                 applied_states=traffic_light_cycle_states,
                 excluded_actor_ids=explicit_traffic_light_actor_ids,

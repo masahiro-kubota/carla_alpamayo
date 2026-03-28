@@ -14,7 +14,7 @@ class TrafficLightApproach:
 class TrafficLightPhaseCycle:
     green_seconds: float
     yellow_seconds: float
-    red_seconds: float
+    all_red_seconds: float
     initial_offset_seconds: float = 0.0
 
 
@@ -74,11 +74,11 @@ def compute_phase_states(
 ) -> dict[int, str]:
     if not phase_actor_ids:
         return {}
-    if cycle.green_seconds < 0.0 or cycle.yellow_seconds < 0.0 or cycle.red_seconds < 0.0:
+    if cycle.green_seconds < 0.0 or cycle.yellow_seconds < 0.0 or cycle.all_red_seconds < 0.0:
         raise ValueError("TrafficLightPhaseCycle durations must be non-negative.")
 
     phase_window_seconds = cycle.green_seconds + cycle.yellow_seconds
-    full_cycle_seconds = (len(phase_actor_ids) * phase_window_seconds) + cycle.red_seconds
+    full_cycle_seconds = (len(phase_actor_ids) * phase_window_seconds) + cycle.all_red_seconds
     if full_cycle_seconds <= 0.0:
         raise ValueError("TrafficLightPhaseCycle must have positive total duration.")
 

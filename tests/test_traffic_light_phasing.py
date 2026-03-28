@@ -56,7 +56,7 @@ class TrafficLightPhasingTests(unittest.TestCase):
 
     def test_compute_phase_states_for_two_phase_cycle(self) -> None:
         phases = [[10, 11], [20]]
-        cycle = TrafficLightPhaseCycle(green_seconds=10.0, yellow_seconds=2.0, red_seconds=6.0)
+        cycle = TrafficLightPhaseCycle(green_seconds=10.0, yellow_seconds=2.0, all_red_seconds=6.0)
 
         self.assertEqual(
             compute_phase_states(phases, elapsed_seconds=0.0, cycle=cycle),
@@ -80,7 +80,7 @@ class TrafficLightPhasingTests(unittest.TestCase):
         cycle = TrafficLightPhaseCycle(
             green_seconds=10.0,
             yellow_seconds=2.0,
-            red_seconds=6.0,
+            all_red_seconds=6.0,
             initial_offset_seconds=12.0,
         )
 
@@ -94,7 +94,7 @@ class TrafficLightPhasingTests(unittest.TestCase):
             compute_phase_states(
                 [[10]],
                 elapsed_seconds=0.0,
-                cycle=TrafficLightPhaseCycle(green_seconds=-1.0, yellow_seconds=0.0, red_seconds=0.0),
+                cycle=TrafficLightPhaseCycle(green_seconds=-1.0, yellow_seconds=0.0, all_red_seconds=0.0),
             )
 
 
