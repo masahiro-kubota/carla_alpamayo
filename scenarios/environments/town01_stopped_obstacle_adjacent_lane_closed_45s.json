@@ -1,0 +1,19 @@
+{
+  "name": "town01_stopped_obstacle_adjacent_lane_closed_45s",
+  "town": "Town01",
+  "max_seconds": 45.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 88,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "stopped_obstacle_scenario": {
+    "scenario_kind": "adjacent_lane_closed",
+    "obstacle_npc_index": 0,
+    "route_aligned_adjacent_lane_available": false
+  },
+  "description": "Candidate Town01 corridor where a stopped obstacle is ahead but the adjacent lane should be treated as unavailable. This asset exists for non-CARLA contract tests and runtime verification remains pending."
+}

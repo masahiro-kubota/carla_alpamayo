@@ -4,13 +4,13 @@
 
 ## Status
 
-- planned
+- implemented_not_verified
 
 現状メモ:
 
-- route 候補は [town01_adjacent_lane_closed_corridor.json](/home/masa/carla_alpamayo/scenarios/routes/town01_adjacent_lane_closed_corridor.json)
-- ただし停止障害物を置く exact transform はまだ未確定
-- `adjacent_lane_closed` だけは CARLA 上で corridor を再確認してから environment / run-config を追加する
+- route は [town01_adjacent_lane_closed_corridor.json](/home/masa/carla_alpamayo/scenarios/routes/town01_adjacent_lane_closed_corridor.json)
+- run-config / environment の scaffold は追加済み
+- ただし停止障害物を置く exact transform と runtime expectation はまだ CARLA 未確認
 
 ## Planned Run Config
 
