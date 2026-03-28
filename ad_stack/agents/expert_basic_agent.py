@@ -341,11 +341,13 @@ class ExpertBasicAgent:
         if not self._overtake_waypoints:
             return None
         vehicle_location = self._vehicle.get_location()
+        # Overtake paths include large lateral shifts. Using the default 3 m acceptance radius lets
+        # the controller skip lane-center waypoints before the ego vehicle has actually settled into
+        # the adjacent lane, which leaves the car straddling the lane boundary during pass/rejoin.
+        acceptance_radius_m = min(1.0, max(0.6, self.config.sampling_resolution_m * 0.4))
         while len(self._overtake_waypoints) > 1:
             next_waypoint = self._overtake_waypoints[0]
-            if vehicle_location.distance(next_waypoint.transform.location) > max(
-                self.config.sampling_resolution_m, 3.0
-            ):
+            if vehicle_location.distance(next_waypoint.transform.location) > acceptance_radius_m:
                 break
             self._overtake_waypoints.popleft()
         return self._overtake_waypoints[0]
