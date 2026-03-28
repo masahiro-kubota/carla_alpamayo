@@ -8,6 +8,8 @@ RUN_CONFIGS=(
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_separated_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_clustered_long_expert.json"
 )
 
 SUMMARY_PATHS=()
@@ -35,16 +37,29 @@ import sys
 from pathlib import Path
 
 summary_paths = [Path(item) for item in sys.argv[1:]]
-if len(summary_paths) != 3:
-    raise SystemExit(f"expected 3 summary paths, got {len(summary_paths)}")
+if len(summary_paths) != 5:
+    raise SystemExit(f"expected 5 summary paths, got {len(summary_paths)}")
 
-clear_summary, blocked_static_summary, blocked_oncoming_summary = [
+(
+    clear_summary,
+    blocked_static_summary,
+    blocked_oncoming_summary,
+    double_stopped_separated_summary,
+    double_stopped_clustered_summary,
+) = [
     json.loads(path.read_text()) for path in summary_paths
 ]
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(message)
+
+def load_manifest(summary: dict) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in Path(summary["manifest_path"]).read_text().splitlines()
+        if line.strip()
+    ]
 
 require(bool(clear_summary["success"]), "clear scenario did not succeed")
 require(clear_summary["collision_count"] == 0, "clear scenario collided")
@@ -79,6 +94,44 @@ require(
 require(
     blocked_oncoming_summary["overtake_success_count"] >= 1,
     "blocked_oncoming never completed overtake",
+)
+
+require(bool(double_stopped_separated_summary["success"]), "double_stopped_separated did not succeed")
+require(double_stopped_separated_summary["collision_count"] == 0, "double_stopped_separated collided")
+require(
+    double_stopped_separated_summary["overtake_attempt_count"] >= 2,
+    "double_stopped_separated never attempted two overtakes",
+)
+require(
+    double_stopped_separated_summary["overtake_success_count"] >= 2,
+    "double_stopped_separated never completed two overtakes",
+)
+separated_manifest = load_manifest(double_stopped_separated_summary)
+separated_targets = [
+    row["overtake_target_actor_id"]
+    for row in separated_manifest
+    if row.get("overtake_target_actor_id") is not None
+]
+require(len(set(separated_targets)) >= 2, "double_stopped_separated never switched target actor")
+
+require(bool(double_stopped_clustered_summary["success"]), "double_stopped_clustered did not succeed")
+require(double_stopped_clustered_summary["collision_count"] == 0, "double_stopped_clustered collided")
+require(
+    double_stopped_clustered_summary["overtake_attempt_count"] >= 1,
+    "double_stopped_clustered never attempted overtake",
+)
+require(
+    double_stopped_clustered_summary["overtake_success_count"] >= 1,
+    "double_stopped_clustered never completed overtake",
+)
+clustered_manifest = load_manifest(double_stopped_clustered_summary)
+require(
+    any(row.get("overtake_target_kind") == "cluster" for row in clustered_manifest),
+    "double_stopped_clustered never reported cluster target kind",
+)
+require(
+    any(len(row.get("overtake_target_member_actor_ids") or []) >= 2 for row in clustered_manifest),
+    "double_stopped_clustered never kept multi-actor cluster members",
 )
 
 print("stopped-obstacle regressions passed")
