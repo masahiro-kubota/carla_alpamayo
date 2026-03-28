@@ -805,6 +805,11 @@ class ExpertBasicAgent:
         target_lane_id = scene_state.route.target_lane_id or scene_state.ego.lane_id
         current_lane_id = scene_state.ego.lane_id
         ego_waypoint = self._map.get_waypoint(self._vehicle.get_location())
+        lane_center_offset_m = (
+            float(self._vehicle.get_location().distance(ego_waypoint.transform.location))
+            if ego_waypoint is not None
+            else None
+        )
         left_front_gap_m, left_rear_gap_m = self._lane_gaps(scene_state.tracked_objects, "left_lane")
         right_front_gap_m, right_rear_gap_m = self._lane_gaps(
             scene_state.tracked_objects, "right_lane"
@@ -864,6 +869,7 @@ class ExpertBasicAgent:
                 and self._overtake_origin_lane_id is not None
                 and current_lane_id == self._overtake_origin_lane_id
                 and self._overtake_state in {"lane_change_back", "abort_return"}
+                and (lane_center_offset_m is None or lane_center_offset_m <= 0.75)
             ):
                 if not self._overtake_aborted:
                     event_flags["event_overtake_success"] = True
@@ -1114,6 +1120,7 @@ class ExpertBasicAgent:
                 "route_progress_index": route_index,
                 "max_route_index": self._max_route_index,
                 "current_lane_id": current_lane_id,
+                "lane_center_offset_m": lane_center_offset_m,
                 "route_target_lane_id": scene_state.route.target_lane_id,
                 "left_lane_open": bool(scene_state.ego.adjacent_lanes_open.get("left", False)),
                 "right_lane_open": bool(scene_state.ego.adjacent_lanes_open.get("right", False)),
