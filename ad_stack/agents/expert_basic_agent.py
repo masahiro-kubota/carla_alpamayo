@@ -255,6 +255,24 @@ class ExpertBasicAgent:
         )
         return _RouteAlignedWaypoint(transform=transform)
 
+    def _interpolate_waypoint(self, start_waypoint: Any, end_waypoint: Any, alpha: float) -> Any:
+        start_location = start_waypoint.transform.location
+        end_location = end_waypoint.transform.location
+        rotation = start_waypoint.transform.rotation
+        transform = self._carla.Transform(
+            self._carla.Location(
+                x=(start_location.x * (1.0 - alpha)) + (end_location.x * alpha),
+                y=(start_location.y * (1.0 - alpha)) + (end_location.y * alpha),
+                z=(start_location.z * (1.0 - alpha)) + (end_location.z * alpha),
+            ),
+            self._carla.Rotation(
+                pitch=rotation.pitch,
+                yaw=rotation.yaw,
+                roll=rotation.roll,
+            ),
+        )
+        return _RouteAlignedWaypoint(transform=transform)
+
     def _build_route_aligned_lane_samples(
         self,
         *,
@@ -320,16 +338,50 @@ class ExpertBasicAgent:
 
         return origin_samples, target_samples, waypoint_lookup, target_lane_id
 
-    @staticmethod
-    def _materialize_plan_waypoints(
-        plan_points: list[LaneChangePlanPoint],
+    def _materialize_lane_change_waypoints(
+        self,
+        *,
+        start_samples: list[LaneChangePlanPoint],
+        destination_samples: list[LaneChangePlanPoint],
         waypoint_lookup: dict[tuple[int, str], Any],
+        distance_same_lane_m: float,
+        lane_change_distance_m: float,
+        distance_other_lane_m: float,
     ) -> list[Any]:
+        if not start_samples or not destination_samples:
+            return []
+
+        start_progress_m = start_samples[0].progress_m
+        same_lane_end_m = start_progress_m + distance_same_lane_m
+        lane_change_end_m = same_lane_end_m + lane_change_distance_m
+        destination_lane_end_m = lane_change_end_m + distance_other_lane_m
+        destination_by_route_index = {sample.route_index: sample for sample in destination_samples}
         materialized: list[Any] = []
-        for point in plan_points:
-            waypoint = waypoint_lookup.get((point.route_index, point.lane_id))
-            if waypoint is None:
+        for point in start_samples:
+            if point.progress_m > destination_lane_end_m + 1e-6:
+                break
+            start_waypoint = waypoint_lookup.get((point.route_index, point.lane_id))
+            if start_waypoint is None:
                 continue
+
+            destination_point = destination_by_route_index.get(point.route_index)
+            destination_waypoint = (
+                waypoint_lookup.get((destination_point.route_index, destination_point.lane_id))
+                if destination_point is not None
+                else None
+            )
+            if point.progress_m <= same_lane_end_m + 1e-6 or destination_waypoint is None:
+                waypoint = start_waypoint
+            elif point.progress_m < lane_change_end_m - 1e-6:
+                alpha = (point.progress_m - same_lane_end_m) / max(lane_change_distance_m, 1e-6)
+                waypoint = self._interpolate_waypoint(
+                    start_waypoint,
+                    destination_waypoint,
+                    max(0.0, min(1.0, alpha)),
+                )
+            else:
+                waypoint = destination_waypoint
+
             if materialized:
                 tail_location = materialized[-1].transform.location
                 if tail_location.distance(waypoint.transform.location) <= 0.05:
@@ -381,50 +433,27 @@ class ExpertBasicAgent:
             self._lane_change_path_failure_reason = lane_change_plan.failure_reason
             return False
 
-        lane_change_end_progress_m = lane_change_plan.points[-1].progress_m
-        target_tail = [
-            sample
-            for sample in target_samples
-            if sample.progress_m >= lane_change_end_progress_m - 1e-6
-        ]
-        origin_tail = [
-            sample
-            for sample in origin_samples
-            if sample.progress_m >= lane_change_end_progress_m - 1e-6
-        ]
-        rejoin_plan = build_route_aligned_lane_change_plan(
-            target_tail,
-            origin_tail,
-            distance_same_lane_m=0.0,
-            lane_change_distance_m=self.config.lane_change_distance_m,
-            distance_other_lane_m=max(self.config.sampling_resolution_m, 0.1),
+        lane_change_end_m = (
+            origin_samples[0].progress_m
+            + self.config.lane_change_same_lane_distance_m
+            + self.config.lane_change_distance_m
         )
-        if not rejoin_plan.available:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = rejoin_plan.failure_reason
-            return False
-
-        materialized = self._materialize_plan_waypoints(
-            lane_change_plan.points + rejoin_plan.points[1:],
-            waypoint_lookup,
+        target_lane_follow_distance_m = max(
+            self.config.overtake_hold_distance_m,
+            target_samples[-1].progress_m - lane_change_end_m,
+        )
+        materialized = self._materialize_lane_change_waypoints(
+            start_samples=origin_samples,
+            destination_samples=target_samples,
+            waypoint_lookup=waypoint_lookup,
+            distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
+            lane_change_distance_m=self.config.lane_change_distance_m,
+            distance_other_lane_m=target_lane_follow_distance_m,
         )
         if not materialized:
             self._lane_change_path_available = False
             self._lane_change_path_failure_reason = "lane_change_materialization_failed"
             return False
-
-        last_route_index = (
-            rejoin_plan.points[-1].route_index
-            if rejoin_plan.points
-            else lane_change_plan.points[-1].route_index
-        )
-        trace_resume_index = min(self._route_trace_index(last_route_index) + 1, len(self._base_trace) - 1)
-        for waypoint, _option in self._base_trace[trace_resume_index:]:
-            if materialized:
-                tail_location = materialized[-1].transform.location
-                if tail_location.distance(waypoint.transform.location) <= 0.05:
-                    continue
-            materialized.append(self._route_aligned_waypoint(waypoint, waypoint))
 
         self._overtake_waypoints = deque(materialized)
         self._overtake_target_lane_id = target_lane_id
@@ -569,20 +598,23 @@ class ExpertBasicAgent:
             self._lane_change_path_failure_reason = rejoin_plan.failure_reason
             return False
 
-        materialized = self._materialize_plan_waypoints(rejoin_plan.points, waypoint_lookup)
+        lane_change_end_m = target_samples[0].progress_m + self.config.lane_change_distance_m
+        origin_lane_follow_distance_m = max(
+            self.config.sampling_resolution_m,
+            origin_samples[-1].progress_m - lane_change_end_m,
+        )
+        materialized = self._materialize_lane_change_waypoints(
+            start_samples=target_samples,
+            destination_samples=origin_samples,
+            waypoint_lookup=waypoint_lookup,
+            distance_same_lane_m=0.0,
+            lane_change_distance_m=self.config.lane_change_distance_m,
+            distance_other_lane_m=origin_lane_follow_distance_m,
+        )
         if not materialized:
             self._lane_change_path_available = False
             self._lane_change_path_failure_reason = "rejoin_materialization_failed"
             return False
-
-        last_route_index = rejoin_plan.points[-1].route_index
-        trace_resume_index = min(self._route_trace_index(last_route_index) + 1, len(self._base_trace) - 1)
-        for waypoint, _option in self._base_trace[trace_resume_index:]:
-            if materialized:
-                tail_location = materialized[-1].transform.location
-                if tail_location.distance(waypoint.transform.location) <= 0.05:
-                    continue
-            materialized.append(self._route_aligned_waypoint(waypoint, waypoint))
 
         self._overtake_waypoints = deque(materialized)
         self._overtake_target_lane_id = self._overtake_origin_lane_id
