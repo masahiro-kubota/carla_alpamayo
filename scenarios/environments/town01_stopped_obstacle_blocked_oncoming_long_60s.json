@@ -14,6 +14,12 @@
       "lane_behavior": "keep_lane"
     }
   ],
+  "stopped_obstacle_scenario": {
+    "scenario_kind": "blocked_oncoming",
+    "obstacle_npc_index": 0,
+    "blocker_npc_index": 1,
+    "route_aligned_adjacent_lane_available": true
+  },
   "traffic_light_overrides": [],
   "description": "Town01 northbound stopped-obstacle blocked-oncoming scenario on the long road-15 straight. A single stationary obstacle is in ego's lane while an oncoming vehicle approaches in the opposite lane, forcing the expert to wait for a safe rejoin gap before bypassing."
 }

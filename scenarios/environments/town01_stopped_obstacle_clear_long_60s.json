@@ -9,6 +9,11 @@
       "lane_behavior": "keep_lane"
     }
   ],
+  "stopped_obstacle_scenario": {
+    "scenario_kind": "clear",
+    "obstacle_npc_index": 0,
+    "route_aligned_adjacent_lane_available": true
+  },
   "traffic_light_overrides": [],
   "description": "Town01 northbound stopped-obstacle clear scenario on the long road-15 straight. A single stationary obstacle is placed far ahead in ego's lane to provide enough runway for lane change, pass, and rejoin. Use with town01_northbound_overtake_long and stopped_obstacle_dev expert config."
 }
