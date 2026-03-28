@@ -1,24 +1,28 @@
 from __future__ import annotations
 
-from base64 import b64encode
-from dataclasses import dataclass
 import io
 import json
+from base64 import b64encode
+from dataclasses import dataclass
 from math import cos, radians, sin, tan
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mcap.writer import CompressionType, Writer
 from PIL import Image
 
-from libs.carla_utils.map_raster import TopdownMapAsset
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from libs.carla_utils.map_raster import TopdownMapAsset
 
 
 def _carla_point_to_foxglove(*, x: float, y: float, z: float) -> dict[str, float]:
     return {"x": float(x), "y": float(-y), "z": float(z)}
 
 
-def _carla_rpy_to_foxglove(*, roll_deg: float, pitch_deg: float, yaw_deg: float) -> tuple[float, float, float]:
+def _carla_rpy_to_foxglove(
+    *, roll_deg: float, pitch_deg: float, yaw_deg: float
+) -> tuple[float, float, float]:
     return float(roll_deg), float(-pitch_deg), float(-yaw_deg)
 
 
@@ -59,7 +63,17 @@ _FOXGLOVE_CAMERA_CALIBRATION_SCHEMA = {
         "R": {"type": "array", "items": {"type": "number"}, "minItems": 9, "maxItems": 9},
         "P": {"type": "array", "items": {"type": "number"}, "minItems": 12, "maxItems": 12},
     },
-    "required": ["timestamp", "frame_id", "width", "height", "distortion_model", "D", "K", "R", "P"],
+    "required": [
+        "timestamp",
+        "frame_id",
+        "width",
+        "height",
+        "distortion_model",
+        "D",
+        "K",
+        "R",
+        "P",
+    ],
     "additionalProperties": False,
 }
 
@@ -163,6 +177,51 @@ _EGO_PLANNING_JSON_SCHEMA = {
     "additionalProperties": False,
 }
 
+_EGO_PLANNING_DEBUG_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "episode_id": {"type": "string"},
+        "frame_id": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"},
+        "planner_state": {"type": ["string", "null"]},
+        "current_lane_id": {"type": ["string", "null"]},
+        "route_target_lane_id": {"type": ["string", "null"]},
+        "target_lane_id": {"type": ["string", "null"]},
+        "left_lane_open": {"type": ["boolean", "null"]},
+        "right_lane_open": {"type": ["boolean", "null"]},
+        "target_speed_kmh": {"type": ["number", "null"]},
+        "lead_vehicle_id": {"type": ["integer", "null"]},
+        "lead_vehicle_distance_m": {"type": ["number", "null"]},
+        "lead_vehicle_speed_mps": {"type": ["number", "null"]},
+        "lead_vehicle_relative_speed_mps": {"type": ["number", "null"]},
+        "traffic_light_actor_id": {"type": ["integer", "null"]},
+        "traffic_light_state": {"type": ["string", "null"]},
+        "traffic_light_distance_m": {"type": ["number", "null"]},
+        "traffic_light_stop_line_distance_m": {"type": ["number", "null"]},
+        "traffic_light_stop_target_distance_m": {"type": ["number", "null"]},
+        "traffic_light_red_latched": {"type": ["boolean", "null"]},
+        "traffic_light_violation": {"type": ["boolean", "null"]},
+        "overtake_state": {"type": ["string", "null"]},
+        "overtake_direction": {"type": ["string", "null"]},
+        "overtake_target_lane_id": {"type": ["string", "null"]},
+        "min_ttc": {"type": ["number", "null"]},
+        "emergency_stop": {"type": ["boolean", "null"]},
+        "event_traffic_light_stop": {"type": ["boolean", "null"]},
+        "event_traffic_light_resume": {"type": ["boolean", "null"]},
+        "event_car_follow_start": {"type": ["boolean", "null"]},
+        "event_overtake_attempt": {"type": ["boolean", "null"]},
+        "event_overtake_success": {"type": ["boolean", "null"]},
+        "event_overtake_abort": {"type": ["boolean", "null"]},
+        "event_unsafe_lane_change_reject": {"type": ["boolean", "null"]},
+        "route_progress_index": {"type": ["integer", "null"]},
+        "max_route_index": {"type": ["integer", "null"]},
+        "remaining_waypoints": {"type": ["integer", "null"]},
+    },
+    "required": ["timestamp", "episode_id", "frame_id", "elapsed_seconds"],
+    "additionalProperties": True,
+}
+
 _NPC_VEHICLE_STATES_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -179,7 +238,11 @@ _NPC_VEHICLE_STATES_JSON_SCHEMA = {
                     "type_id": {"type": ["string", "null"]},
                     "spawn_index": {"type": ["integer", "null"]},
                     "target_speed_kmh": {"type": ["number", "null"]},
+                    "npc_profile_id": {"type": ["string", "null"]},
+                    "lane_behavior": {"type": ["string", "null"]},
+                    "autopilot_enabled": {"type": ["boolean", "null"]},
                     "speed_mps": {"type": "number"},
+                    "lane_id": {"type": ["string", "null"]},
                     "pose": {
                         "type": "object",
                         "properties": {
@@ -193,8 +256,30 @@ _NPC_VEHICLE_STATES_JSON_SCHEMA = {
                         "required": ["x", "y", "z", "yaw_deg", "pitch_deg", "roll_deg"],
                         "additionalProperties": False,
                     },
+                    "size": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z"],
+                        "additionalProperties": False,
+                    },
                 },
-                "required": ["actor_id", "type_id", "spawn_index", "target_speed_kmh", "speed_mps", "pose"],
+                "required": [
+                    "actor_id",
+                    "type_id",
+                    "spawn_index",
+                    "target_speed_kmh",
+                    "npc_profile_id",
+                    "lane_behavior",
+                    "autopilot_enabled",
+                    "speed_mps",
+                    "lane_id",
+                    "pose",
+                    "size",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -365,7 +450,14 @@ _FOXGLOVE_SCENE_UPDATE_SCHEMA = {
                                     "items": {"type": "integer"},
                                 },
                             },
-                            "required": ["type", "pose", "thickness", "scale_invariant", "points", "color"],
+                            "required": [
+                                "type",
+                                "pose",
+                                "thickness",
+                                "scale_invariant",
+                                "points",
+                                "color",
+                            ],
                             "additionalProperties": False,
                         },
                     },
@@ -412,7 +504,13 @@ _FOXGLOVE_FRAME_TRANSFORMS_SCHEMA = {
                         "additionalProperties": False,
                     },
                 },
-                "required": ["timestamp", "parent_frame_id", "child_frame_id", "translation", "rotation"],
+                "required": [
+                    "timestamp",
+                    "parent_frame_id",
+                    "child_frame_id",
+                    "translation",
+                    "rotation",
+                ],
                 "additionalProperties": False,
             },
         }
@@ -440,6 +538,7 @@ class EgoStateSample:
     min_ttc: float | None
     pose: dict[str, float]
     control: dict[str, float]
+    planning_debug: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -448,8 +547,13 @@ class NPCVehicleStateSample:
     type_id: str | None
     spawn_index: int | None
     target_speed_kmh: float | None
+    npc_profile_id: str | None
+    lane_behavior: str | None
+    autopilot_enabled: bool | None
     speed_mps: float
+    lane_id: str | None
     pose: dict[str, float]
+    size: dict[str, float]
 
 
 @dataclass(slots=True)
@@ -470,7 +574,9 @@ def _foxglove_time(timestamp_s: float) -> dict[str, int]:
     return {"sec": sec, "nsec": nsec}
 
 
-def _euler_degrees_to_quaternion(*, roll_deg: float, pitch_deg: float, yaw_deg: float) -> dict[str, float]:
+def _euler_degrees_to_quaternion(
+    *, roll_deg: float, pitch_deg: float, yaw_deg: float
+) -> dict[str, float]:
     roll = radians(roll_deg)
     pitch = radians(pitch_deg)
     yaw = radians(yaw_deg)
@@ -525,7 +631,9 @@ class RouteLoopMcapWriter:
         camera_calibration_schema_id = self._writer.register_schema(
             name="foxglove.CameraCalibration",
             encoding="jsonschema",
-            data=json.dumps(_FOXGLOVE_CAMERA_CALIBRATION_SCHEMA, ensure_ascii=False).encode("utf-8"),
+            data=json.dumps(_FOXGLOVE_CAMERA_CALIBRATION_SCHEMA, ensure_ascii=False).encode(
+                "utf-8"
+            ),
         )
         frame_transforms_schema_id = self._writer.register_schema(
             name="foxglove.FrameTransforms",
@@ -546,6 +654,11 @@ class RouteLoopMcapWriter:
             name="carla_alpamayo.EgoPlanning",
             encoding="jsonschema",
             data=json.dumps(_EGO_PLANNING_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
+        ego_planning_debug_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.EgoPlanningDebug",
+            encoding="jsonschema",
+            data=json.dumps(_EGO_PLANNING_DEBUG_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
         npc_vehicle_states_schema_id = self._writer.register_schema(
             name="carla_alpamayo.NpcVehicleStates",
@@ -576,6 +689,12 @@ class RouteLoopMcapWriter:
             schema_id=scene_update_schema_id,
             metadata={"frame_id": "ego/base_link"},
         )
+        self._npc_marker_channel_id = self._writer.register_channel(
+            topic="/world/npc_markers",
+            message_encoding="json",
+            schema_id=scene_update_schema_id,
+            metadata={"frame_id": "map"},
+        )
         self._topdown_image_channel_id = self._writer.register_channel(
             topic="/map/topdown/compressed",
             message_encoding="json",
@@ -605,6 +724,11 @@ class RouteLoopMcapWriter:
             topic="/ego/planning",
             message_encoding="json",
             schema_id=ego_planning_schema_id,
+        )
+        self._ego_planning_debug_channel_id = self._writer.register_channel(
+            topic="/ego/planning_debug",
+            message_encoding="json",
+            schema_id=ego_planning_debug_schema_id,
         )
         self._npc_vehicle_states_channel_id = self._writer.register_channel(
             topic="/world/npc_vehicles",
@@ -656,17 +780,21 @@ class RouteLoopMcapWriter:
             if len(line) >= 2
         ]
 
-        route_lines = [
-            {
-                "type": 0,
-                "pose": identity_pose,
-                "thickness": 0.3,
-                "scale_invariant": False,
-                "points": [_carla_point_to_foxglove(x=x, y=y, z=z) for x, y, z in route_points],
-                "color": {"r": 0.08, "g": 0.72, "b": 1.0, "a": 0.95},
-                "indices": [],
-            }
-        ] if len(route_points) >= 2 else []
+        route_lines = (
+            [
+                {
+                    "type": 0,
+                    "pose": identity_pose,
+                    "thickness": 0.3,
+                    "scale_invariant": False,
+                    "points": [_carla_point_to_foxglove(x=x, y=y, z=z) for x, y, z in route_points],
+                    "color": {"r": 0.08, "g": 0.72, "b": 1.0, "a": 0.95},
+                    "indices": [],
+                }
+            ]
+            if len(route_points) >= 2
+            else []
+        )
 
         scene_update = {
             "deletions": [],
@@ -702,7 +830,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=0,
-            data=json.dumps(scene_update, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(scene_update, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         if self._topdown_map_asset is not None:
@@ -726,7 +856,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=0,
-            data=json.dumps(image_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(image_message, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         if asset.camera_fov_deg > 0.0:
@@ -753,7 +885,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=0,
-            data=json.dumps(calibration_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(calibration_message, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         topdown_transform = {
@@ -781,7 +915,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=0,
-            data=json.dumps(topdown_transform, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(topdown_transform, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
     def write_frame(
@@ -814,7 +950,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(compressed_image, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(compressed_image, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         base_link_orientation = _euler_degrees_to_quaternion(
@@ -854,7 +992,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(frame_transforms, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(frame_transforms, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         ego_marker_message = {
@@ -887,7 +1027,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(ego_marker_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(ego_marker_message, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         ego_state_message = {
@@ -912,7 +1054,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(ego_state_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(ego_state_message, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         ego_control_message = {
@@ -929,7 +1073,9 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(ego_control_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(ego_control_message, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
 
         ego_planning_message = {
@@ -949,8 +1095,28 @@ class RouteLoopMcapWriter:
             log_time=log_time_ns,
             publish_time=log_time_ns,
             sequence=ego_state.frame_id,
-            data=json.dumps(ego_planning_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(ego_planning_message, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            ),
         )
+
+        if ego_state.planning_debug is not None:
+            ego_planning_debug_message = {
+                "timestamp": timestamp,
+                "episode_id": ego_state.episode_id,
+                "frame_id": ego_state.frame_id,
+                "elapsed_seconds": ego_state.elapsed_seconds,
+                **ego_state.planning_debug,
+            }
+            self._writer.add_message(
+                channel_id=self._ego_planning_debug_channel_id,
+                log_time=log_time_ns,
+                publish_time=log_time_ns,
+                sequence=ego_state.frame_id,
+                data=json.dumps(
+                    ego_planning_debug_message, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
+            )
 
         if npc_vehicle_states is not None:
             npc_vehicle_states_message = {
@@ -964,7 +1130,11 @@ class RouteLoopMcapWriter:
                         "type_id": vehicle.type_id,
                         "spawn_index": vehicle.spawn_index,
                         "target_speed_kmh": vehicle.target_speed_kmh,
+                        "npc_profile_id": vehicle.npc_profile_id,
+                        "lane_behavior": vehicle.lane_behavior,
+                        "autopilot_enabled": vehicle.autopilot_enabled,
                         "speed_mps": float(vehicle.speed_mps),
+                        "lane_id": vehicle.lane_id,
                         "pose": {
                             "x": float(vehicle.pose["x"]),
                             "y": float(vehicle.pose["y"]),
@@ -972,6 +1142,11 @@ class RouteLoopMcapWriter:
                             "yaw_deg": float(vehicle.pose["yaw_deg"]),
                             "pitch_deg": float(vehicle.pose["pitch_deg"]),
                             "roll_deg": float(vehicle.pose["roll_deg"]),
+                        },
+                        "size": {
+                            "x": float(vehicle.size["x"]),
+                            "y": float(vehicle.size["y"]),
+                            "z": float(vehicle.size["z"]),
                         },
                     }
                     for vehicle in npc_vehicle_states
@@ -982,7 +1157,68 @@ class RouteLoopMcapWriter:
                 log_time=log_time_ns,
                 publish_time=log_time_ns,
                 sequence=ego_state.frame_id,
-                data=json.dumps(npc_vehicle_states_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                data=json.dumps(
+                    npc_vehicle_states_message, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
+            )
+
+            npc_marker_message = {
+                "deletions": [],
+                "entities": [
+                    {
+                        "timestamp": timestamp,
+                        "frame_id": "map",
+                        "id": f"npc_vehicle_{vehicle.actor_id}",
+                        "lifetime": {"sec": 0, "nsec": 0},
+                        "frame_locked": True,
+                        "metadata": [
+                            {"key": "kind", "value": "npc_vehicle_marker"},
+                            {"key": "actor_id", "value": str(vehicle.actor_id)},
+                            {"key": "type_id", "value": vehicle.type_id or ""},
+                            {"key": "lane_id", "value": vehicle.lane_id or ""},
+                            {"key": "npc_profile_id", "value": vehicle.npc_profile_id or ""},
+                        ],
+                        "cubes": [
+                            {
+                                "pose": {
+                                    "position": _carla_point_to_foxglove(
+                                        x=float(vehicle.pose["x"]),
+                                        y=float(vehicle.pose["y"]),
+                                        z=float(vehicle.pose["z"] + (vehicle.size["z"] * 0.5)),
+                                    ),
+                                    "orientation": _euler_degrees_to_quaternion(
+                                        roll_deg=vehicle.pose["roll_deg"],
+                                        pitch_deg=vehicle.pose["pitch_deg"],
+                                        yaw_deg=vehicle.pose["yaw_deg"],
+                                    ),
+                                },
+                                "size": {
+                                    "x": float(vehicle.size["x"]),
+                                    "y": float(vehicle.size["y"]),
+                                    "z": float(vehicle.size["z"]),
+                                },
+                                "color": (
+                                    {"r": 0.92, "g": 0.26, "b": 0.18, "a": 0.9}
+                                    if (
+                                        vehicle.autopilot_enabled is False
+                                        or vehicle.speed_mps <= 0.25
+                                    )
+                                    else {"r": 0.32, "g": 0.62, "b": 0.92, "a": 0.75}
+                                ),
+                            }
+                        ],
+                    }
+                    for vehicle in npc_vehicle_states
+                ],
+            }
+            self._writer.add_message(
+                channel_id=self._npc_marker_channel_id,
+                log_time=log_time_ns,
+                publish_time=log_time_ns,
+                sequence=ego_state.frame_id,
+                data=json.dumps(
+                    npc_marker_message, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
             )
 
     def close(self) -> None:
@@ -1075,7 +1311,9 @@ class RotatingRouteLoopMcapWriter:
         }
         self.index_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-    def _open_segment(self, *, segment_index: int, timestamp_s: float, elapsed_seconds: float) -> None:
+    def _open_segment(
+        self, *, segment_index: int, timestamp_s: float, elapsed_seconds: float
+    ) -> None:
         path = self._segment_path(segment_index)
         self._current_writer = RouteLoopMcapWriter(
             path=path,

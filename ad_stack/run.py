@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
-from math import inf
-from pathlib import Path
 import queue
 import random
 import tempfile
-from typing import Any, Callable, Literal
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from math import inf
+from pathlib import Path
+from typing import Any, Literal
 
 from ad_stack.api import (
     create_expert_collector_stack,
@@ -20,9 +21,9 @@ from libs.carla_utils import (
     FrameEventTracker,
     attach_sensor,
     build_planned_route,
-    load_default_topdown_map_asset,
     destroy_actors,
     ensure_carla_agents_on_path,
+    load_default_topdown_map_asset,
     load_route_config,
     relative_to_project,
     require_blueprint,
@@ -243,6 +244,12 @@ def _relative_or_none(path: Path | None) -> str | None:
     return relative_to_project(path)
 
 
+def _lane_id(waypoint: Any | None) -> str | None:
+    if waypoint is None:
+        return None
+    return f"{waypoint.road_id}:{waypoint.lane_id}"
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -273,8 +280,12 @@ def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
         name=str(raw["name"]),
         town=str(raw["town"]),
         weather=str(raw["weather"]) if raw.get("weather") is not None else None,
-        goal_tolerance_m=float(raw["goal_tolerance_m"]) if raw.get("goal_tolerance_m") is not None else None,
-        max_stop_seconds=float(raw["max_stop_seconds"]) if raw.get("max_stop_seconds") is not None else None,
+        goal_tolerance_m=float(raw["goal_tolerance_m"])
+        if raw.get("goal_tolerance_m") is not None
+        else None,
+        max_stop_seconds=float(raw["max_stop_seconds"])
+        if raw.get("max_stop_seconds") is not None
+        else None,
         stationary_speed_threshold_mps=(
             float(raw["stationary_speed_threshold_mps"])
             if raw.get("stationary_speed_threshold_mps") is not None
@@ -285,7 +296,9 @@ def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
             NPCVehicleSpec(
                 spawn_index=int(item["spawn_index"]),
                 npc_profile_id=str(item["npc_profile_id"]) if item.get("npc_profile_id") else None,
-                target_speed_kmh=float(item["target_speed_kmh"]) if item.get("target_speed_kmh") is not None else None,
+                target_speed_kmh=float(item["target_speed_kmh"])
+                if item.get("target_speed_kmh") is not None
+                else None,
                 lane_behavior=str(item.get("lane_behavior", "keep_lane")),
                 vehicle_filter=str(item.get("vehicle_filter", "vehicle.*")),
             )
@@ -331,7 +344,9 @@ def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
     )
 
 
-def _resolved_npc_speed_kmh(spec: NPCVehicleSpec, profile: NPCProfileSpec | None, rng: random.Random) -> float:
+def _resolved_npc_speed_kmh(
+    spec: NPCVehicleSpec, profile: NPCProfileSpec | None, rng: random.Random
+) -> float:
     if spec.target_speed_kmh is not None:
         return float(spec.target_speed_kmh)
     if profile is None:
@@ -369,7 +384,9 @@ def _traffic_lights_by_id(world: Any) -> dict[int, Any]:
     return {int(actor.id): actor for actor in world.get_actors().filter("*traffic_light*")}
 
 
-def _set_traffic_light_state(carla_module: Any, traffic_light: Any, *, state_name: str, freeze: bool) -> None:
+def _set_traffic_light_state(
+    carla_module: Any, traffic_light: Any, *, state_name: str, freeze: bool
+) -> None:
     state_map = {
         "red": carla_module.TrafficLightState.Red,
         "yellow": carla_module.TrafficLightState.Yellow,
@@ -393,7 +410,9 @@ def _apply_traffic_light_overrides(
     for override in overrides:
         traffic_light = lights_by_id.get(override.actor_id)
         if traffic_light is None:
-            raise RuntimeError(f"Traffic light actor_id={override.actor_id} not found for override.")
+            raise RuntimeError(
+                f"Traffic light actor_id={override.actor_id} not found for override."
+            )
         _set_traffic_light_state(
             carla_module,
             traffic_light,
@@ -502,7 +521,9 @@ def _apply_traffic_light_schedules(
     for schedule in schedules:
         traffic_light = lights_by_id.get(schedule.actor_id)
         if traffic_light is None:
-            raise RuntimeError(f"Traffic light actor_id={schedule.actor_id} not found for schedule.")
+            raise RuntimeError(
+                f"Traffic light actor_id={schedule.actor_id} not found for schedule."
+            )
         latest_index = -1
         for phase_index, phase in enumerate(schedule.phases):
             if phase.at_seconds <= elapsed_seconds:
@@ -525,6 +546,7 @@ def _apply_traffic_light_schedules(
 
 def _spawn_npc_vehicles(
     *,
+    carla_module: Any,
     client: Any,
     world: Any,
     runtime: RuntimeSpec,
@@ -547,10 +569,12 @@ def _spawn_npc_vehicles(
         profile = _load_npc_profile(npc_spec.npc_profile_id) if npc_spec.npc_profile_id else None
         desired_speed_kmh = _resolved_npc_speed_kmh(npc_spec, profile, rng)
         blueprint = require_blueprint(world, npc_spec.vehicle_filter, rng=rng)
-        blueprint.set_attribute("role_name", "autopilot")
+        blueprint.set_attribute("role_name", "npc")
         actor = world.try_spawn_actor(blueprint, spawn_points[npc_spec.spawn_index])
         if actor is None:
-            raise RuntimeError(f"Failed to spawn NPC vehicle at spawn index {npc_spec.spawn_index}.")
+            raise RuntimeError(
+                f"Failed to spawn NPC vehicle at spawn index {npc_spec.spawn_index}."
+            )
         actors.append(actor)
         if spawned_actor_refs is not None:
             spawned_actor_refs.append(actor)
@@ -561,6 +585,14 @@ def _spawn_npc_vehicles(
             traffic_manager.ignore_lights_percentage(actor, 0.0)
             traffic_manager.ignore_vehicles_percentage(actor, 0.0)
             traffic_manager.set_desired_speed(actor, float(desired_speed_kmh))
+        else:
+            actor.apply_control(
+                carla_module.VehicleControl(
+                    throttle=0.0,
+                    brake=1.0,
+                    hand_brake=True,
+                )
+            )
         spawned.append(
             {
                 "actor_id": int(actor.id),
@@ -568,6 +600,7 @@ def _spawn_npc_vehicles(
                 "target_speed_kmh": round(desired_speed_kmh, 2),
                 "lane_behavior": npc_spec.lane_behavior,
                 "npc_profile_id": npc_spec.npc_profile_id,
+                "autopilot_enabled": bool(profile is None or profile.enable_autopilot),
             }
         )
     return spawned
@@ -577,6 +610,7 @@ def _collect_npc_vehicle_states(
     *,
     npc_actor_refs: list[Any],
     npc_actor_metadata_by_id: dict[int, dict[str, Any]],
+    world_map: Any,
 ) -> list[NPCVehicleStateSample]:
     states: list[NPCVehicleStateSample] = []
     for actor in npc_actor_refs:
@@ -587,6 +621,8 @@ def _collect_npc_vehicle_states(
             rotation = transform.rotation
             actor_type_id = str(actor.type_id)
             current_speed_mps = float(speed_mps(actor))
+            waypoint = world_map.get_waypoint(location)
+            bounding_box = actor.bounding_box
         except RuntimeError as exc:
             if "destroyed actor" in str(exc):
                 continue
@@ -606,7 +642,19 @@ def _collect_npc_vehicle_states(
                     if metadata.get("target_speed_kmh") is not None
                     else None
                 ),
+                npc_profile_id=str(metadata["npc_profile_id"])
+                if metadata.get("npc_profile_id") is not None
+                else None,
+                lane_behavior=str(metadata["lane_behavior"])
+                if metadata.get("lane_behavior") is not None
+                else None,
+                autopilot_enabled=(
+                    bool(metadata["autopilot_enabled"])
+                    if metadata.get("autopilot_enabled") is not None
+                    else None
+                ),
                 speed_mps=current_speed_mps,
+                lane_id=_lane_id(waypoint),
                 pose={
                     "x": float(location.x),
                     "y": float(location.y),
@@ -614,6 +662,11 @@ def _collect_npc_vehicle_states(
                     "yaw_deg": float(rotation.yaw),
                     "pitch_deg": float(rotation.pitch),
                     "roll_deg": float(rotation.roll),
+                },
+                size={
+                    "x": float(bounding_box.extent.x * 2.0),
+                    "y": float(bounding_box.extent.y * 2.0),
+                    "z": float(bounding_box.extent.z * 2.0),
                 },
             )
         )
@@ -691,11 +744,17 @@ def _resolve_route_loop_scenario(
     )
 
 
-def _route_trace_xyz(route_trace: list[tuple[Any, Any]], *, z_offset_m: float = 0.2) -> list[tuple[float, float, float]]:
+def _route_trace_xyz(
+    route_trace: list[tuple[Any, Any]], *, z_offset_m: float = 0.2
+) -> list[tuple[float, float, float]]:
     points: list[tuple[float, float, float]] = []
     for waypoint, _road_option in route_trace:
         location = waypoint.transform.location
-        point = (round(float(location.x), 3), round(float(location.y), 3), round(float(location.z + z_offset_m), 3))
+        point = (
+            round(float(location.x), 3),
+            round(float(location.y), 3),
+            round(float(location.z + z_offset_m), 3),
+        )
         if not points or point != points[-1]:
             points.append(point)
     return points
@@ -844,7 +903,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
     git_commit_id = ensure_clean_git_worktree(action_label="Evaluate route loop")
     eval_suffix = "pilotnet_eval" if policy.kind == "learned" else "expert_eval"
-    episode_id = build_versioned_run_id(f"{route_config.name}_{eval_suffix}", commit_id=git_commit_id)
+    episode_id = build_versioned_run_id(
+        f"{route_config.name}_{eval_suffix}", commit_id=git_commit_id
+    )
     episode_dir = PROJECT_ROOT / "outputs" / "evaluate" / episode_id
     manifest_path = episode_dir / "manifest.jsonl"
     summary_path = episode_dir / "summary.json"
@@ -898,16 +959,17 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     traffic_light_phase_indices: dict[int, int] = {}
     traffic_light_runtime_groups: list[TrafficLightPhaseRuntimeGroup] = []
     controlled_cycle_actor_ids: set[int] = set()
-    explicit_traffic_light_actor_ids = (
-        {
-            override.actor_id
-            for override in (environment_config.traffic_light_overrides if environment_config is not None else [])
-        }
-        | {
-            schedule.actor_id
-            for schedule in (environment_config.traffic_light_schedules if environment_config is not None else [])
-        }
-    )
+    explicit_traffic_light_actor_ids = {
+        override.actor_id
+        for override in (
+            environment_config.traffic_light_overrides if environment_config is not None else []
+        )
+    } | {
+        schedule.actor_id
+        for schedule in (
+            environment_config.traffic_light_schedules if environment_config is not None else []
+        )
+    }
     traffic_light_cycle_states: dict[int, str] = {}
 
     planned_route = build_planned_route(world.get_map(), route_config)
@@ -915,7 +977,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     route_geometry = route_geometry_from_planned_route(planned_route)
     goal_location = planned_route.trace[-1][0].transform.location
     success_criteria = _route_success_criteria(scenario)
-    record_period_s = runtime.fixed_delta_seconds if artifacts.record_hz <= 0 else max(runtime.fixed_delta_seconds, 1.0 / artifacts.record_hz)
+    record_period_s = (
+        runtime.fixed_delta_seconds
+        if artifacts.record_hz <= 0
+        else max(runtime.fixed_delta_seconds, 1.0 / artifacts.record_hz)
+    )
     next_record_elapsed_s = runtime.fixed_delta_seconds
 
     try:
@@ -949,7 +1015,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         actors.append(camera)
         camera.listen(image_queue.put)
 
-        collision_sensor = attach_sensor(world, "sensor.other.collision", carla.Transform(), vehicle)
+        collision_sensor = attach_sensor(
+            world, "sensor.other.collision", carla.Transform(), vehicle
+        )
         actors.append(collision_sensor)
 
         def _handle_collision_event(event: Any) -> None:
@@ -970,7 +1038,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
         lights_by_id, traffic_light_runtime_groups = _apply_traffic_light_group_cycle(
             world,
-            environment_config.traffic_light_phase_cycle if environment_config is not None else None,
+            environment_config.traffic_light_phase_cycle
+            if environment_config is not None
+            else None,
         )
         controlled_cycle_actor_ids = {
             actor_id
@@ -981,7 +1051,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             carla,
             lights_by_id,
             traffic_light_runtime_groups,
-            environment_config.traffic_light_phase_cycle if environment_config is not None else None,
+            environment_config.traffic_light_phase_cycle
+            if environment_config is not None
+            else None,
             elapsed_seconds=0.0,
             applied_states=traffic_light_cycle_states,
             excluded_actor_ids=explicit_traffic_light_actor_ids,
@@ -999,6 +1071,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             applied_phase_indices=traffic_light_phase_indices,
         )
         npc_actors_summary = _spawn_npc_vehicles(
+            carla_module=carla,
             client=client,
             world=world,
             runtime=runtime,
@@ -1007,10 +1080,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             actors=actors,
             spawned_actor_refs=npc_actor_refs,
         )
-        npc_actor_metadata_by_id = {
-            int(item["actor_id"]): item
-            for item in npc_actors_summary
-        }
+        npc_actor_metadata_by_id = {int(item["actor_id"]): item for item in npc_actors_summary}
         traffic_manager = client.get_trafficmanager(8000)
 
         if policy.kind == "expert":
@@ -1073,7 +1143,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 carla,
                 lights_by_id,
                 traffic_light_runtime_groups,
-                environment_config.traffic_light_phase_cycle if environment_config is not None else None,
+                environment_config.traffic_light_phase_cycle
+                if environment_config is not None
+                else None,
                 elapsed_seconds=elapsed_seconds,
                 applied_states=traffic_light_cycle_states,
                 excluded_actor_ids=explicit_traffic_light_actor_ids,
@@ -1081,14 +1153,18 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             _apply_traffic_light_schedules(
                 carla,
                 lights_by_id,
-                environment_config.traffic_light_schedules if environment_config is not None else [],
+                environment_config.traffic_light_schedules
+                if environment_config is not None
+                else [],
                 elapsed_seconds=elapsed_seconds,
                 applied_phase_indices=traffic_light_phase_indices,
             )
             current_speed = speed_mps(vehicle)
             vehicle_transform = vehicle.get_transform()
             vehicle_location = vehicle_transform.location
-            current_rgb = _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
+            current_rgb = (
+                _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
+            )
 
             if policy.kind == "learned":
                 step_result = stack.run_step(
@@ -1132,13 +1208,20 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
 
             traffic_light_stop_count += int(bool(planning_debug.get("event_traffic_light_stop")))
-            traffic_light_resume_count += int(bool(planning_debug.get("event_traffic_light_resume")))
+            traffic_light_resume_count += int(
+                bool(planning_debug.get("event_traffic_light_resume"))
+            )
             car_follow_event_count += int(bool(planning_debug.get("event_car_follow_start")))
             overtake_attempt_count += int(bool(planning_debug.get("event_overtake_attempt")))
             overtake_success_count += int(bool(planning_debug.get("event_overtake_success")))
             overtake_abort_count += int(bool(planning_debug.get("event_overtake_abort")))
-            unsafe_lane_change_reject_count += int(bool(planning_debug.get("event_unsafe_lane_change_reject")))
-            if bool(planning_debug.get("traffic_light_violation")) and not _traffic_light_violation_active:
+            unsafe_lane_change_reject_count += int(
+                bool(planning_debug.get("event_unsafe_lane_change_reject"))
+            )
+            if (
+                bool(planning_debug.get("traffic_light_violation"))
+                and not _traffic_light_violation_active
+            ):
                 traffic_light_violation_count += 1
                 _traffic_light_violation_active = True
             elif not bool(planning_debug.get("traffic_light_violation")):
@@ -1146,7 +1229,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             if planning_debug.get("min_ttc") is not None:
                 min_ttc = min(min_ttc, float(planning_debug["min_ttc"]))
             if planning_debug.get("lead_vehicle_distance_m") is not None:
-                min_lead_distance_m = min(min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"]))
+                min_lead_distance_m = min(
+                    min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"])
+                )
 
             if should_record:
                 if current_rgb is None:
@@ -1164,6 +1249,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     npc_vehicle_states = _collect_npc_vehicle_states(
                         npc_actor_refs=npc_actor_refs,
                         npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+                        world_map=world.get_map(),
                     )
                     mcap_segment = mcap_writer.write_frame(
                         current_rgb=current_rgb,
@@ -1194,6 +1280,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                                 "steer": float(decision.command.steer),
                                 "throttle": float(decision.command.throttle),
                                 "brake": float(decision.command.brake),
+                            },
+                            planning_debug={
+                                "planner_state": planning_decision.planner_state,
+                                "behavior": behavior,
+                                **planning_debug,
                             },
                         ),
                         npc_vehicle_states=npc_vehicle_states,
@@ -1232,9 +1323,26 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     route_target_y=route_point[1] if route_point is not None else None,
                     planner_state=planning_decision.planner_state,
                     traffic_light_state=planning_debug.get("traffic_light_state"),
+                    traffic_light_actor_id=planning_debug.get("traffic_light_actor_id"),
+                    traffic_light_distance_m=planning_debug.get("traffic_light_distance_m"),
+                    traffic_light_stop_line_distance_m=planning_debug.get(
+                        "traffic_light_stop_line_distance_m"
+                    ),
+                    traffic_light_violation=planning_debug.get("traffic_light_violation"),
                     lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
+                    lead_vehicle_id=planning_debug.get("lead_vehicle_id"),
+                    lead_vehicle_speed_mps=planning_debug.get("lead_vehicle_speed_mps"),
+                    lead_vehicle_relative_speed_mps=planning_debug.get(
+                        "lead_vehicle_relative_speed_mps"
+                    ),
                     overtake_state=planning_debug.get("overtake_state"),
+                    overtake_direction=planning_debug.get("overtake_direction"),
+                    overtake_target_lane_id=planning_debug.get("overtake_target_lane_id"),
+                    current_lane_id=planning_debug.get("current_lane_id"),
+                    route_target_lane_id=planning_debug.get("route_target_lane_id"),
                     target_lane_id=planning_debug.get("target_lane_id"),
+                    target_speed_kmh=planning_debug.get("target_speed_kmh"),
+                    emergency_stop=planning_debug.get("emergency_stop"),
                     min_ttc=planning_debug.get("min_ttc"),
                     mcap_segment_index=mcap_segment_index,
                     mcap_segment_path=mcap_segment_path,
@@ -1289,14 +1397,18 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             not failure_reason
             and max_completion_ratio >= success_criteria["route_completion_ratio_min"]
             and frame_events.collision_count <= success_criteria["collision_count_max"]
-            and traffic_light_violation_count <= success_criteria["traffic_light_violation_count_max"]
+            and traffic_light_violation_count
+            <= success_criteria["traffic_light_violation_count_max"]
             and max_stationary_seconds < success_criteria["max_stationary_seconds_max"]
             and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
         )
         if not success and not failure_reason:
             if max_completion_ratio < success_criteria["route_completion_ratio_min"]:
                 failure_reason = "route_incomplete"
-            elif traffic_light_violation_count > success_criteria["traffic_light_violation_count_max"]:
+            elif (
+                traffic_light_violation_count
+                > success_criteria["traffic_light_violation_count_max"]
+            ):
                 failure_reason = "traffic_light_violation"
             elif distance_to_goal_m > success_criteria["goal_tolerance_m_max"]:
                 failure_reason = "goal_tolerance_exceeded"
@@ -1311,7 +1423,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             except Exception as exc:  # pragma: no cover - depends on runtime environment
                 mcap_error = str(exc)
         if environment_config is not None:
-            managed_traffic_light_actor_ids = controlled_cycle_actor_ids | explicit_traffic_light_actor_ids
+            managed_traffic_light_actor_ids = (
+                controlled_cycle_actor_ids | explicit_traffic_light_actor_ids
+            )
             for actor in world.get_actors().filter("*traffic_light*"):
                 if int(actor.id) in managed_traffic_light_actor_ids:
                     actor.freeze(False)
@@ -1357,8 +1471,14 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "episode_id": episode_id,
         "route_name": route_config.name,
         "route_config_path": relative_to_project(route_config_path),
-        "environment_config_path": _relative_or_none(Path(scenario.environment_config_path).resolve() if scenario.environment_config_path else None),
-        "environment_config_name": environment_config.name if environment_config is not None else None,
+        "environment_config_path": _relative_or_none(
+            Path(scenario.environment_config_path).resolve()
+            if scenario.environment_config_path
+            else None
+        ),
+        "environment_config_name": environment_config.name
+        if environment_config is not None
+        else None,
         "expert_config_path": relative_to_project(expert_config_path),
         "expert_config": expert_config_to_dict(effective_expert_config),
         "npc_vehicle_count": len(npc_actors_summary),
@@ -1387,7 +1507,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "overtake_abort_count": overtake_abort_count,
         "unsafe_lane_change_reject_count": unsafe_lane_change_reject_count,
         "min_ttc": None if not min_ttc < float("inf") else round(min_ttc, 3),
-        "min_lead_distance_m": None if not min_lead_distance_m < float("inf") else round(min_lead_distance_m, 3),
+        "min_lead_distance_m": None
+        if not min_lead_distance_m < float("inf")
+        else round(min_lead_distance_m, 3),
         "allow_overtake": allow_overtake,
         "max_stationary_seconds": round(max_stationary_seconds, 2),
         "route_completion_ratio": round(max_completion_ratio, 4),
@@ -1443,7 +1565,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             "longitudinal_control_source": "ad_stack_expert_route_policy_longitudinal",
             "is_camera_e2e_policy": True,
             "e2e_scope": "front_rgb_plus_speed_to_steer",
-            "model_checkpoint_path": _relative_or_none(Path(policy.checkpoint_path).resolve() if policy.checkpoint_path else None),
+            "model_checkpoint_path": _relative_or_none(
+                Path(policy.checkpoint_path).resolve() if policy.checkpoint_path else None
+            ),
             "model_name": stack_description.model_name,
             "git_commit_id": git_commit_id,
             "steer_smoothing": policy.steer_smoothing,
@@ -1466,7 +1590,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         summary_path=summary_path,
         manifest_path=manifest_path,
         video_path=video_path,
-        mcap_path=(Path(PROJECT_ROOT / first_mcap_segment_path).resolve() if first_mcap_segment_path is not None else None),
+        mcap_path=(
+            Path(PROJECT_ROOT / first_mcap_segment_path).resolve()
+            if first_mcap_segment_path is not None
+            else None
+        ),
         frame_count=frame_index,
         elapsed_seconds=elapsed_seconds,
     )
@@ -1511,7 +1639,9 @@ def _run_interactive(request: RunRequest) -> RunResult:
         vehicle_blueprint.set_attribute("role_name", "hero")
         vehicle = world.try_spawn_actor(vehicle_blueprint, spawn_points[scenario.spawn_index])
         if vehicle is None:
-            raise RuntimeError(f"Failed to spawn ego vehicle at spawn index {scenario.spawn_index}.")
+            raise RuntimeError(
+                f"Failed to spawn ego vehicle at spawn index {scenario.spawn_index}."
+            )
         actors.append(vehicle)
 
         camera_blueprint = world.get_blueprint_library().find("sensor.camera.rgb")
@@ -1523,7 +1653,9 @@ def _run_interactive(request: RunRequest) -> RunResult:
         actors.append(camera)
         camera.listen(image_queue.put)
 
-        collision_sensor = attach_sensor(world, "sensor.other.collision", carla.Transform(), vehicle)
+        collision_sensor = attach_sensor(
+            world, "sensor.other.collision", carla.Transform(), vehicle
+        )
         actors.append(collision_sensor)
         collision_sensor.listen(lambda _event: frame_events.mark_collision())
 

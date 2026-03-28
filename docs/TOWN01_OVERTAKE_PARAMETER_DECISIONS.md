@@ -389,7 +389,7 @@ Town01 の safe overtake は高速道路ではなく、短い直線の市街地 
 
 ### 判断
 
-Town01 では、signal conflict route で same-lane の信号 trigger が `32m` 先にある。  
+Town01 では、signal conflict route で same-lane の信号 trigger が `32m` 先にある。
 この区間では overtake を suppress したいので、threshold は少なくともこれより少し大きくする必要がある。
 
 そのため、Town01 の初期値は `35m` にする。
@@ -533,7 +533,7 @@ Town01 safe route 上の代表 waypoint から、
 
 ### 判断
 
-Town01 safe route では opposing lane の可視 corridor が少なくとも `112m` ある。  
+Town01 safe route では opposing lane の可視 corridor が少なくとも `112m` ある。
 Town01 採用値の lane-change 幾何は約 `55m` なので、
 
 - 幾何 `55m`
@@ -590,7 +590,7 @@ Town01 の short route で route trace の局所曲率を見た。
 
 ### 判断
 
-Town01 の P0 overtake は「ほぼ直線」だけに絞りたい。  
+Town01 の P0 overtake は「ほぼ直線」だけに絞りたい。
 safe route の実測値は `0.0002 1/m` 以下だったので、これより 5 倍大きい `0.001 1/m` を保守的な straight-only gate として使う。
 
 ### 根拠の強さ
@@ -630,7 +630,7 @@ Town01 の short route 中間 waypoint で lane marking を確認した。
 
 ### 判断
 
-Town01 では、safe overtake 候補区間 2 本がどちらも `Broken Yellow` だった。  
+Town01 では、safe overtake 候補区間 2 本がどちらも `Broken Yellow` だった。
 したがって、P0 実装では
 
 - `Broken Yellow` 以外は追い越し禁止

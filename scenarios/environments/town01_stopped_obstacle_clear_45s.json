@@ -1,0 +1,16 @@
+{
+  "name": "town01_stopped_obstacle_clear_45s",
+  "town": "Town01",
+  "weather": "ClearNoon",
+  "max_seconds": 45.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 80,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "traffic_light_schedules": [],
+  "description": "Road-12 stopped-obstacle development scenario. A single stationary vehicle is placed close ahead in ego's lane so the expert can immediately evaluate a bypass when the opposing lane is clear. Use with town01_road12_overtake_short."
+}

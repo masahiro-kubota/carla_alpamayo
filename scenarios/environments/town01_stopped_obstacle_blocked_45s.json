@@ -1,0 +1,21 @@
+{
+  "name": "town01_stopped_obstacle_blocked_45s",
+  "town": "Town01",
+  "weather": "ClearNoon",
+  "max_seconds": 45.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 80,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "oncoming_profile_v1",
+      "spawn_index": 85,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "traffic_light_schedules": [],
+  "description": "Road-12 stopped-obstacle blocker scenario. A stationary obstacle is close ahead in ego's lane while an oncoming vehicle approaches in the opposing lane, so the expert should reject the bypass and wait conservatively. Use with town01_road12_overtake_short."
+}

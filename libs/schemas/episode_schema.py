@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
-from pathlib import Path
-from typing import Any
+from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -34,9 +36,22 @@ class EpisodeRecord:
     route_target_y: float | None = None
     planner_state: str | None = None
     traffic_light_state: str | None = None
+    traffic_light_actor_id: int | None = None
+    traffic_light_distance_m: float | None = None
+    traffic_light_stop_line_distance_m: float | None = None
+    traffic_light_violation: bool | None = None
     lead_vehicle_distance_m: float | None = None
+    lead_vehicle_id: int | None = None
+    lead_vehicle_speed_mps: float | None = None
+    lead_vehicle_relative_speed_mps: float | None = None
     overtake_state: str | None = None
+    overtake_direction: str | None = None
+    overtake_target_lane_id: str | None = None
+    current_lane_id: str | None = None
+    route_target_lane_id: str | None = None
     target_lane_id: str | None = None
+    target_speed_kmh: float | None = None
+    emergency_stop: bool | None = None
     min_ttc: float | None = None
     mcap_segment_index: int | None = None
     mcap_segment_path: str | None = None

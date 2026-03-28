@@ -14,8 +14,16 @@ from ad_stack.agents import (
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.runtime import ObservationBuilder
-from ad_stack.world_model import DynamicVehicleStateView, EgoState, RouteState, TrafficLightStateView
-from libs.carla_utils import compute_local_target_point, ensure_carla_agents_on_path, road_option_name
+from ad_stack.world_model import (
+    DynamicVehicleStateView,
+    EgoState,
+    RouteState,
+    TrafficLightStateView,
+)
+from libs.carla_utils import (
+    compute_local_target_point,
+    ensure_carla_agents_on_path,
+)
 
 
 def _completion_ratio(route_index: int | None, route_point_count: int) -> float:
@@ -173,7 +181,10 @@ class _RouteSceneMixin:
         for trace_index, (waypoint, _option) in enumerate(self._planned_trace):
             location = waypoint.transform.location
             point = (location.x, location.y)
-            if last_point is None or ((point[0] - last_point[0]) ** 2 + (point[1] - last_point[1]) ** 2) ** 0.5 > 0.05:
+            if (
+                last_point is None
+                or ((point[0] - last_point[0]) ** 2 + (point[1] - last_point[1]) ** 2) ** 0.5 > 0.05
+            ):
                 mapping.append(trace_index)
                 last_point = point
         return mapping
@@ -197,26 +208,45 @@ class _RouteSceneMixin:
         left_waypoint = ego_waypoint.get_left_lane()
         right_waypoint = ego_waypoint.get_right_lane()
         return {
-            "left": bool(left_waypoint is not None and left_waypoint.lane_type == self._carla.LaneType.Driving),
-            "right": bool(right_waypoint is not None and right_waypoint.lane_type == self._carla.LaneType.Driving),
+            "left": bool(
+                left_waypoint is not None
+                and left_waypoint.lane_type == self._carla.LaneType.Driving
+            ),
+            "right": bool(
+                right_waypoint is not None
+                and right_waypoint.lane_type == self._carla.LaneType.Driving
+            ),
         }
 
     def _lane_relation(self, ego_waypoint: Any | None, target_waypoint: Any | None) -> str:
         if ego_waypoint is None or target_waypoint is None:
             return "unknown"
-        if target_waypoint.road_id == ego_waypoint.road_id and target_waypoint.lane_id == ego_waypoint.lane_id:
+        if (
+            target_waypoint.road_id == ego_waypoint.road_id
+            and target_waypoint.lane_id == ego_waypoint.lane_id
+        ):
             return "same_lane"
         left_waypoint = ego_waypoint.get_left_lane()
-        if left_waypoint is not None and left_waypoint.lane_type == self._carla.LaneType.Driving:
-            if target_waypoint.road_id == left_waypoint.road_id and target_waypoint.lane_id == left_waypoint.lane_id:
-                return "left_lane"
+        if (
+            left_waypoint is not None
+            and left_waypoint.lane_type == self._carla.LaneType.Driving
+            and target_waypoint.road_id == left_waypoint.road_id
+            and target_waypoint.lane_id == left_waypoint.lane_id
+        ):
+            return "left_lane"
         right_waypoint = ego_waypoint.get_right_lane()
-        if right_waypoint is not None and right_waypoint.lane_type == self._carla.LaneType.Driving:
-            if target_waypoint.road_id == right_waypoint.road_id and target_waypoint.lane_id == right_waypoint.lane_id:
-                return "right_lane"
+        if (
+            right_waypoint is not None
+            and right_waypoint.lane_type == self._carla.LaneType.Driving
+            and target_waypoint.road_id == right_waypoint.road_id
+            and target_waypoint.lane_id == right_waypoint.lane_id
+        ):
+            return "right_lane"
         return "unknown"
 
-    def _build_tracked_objects(self, vehicle_transform: Any, ego_waypoint: Any | None) -> tuple[DynamicVehicleStateView, ...]:
+    def _build_tracked_objects(
+        self, vehicle_transform: Any, ego_waypoint: Any | None
+    ) -> tuple[DynamicVehicleStateView, ...]:
         ego_location = vehicle_transform.location
         forward_vector = vehicle_transform.get_forward_vector()
         right_vector = vehicle_transform.get_right_vector()
@@ -231,7 +261,9 @@ class _RouteSceneMixin:
                 actor_location = actor_transform.location
                 if actor_location.distance(ego_location) > 60.0:
                     continue
-                target_waypoint = self._map.get_waypoint(actor_location, lane_type=self._carla.LaneType.Driving)
+                target_waypoint = self._map.get_waypoint(
+                    actor_location, lane_type=self._carla.LaneType.Driving
+                )
                 dx = actor_location.x - ego_location.x
                 dy = actor_location.y - ego_location.y
                 longitudinal_distance_m = (dx * forward_vector.x) + (dy * forward_vector.y)
@@ -254,9 +286,13 @@ class _RouteSceneMixin:
                 if "destroyed actor" in str(exc):
                     continue
                 raise
-        return tuple(sorted(tracked_objects, key=lambda actor: abs(actor.longitudinal_distance_m or 0.0)))
+        return tuple(
+            sorted(tracked_objects, key=lambda actor: abs(actor.longitudinal_distance_m or 0.0))
+        )
 
-    def _build_traffic_lights(self, vehicle_transform: Any, ego_waypoint: Any | None) -> tuple[TrafficLightStateView, ...]:
+    def _build_traffic_lights(
+        self, vehicle_transform: Any, ego_waypoint: Any | None
+    ) -> tuple[TrafficLightStateView, ...]:
         if ego_waypoint is None:
             return ()
         ego_location = vehicle_transform.location
@@ -281,7 +317,11 @@ class _RouteSceneMixin:
                 and trigger_waypoint.lane_id == ego_waypoint.lane_id
             ):
                 trigger_forward = trigger_waypoint.transform.get_forward_vector()
-                dot = (ego_forward.x * trigger_forward.x) + (ego_forward.y * trigger_forward.y) + (ego_forward.z * trigger_forward.z)
+                dot = (
+                    (ego_forward.x * trigger_forward.x)
+                    + (ego_forward.y * trigger_forward.y)
+                    + (ego_forward.z * trigger_forward.z)
+                )
                 dx = trigger_location.x - ego_location.x
                 dy = trigger_location.y - ego_location.y
                 longitudinal_distance_m = (dx * ego_forward.x) + (dy * ego_forward.y)
@@ -330,7 +370,9 @@ class _RouteSceneMixin:
             if route_index is not None:
                 self._max_route_index = max(self._max_route_index, route_index)
 
-        ego_waypoint = self._map.get_waypoint(vehicle_transform.location, lane_type=self._carla.LaneType.Driving)
+        ego_waypoint = self._map.get_waypoint(
+            vehicle_transform.location, lane_type=self._carla.LaneType.Driving
+        )
         scene_state = self._observation_builder.build(
             timestamp_s=timestamp_s,
             town_id=self.town_id,
@@ -395,7 +437,8 @@ class ExpertCollectorStack(_RouteSceneMixin):
         self._agent = ExpertBasicAgent(
             vehicle,
             world_map,
-            config=expert_config or ExpertBasicAgentConfig(
+            config=expert_config
+            or ExpertBasicAgentConfig(
                 target_speed_kmh=target_speed_kmh,
                 ignore_traffic_lights=ignore_traffic_lights,
                 ignore_stop_signs=ignore_stop_signs,
@@ -468,14 +511,17 @@ class PilotNetEvalStack(_RouteSceneMixin):
             target_speed_kmh=target_speed_kmh,
             route_geometry=route_geometry,
             route_lookahead_m=float(self._runtime.model_config.get("route_lookahead_m", 8.0)),
-            route_target_normalization_m=float(self._runtime.model_config.get("route_target_normalization_m", 20.0)),
+            route_target_normalization_m=float(
+                self._runtime.model_config.get("route_target_normalization_m", 20.0)
+            ),
         )
         self._rgb_history: deque[Any] = deque(maxlen=self._runtime.frame_stack)
         self._previous_applied_steer: float | None = None
         self._expert_agent = ExpertBasicAgent(
             vehicle,
             world_map,
-            config=expert_config or ExpertBasicAgentConfig(
+            config=expert_config
+            or ExpertBasicAgentConfig(
                 target_speed_kmh=target_speed_kmh,
                 ignore_traffic_lights=ignore_traffic_lights,
                 ignore_stop_signs=ignore_stop_signs,

@@ -1,0 +1,6 @@
+{
+  "name": "stopped_obstacle_profile_v1",
+  "default_target_speed_kmh": 0.0,
+  "speed_jitter_kmh": 0.0,
+  "enable_autopilot": false
+}
