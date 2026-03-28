@@ -1,0 +1,44 @@
+# Adjacent Lane Closed Scenario
+
+停止障害物は前方にあるが、隣接 lane 自体が使えないため追い越しを開始しない scenario です。
+
+## Status
+
+- planned
+
+## Planned Run Config
+
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json`
+
+## Scenario Contract
+
+- same-lane に停止障害物が 1 台
+- adjacent lane が `Driving` でない、または route 上で継続利用できない
+- gap が空いていても lane 自体は closed
+
+## Expectations
+
+### Target Actor
+
+- `lead_vehicle_id` は停止障害物 actor に収束する
+
+### Reject / Wait
+
+- `overtake_reject_reason = adjacent_lane_closed`
+- `lane_change_out` に入らない
+
+### Pass / Rejoin
+
+- `pass_vehicle` に入らない
+- `lane_change_back` に入らない
+
+### Summary Acceptance
+
+- `collision_count = 0`
+- `overtake_attempt_count = 0`
+- `unsafe_lane_change_reject_count >= 1`
+
+## Why This Matters
+
+- gap 不足と lane invalid を分離して扱えているかを見る
+- preflight validation と runtime reject の整合を確認する
