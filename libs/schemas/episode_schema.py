@@ -53,7 +53,14 @@ class EpisodeRecord:
     overtake_considered: bool | None = None
     overtake_direction: str | None = None
     overtake_reject_reason: str | None = None
+    overtake_target_actor_id: int | None = None
+    overtake_target_kind: str | None = None
+    overtake_target_member_actor_ids: list[int] | None = None
     overtake_target_lane_id: str | None = None
+    target_passed: bool | None = None
+    distance_past_target_m: float | None = None
+    target_actor_visible: bool | None = None
+    target_actor_last_seen_s: float | None = None
     current_lane_id: str | None = None
     route_target_lane_id: str | None = None
     target_lane_id: str | None = None

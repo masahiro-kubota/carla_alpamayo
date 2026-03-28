@@ -1330,7 +1330,16 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     overtake_considered=planning_debug.get("overtake_considered"),
                     overtake_direction=planning_debug.get("overtake_direction"),
                     overtake_reject_reason=planning_debug.get("overtake_reject_reason"),
+                    overtake_target_actor_id=planning_debug.get("overtake_target_actor_id"),
+                    overtake_target_kind=planning_debug.get("overtake_target_kind"),
+                    overtake_target_member_actor_ids=planning_debug.get(
+                        "overtake_target_member_actor_ids"
+                    ),
                     overtake_target_lane_id=planning_debug.get("overtake_target_lane_id"),
+                    target_passed=planning_debug.get("target_passed"),
+                    distance_past_target_m=planning_debug.get("distance_past_target_m"),
+                    target_actor_visible=planning_debug.get("target_actor_visible"),
+                    target_actor_last_seen_s=planning_debug.get("target_actor_last_seen_s"),
                     current_lane_id=planning_debug.get("current_lane_id"),
                     route_target_lane_id=planning_debug.get("route_target_lane_id"),
                     target_lane_id=planning_debug.get("target_lane_id"),
