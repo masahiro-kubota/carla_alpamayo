@@ -11,17 +11,17 @@
   ],
   "traffic_light_overrides": [
     {
-      "actor_id": 57,
+      "actor_id": 31,
       "state": "red",
       "freeze": true
     },
     {
-      "actor_id": 58,
-      "state": "red",
+      "actor_id": 32,
+      "state": "green",
       "freeze": true
     },
     {
-      "actor_id": 59,
+      "actor_id": 33,
       "state": "red",
       "freeze": true
     }
