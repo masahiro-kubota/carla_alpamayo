@@ -934,16 +934,26 @@ class ExpertBasicAgent:
                         self._lane_change_path_failure_reason or "lane_change_path_failed"
                     )
             else:
-                planner_state = "car_follow"
-                target_speed_kmh = follow_target_speed_kmh
                 overtake_reject_reason = overtake_decision.reject_reason
-                if overtake_reject_reason in {
-                    "adjacent_front_gap_insufficient",
-                    "adjacent_rear_gap_insufficient",
-                    "adjacent_lane_closed",
-                    "signal_suppressed",
-                }:
-                    event_flags["event_unsafe_lane_change_reject"] = True
+                if (
+                    overtake_reject_reason == "lead_out_of_range"
+                    and self.config.allow_overtake
+                    and lead_distance_m is not None
+                    and lead_distance_m > self.config.overtake_trigger_distance_m
+                    and lead_speed_mps <= 0.3
+                ):
+                    planner_state = "nominal_cruise"
+                    target_speed_kmh = self.config.target_speed_kmh
+                else:
+                    planner_state = "car_follow"
+                    target_speed_kmh = follow_target_speed_kmh
+                    if overtake_reject_reason in {
+                        "adjacent_front_gap_insufficient",
+                        "adjacent_rear_gap_insufficient",
+                        "adjacent_lane_closed",
+                        "signal_suppressed",
+                    }:
+                        event_flags["event_unsafe_lane_change_reject"] = True
 
         target_actor = None
         if self._overtake_target_actor_id is not None:
