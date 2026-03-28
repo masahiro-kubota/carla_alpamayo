@@ -11,7 +11,9 @@ from ad_stack.overtake import (
     LaneChangePlanPoint,
     OvertakeLeadSnapshot,
     OvertakeMemory,
+    StoppedObstacleTargetSnapshot,
     StoppedObstacleContext,
+    build_stopped_obstacle_targets,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
@@ -68,6 +70,8 @@ class ExpertBasicAgentConfig:
     lane_change_distance_m: float = 14.0
     lane_change_other_lane_distance_m: float = 22.0
     overtake_hold_distance_m: float = 30.0
+    overtake_cluster_merge_gap_m: float = 10.0
+    overtake_cluster_max_member_speed_mps: float = 0.5
 
 
 class ExpertBasicAgent:
@@ -122,6 +126,7 @@ class ExpertBasicAgent:
         self._overtake_origin_lane_id: str | None = None
         self._overtake_target_lane_id: str | None = None
         self._overtake_target_actor_id: int | None = None
+        self._overtake_target_member_actor_ids: tuple[int, ...] = ()
         self._overtake_aborted = False
         self._overtake_waypoints: deque[Any] = deque()
         self._overtake_memory = OvertakeMemory()
@@ -165,6 +170,7 @@ class ExpertBasicAgent:
         self._overtake_origin_lane_id = None
         self._overtake_target_lane_id = None
         self._overtake_target_actor_id = None
+        self._overtake_target_member_actor_ids = ()
         self._overtake_aborted = False
         self._overtake_waypoints.clear()
         self._overtake_memory = OvertakeMemory()
@@ -490,6 +496,49 @@ class ExpertBasicAgent:
             return None
         return min(candidates, key=lambda actor: float(actor.longitudinal_distance_m))
 
+    def _same_lane_stopped_targets(
+        self,
+        tracked_objects: tuple[DynamicVehicleStateView, ...],
+    ) -> list[StoppedObstacleTargetSnapshot]:
+        leads = [
+            OvertakeLeadSnapshot(
+                actor_id=actor.actor_id,
+                lane_id=actor.lane_id,
+                distance_m=float(actor.longitudinal_distance_m),
+                speed_mps=float(actor.speed_mps),
+                relative_speed_mps=0.0,
+                is_stopped=float(actor.speed_mps) <= self.config.stopped_speed_threshold_mps,
+            )
+            for actor in tracked_objects
+            if (
+                actor.relation == "same_lane"
+                and actor.is_ahead
+                and actor.longitudinal_distance_m is not None
+                and float(actor.longitudinal_distance_m) > 0.0
+            )
+        ]
+        return build_stopped_obstacle_targets(
+            leads,
+            cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
+            cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
+        )
+
+    def _visible_overtake_target_actors(
+        self,
+        tracked_objects: tuple[DynamicVehicleStateView, ...],
+    ) -> tuple[DynamicVehicleStateView | None, tuple[DynamicVehicleStateView, ...]]:
+        if self._overtake_target_actor_id is None:
+            return None, ()
+        member_ids = set(self._overtake_target_member_actor_ids) or {self._overtake_target_actor_id}
+        visible_members = tuple(
+            actor for actor in tracked_objects if actor.actor_id in member_ids
+        )
+        primary_actor = next(
+            (actor for actor in visible_members if actor.actor_id == self._overtake_target_actor_id),
+            None,
+        )
+        return primary_actor, visible_members
+
     @staticmethod
     def _select_active_light(
         traffic_lights: tuple[TrafficLightStateView, ...],
@@ -788,6 +837,8 @@ class ExpertBasicAgent:
             timestamp_s=scene_state.timestamp_s,
         )
         lead_vehicle = self._nearest_lead(scene_state.tracked_objects, relation="same_lane")
+        stopped_targets = self._same_lane_stopped_targets(scene_state.tracked_objects)
+        active_overtake_target = stopped_targets[0] if stopped_targets else None
         lead_distance_m = (
             float(lead_vehicle.longitudinal_distance_m)
             if lead_vehicle and lead_vehicle.longitudinal_distance_m is not None
@@ -889,6 +940,7 @@ class ExpertBasicAgent:
                 self._overtake_origin_lane_id = None
                 self._overtake_target_lane_id = None
                 self._overtake_target_actor_id = None
+                self._overtake_target_member_actor_ids = ()
                 self._overtake_aborted = False
                 self._overtake_waypoints.clear()
                 self._overtake_memory = OvertakeMemory()
@@ -960,6 +1012,7 @@ class ExpertBasicAgent:
                         relative_speed_mps=closing_speed_mps,
                         is_stopped=lead_speed_mps <= 0.3,
                     ),
+                    obstacle_target=active_overtake_target,
                     left_lane=left_lane_snapshot,
                     right_lane=right_lane_snapshot,
                     active_signal_state=active_light.state if active_light is not None else None,
@@ -981,14 +1034,38 @@ class ExpertBasicAgent:
                     self._overtake_state = "lane_change_out"
                     self._overtake_direction = overtake_decision.direction
                     self._overtake_aborted = False
-                    self._overtake_target_actor_id = lead_vehicle.actor_id
+                    self._overtake_target_actor_id = (
+                        active_overtake_target.primary_actor_id
+                        if active_overtake_target is not None
+                        else lead_vehicle.actor_id
+                    )
+                    self._overtake_target_member_actor_ids = (
+                        active_overtake_target.member_actor_ids
+                        if active_overtake_target is not None
+                        else (lead_vehicle.actor_id,)
+                    )
                     self._overtake_memory = OvertakeMemory(
                         state="lane_change_out",
                         direction=overtake_decision.direction,
                         origin_lane_id=current_lane_id,
                         target_lane_id=self._overtake_target_lane_id,
-                        target_actor_id=lead_vehicle.actor_id,
-                        target_actor_lane_id=lead_vehicle.lane_id,
+                        target_actor_id=self._overtake_target_actor_id,
+                        target_actor_lane_id=(
+                            active_overtake_target.lane_id
+                            if active_overtake_target is not None
+                            else lead_vehicle.lane_id
+                        ),
+                        target_kind=(
+                            active_overtake_target.kind
+                            if active_overtake_target is not None
+                            else "single_actor"
+                        ),
+                        target_member_actor_ids=self._overtake_target_member_actor_ids,
+                        target_exit_distance_m=(
+                            active_overtake_target.exit_distance_m
+                            if active_overtake_target is not None
+                            else lead_distance_m
+                        ),
                     )
                     planner_state = "lane_change_out"
                     event_flags["event_overtake_attempt"] = True
@@ -998,6 +1075,7 @@ class ExpertBasicAgent:
                     planner_state = "car_follow"
                     target_speed_kmh = follow_target_speed_kmh
                     self._overtake_target_actor_id = None
+                    self._overtake_target_member_actor_ids = ()
                     self._overtake_memory = OvertakeMemory()
                     overtake_reject_reason = (
                         self._lane_change_path_failure_reason or "lane_change_path_failed"
@@ -1025,25 +1103,32 @@ class ExpertBasicAgent:
                         event_flags["event_unsafe_lane_change_reject"] = True
 
         target_actor = None
+        target_actor_visible = False
         if self._overtake_target_actor_id is not None:
-            target_actor = next(
-                (
-                    actor
-                    for actor in scene_state.tracked_objects
-                    if actor.actor_id == self._overtake_target_actor_id
-                ),
-                None,
+            target_actor, visible_target_actors = self._visible_overtake_target_actors(
+                scene_state.tracked_objects
             )
+            target_actor_visible = bool(visible_target_actors)
+            target_exit_longitudinal_distance_m = None
+            visible_longitudinal_distances = [
+                float(actor.longitudinal_distance_m)
+                for actor in visible_target_actors
+                if actor.longitudinal_distance_m is not None
+            ]
+            if visible_longitudinal_distances:
+                target_exit_longitudinal_distance_m = max(visible_longitudinal_distances)
             self._overtake_memory = evaluate_pass_progress(
                 self._overtake_memory,
                 timestamp_s=scene_state.timestamp_s,
-                target_actor_visible=target_actor is not None,
+                target_actor_visible=target_actor_visible,
                 target_longitudinal_distance_m=(
                     float(target_actor.longitudinal_distance_m)
                     if target_actor is not None and target_actor.longitudinal_distance_m is not None
                     else None
                 ),
                 overtake_resume_front_gap_m=self.config.overtake_resume_front_gap_m,
+                target_kind=self._overtake_memory.target_kind,
+                target_exit_longitudinal_distance_m=target_exit_longitudinal_distance_m,
             )
             if self._overtake_origin_lane_id is not None:
                 rejoin_front_gap_m, rejoin_rear_gap_m = self._lane_gaps_for_lane_id(
@@ -1206,10 +1291,14 @@ class ExpertBasicAgent:
                 "overtake_direction": self._overtake_direction,
                 "overtake_origin_lane_id": self._overtake_origin_lane_id,
                 "overtake_target_actor_id": self._overtake_target_actor_id,
+                "overtake_target_kind": self._overtake_memory.target_kind,
+                "overtake_target_member_actor_ids": list(
+                    self._overtake_target_member_actor_ids
+                ),
                 "overtake_target_lane_id": self._overtake_target_lane_id,
                 "target_passed": self._overtake_memory.target_passed,
                 "distance_past_target_m": self._overtake_memory.target_pass_distance_m,
-                "target_actor_visible": target_actor is not None,
+                "target_actor_visible": target_actor_visible,
                 "target_actor_last_seen_s": self._overtake_memory.target_actor_last_seen_s,
                 "lane_change_path_available": self._lane_change_path_available,
                 "lane_change_path_failed_reason": self._lane_change_path_failure_reason,
