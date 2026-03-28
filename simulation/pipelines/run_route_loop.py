@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from ad_stack import run
-from libs.project import PROJECT_ROOT, current_git_commit_short
+from libs.project import PROJECT_ROOT, current_git_commit_short, ensure_clean_git_worktree
 from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
 from simulation.pipelines.route_loop_run_config import (
     ROUTE_LOOP_ENTRYPOINT,
@@ -26,7 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Every simulation setting must come from the config file; no CLI overrides are accepted."
         )
     )
-    parser.add_argument("config_paths", nargs="+", help="Path(s) to route-loop run config JSON files.")
+    parser.add_argument(
+        "config_paths", nargs="+", help="Path(s) to route-loop run config JSON files."
+    )
     return parser
 
 
@@ -38,7 +40,9 @@ def _project_relative_or_absolute(path: Path) -> str:
 
 
 def _build_launcher_output_dir() -> Path:
-    run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_route_loop_batch_{current_git_commit_short()}"
+    run_id = (
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_route_loop_batch_{current_git_commit_short()}"
+    )
     output_dir = PROJECT_ROOT / "outputs" / "launcher_runs" / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
@@ -55,7 +59,9 @@ def _write_launcher_manifest(
     payload = {
         "entrypoint": ROUTE_LOOP_ENTRYPOINT,
         "argv": argv,
-        "config_paths": [_project_relative_or_absolute(config.config_path) for config in loaded_configs],
+        "config_paths": [
+            _project_relative_or_absolute(config.config_path) for config in loaded_configs
+        ],
         "workers": worker_records,
     }
     manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -85,9 +91,7 @@ def _run_single_config(config_path: Path, argv: list[str]) -> dict[str, Any]:
             if preview is not None and not preview.closed:
                 preview.update(rgb_array, status_text)
                 return True
-            if preview is not None and preview.closed:
-                return False
-            return True
+            return not (preview is not None and preview.closed)
 
         request.policy.preview_sink = preview_sink if preview_enabled else None
         result = run(request)
@@ -105,7 +109,9 @@ def _run_single_config(config_path: Path, argv: list[str]) -> dict[str, Any]:
             result.summary["cli_args_path"] = _project_relative_or_absolute(cli_args_path)
             result.summary["run_request_path"] = _project_relative_or_absolute(run_request_path)
             result.summary["run_config_path"] = _project_relative_or_absolute(run_config_path)
-            result.summary["run_config_source_path"] = _project_relative_or_absolute(loaded_config.config_path)
+            result.summary["run_config_source_path"] = _project_relative_or_absolute(
+                loaded_config.config_path
+            )
             result.summary["front_camera_preview_requested"] = preview_requested
             result.summary["front_camera_preview_enabled"] = preview_enabled
     finally:
@@ -186,6 +192,7 @@ def _run_parallel_configs(config_paths: list[Path], argv: list[str]) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
+    ensure_clean_git_worktree(action_label="Route loop run")
     config_paths = [Path(path) for path in args.config_paths]
     if len(config_paths) == 1:
         _run_single_config(config_paths[0], sys.argv[1:])

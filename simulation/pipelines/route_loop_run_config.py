@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +10,16 @@ from libs.project import PROJECT_ROOT, relative_to_project
 
 ROUTE_LOOP_ENTRYPOINT = "simulation.pipelines.run_route_loop"
 
-_TOP_LEVEL_KEYS = {"name", "description", "mode", "scenario", "runtime", "policy", "artifacts", "preview"}
+_TOP_LEVEL_KEYS = {
+    "name",
+    "description",
+    "mode",
+    "scenario",
+    "runtime",
+    "policy",
+    "artifacts",
+    "preview",
+}
 _TOP_LEVEL_REQUIRED_KEYS = {"mode", "scenario", "runtime", "policy", "artifacts", "preview"}
 _SCENARIO_KEYS = {
     "route_config_path",
@@ -153,7 +162,7 @@ def _require_int(payload: dict[str, Any], key: str) -> int:
 
 def _require_float(payload: dict[str, Any], key: str) -> float:
     value = payload.get(key)
-    if type(value) is bool or not isinstance(value, (int, float)):
+    if type(value) is bool or not isinstance(value, int | float):
         raise ValueError(f"{key} must be a number.")
     return float(value)
 
@@ -162,7 +171,7 @@ def _require_optional_float(payload: dict[str, Any], key: str) -> float | None:
     value = payload.get(key)
     if value is None:
         return None
-    if type(value) is bool or not isinstance(value, (int, float)):
+    if type(value) is bool or not isinstance(value, int | float):
         raise ValueError(f"{key} must be a number or null.")
     return float(value)
 
@@ -192,15 +201,29 @@ def _build_request_from_payload(payload: dict[str, Any]) -> tuple[RunRequest, Ro
     artifacts_payload = _require_object(payload, "artifacts")
     preview_payload = _require_object(payload, "preview")
 
-    _validate_keys("scenario", scenario_payload, allowed_keys=_SCENARIO_KEYS, required_keys=_SCENARIO_KEYS)
-    _validate_keys("runtime", runtime_payload, allowed_keys=_RUNTIME_KEYS, required_keys=_RUNTIME_KEYS)
+    _validate_keys(
+        "scenario", scenario_payload, allowed_keys=_SCENARIO_KEYS, required_keys=_SCENARIO_KEYS
+    )
+    _validate_keys(
+        "runtime", runtime_payload, allowed_keys=_RUNTIME_KEYS, required_keys=_RUNTIME_KEYS
+    )
     _validate_keys("policy", policy_payload, allowed_keys=_POLICY_KEYS, required_keys=_POLICY_KEYS)
-    _validate_keys("artifacts", artifacts_payload, allowed_keys=_ARTIFACT_KEYS, required_keys=_ARTIFACT_KEYS)
-    _validate_keys("preview", preview_payload, allowed_keys=_PREVIEW_KEYS, required_keys=_PREVIEW_KEYS)
+    _validate_keys(
+        "artifacts", artifacts_payload, allowed_keys=_ARTIFACT_KEYS, required_keys=_ARTIFACT_KEYS
+    )
+    _validate_keys(
+        "preview", preview_payload, allowed_keys=_PREVIEW_KEYS, required_keys=_PREVIEW_KEYS
+    )
 
-    route_config_path = _require_existing_path(scenario_payload, "route_config_path", allow_none=False)
-    environment_config_path = _require_existing_path(scenario_payload, "environment_config_path", allow_none=True)
-    expert_config_path = _require_existing_path(policy_payload, "expert_config_path", allow_none=True)
+    route_config_path = _require_existing_path(
+        scenario_payload, "route_config_path", allow_none=False
+    )
+    environment_config_path = _require_existing_path(
+        scenario_payload, "environment_config_path", allow_none=True
+    )
+    expert_config_path = _require_existing_path(
+        policy_payload, "expert_config_path", allow_none=True
+    )
     checkpoint_path = _require_existing_path(policy_payload, "checkpoint_path", allow_none=True)
 
     policy_kind = _require_string(policy_payload, "kind")
@@ -215,7 +238,9 @@ def _build_request_from_payload(payload: dict[str, Any]) -> tuple[RunRequest, Ro
 
     mcap_map_scope = _require_string(artifacts_payload, "mcap_map_scope")
     if mcap_map_scope not in {"full", "near_route"}:
-        raise ValueError(f"artifacts.mcap_map_scope must be 'full' or 'near_route', got {mcap_map_scope!r}")
+        raise ValueError(
+            f"artifacts.mcap_map_scope must be 'full' or 'near_route', got {mcap_map_scope!r}"
+        )
 
     request = RunRequest(
         mode="evaluate",
@@ -224,7 +249,9 @@ def _build_request_from_payload(payload: dict[str, Any]) -> tuple[RunRequest, Ro
             weather=_require_string(scenario_payload, "weather"),
             goal_tolerance_m=_require_float(scenario_payload, "goal_tolerance_m"),
             max_stop_seconds=_require_float(scenario_payload, "max_stop_seconds"),
-            stationary_speed_threshold_mps=_require_float(scenario_payload, "stationary_speed_threshold_mps"),
+            stationary_speed_threshold_mps=_require_float(
+                scenario_payload, "stationary_speed_threshold_mps"
+            ),
             max_seconds=_require_float(scenario_payload, "max_seconds"),
             environment_config_path=environment_config_path,
         ),
@@ -300,7 +327,7 @@ def _jsonable(value: Any) -> Any:
         return str(value)
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         return [_jsonable(item) for item in value]
     return value
 
@@ -312,8 +339,12 @@ def build_resolved_request_payload(request: RunRequest) -> dict[str, object]:
         "runtime": _jsonable(asdict(request.runtime)),
         "policy": {
             "kind": request.policy.kind,
-            "checkpoint_path": str(request.policy.checkpoint_path) if request.policy.checkpoint_path else None,
-            "expert_config_path": str(request.policy.expert_config_path) if request.policy.expert_config_path else None,
+            "checkpoint_path": str(request.policy.checkpoint_path)
+            if request.policy.checkpoint_path
+            else None,
+            "expert_config_path": str(request.policy.expert_config_path)
+            if request.policy.expert_config_path
+            else None,
             "device": request.policy.device,
             "steer_smoothing": request.policy.steer_smoothing,
             "max_steer_delta": request.policy.max_steer_delta,

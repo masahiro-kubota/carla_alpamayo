@@ -78,13 +78,6 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   simulation/run_configs/town01_perimeter_cw_expert.json
 ```
 
-wrapper を使うなら:
-
-```bash
-cd /home/masa/carla_alpamayo
-./simulation/scripts/run_expert_town01.sh simulation/run_configs/town01_perimeter_cw_expert.json
-```
-
 内部では `simulation.pipelines.run_route_loop` が run config JSON から `RunRequest(mode="evaluate", policy.kind=..., ...)` を作り、`ad_stack.run(...)` を呼びます。
 route は `scenarios/routes/*.json`、周辺環境と stopping 条件は `scenarios/environments/*.json`、ego 側の expert policy 閾値は `ad_stack/configs/expert/*.json` で管理します。
 

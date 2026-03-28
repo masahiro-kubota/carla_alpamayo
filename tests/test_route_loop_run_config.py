@@ -3,9 +3,9 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 from simulation.pipelines.route_loop_run_config import load_route_loop_run_config
 from simulation.pipelines.run_route_loop import build_parser
@@ -76,7 +76,10 @@ class RouteLoopRunConfigTests(unittest.TestCase):
         self.assertEqual(loaded.request.mode, "evaluate")
         self.assertEqual(loaded.request.policy.kind, "expert")
         self.assertEqual(loaded.request.runtime.port, 2000)
-        self.assertEqual(str(loaded.request.scenario.route_config_path), "scenarios/routes/town01_perimeter_cw.json")
+        self.assertEqual(
+            str(loaded.request.scenario.route_config_path),
+            "scenarios/routes/town01_perimeter_cw.json",
+        )
         self.assertFalse(loaded.preview.show_front_camera)
 
     def test_load_route_loop_run_config_rejects_unknown_key(self) -> None:
@@ -90,9 +93,8 @@ class RouteLoopRunConfigTests(unittest.TestCase):
 
     def test_build_parser_rejects_non_json_cli_overrides(self) -> None:
         parser = build_parser()
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                parser.parse_args(["--port", "2000"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parser.parse_args(["--port", "2000"])
 
     def test_build_parser_accepts_multiple_json_paths(self) -> None:
         parser = build_parser()
