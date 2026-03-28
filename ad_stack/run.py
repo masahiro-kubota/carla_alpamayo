@@ -38,7 +38,13 @@ from libs.carla_utils.traffic_light_phasing import (
     compute_phase_states,
 )
 from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree
-from libs.schemas import EgoStateSample, EpisodeRecord, RotatingRouteLoopMcapWriter, append_jsonl
+from libs.schemas import (
+    EgoStateSample,
+    EpisodeRecord,
+    NPCVehicleStateSample,
+    RotatingRouteLoopMcapWriter,
+    append_jsonl,
+)
 from libs.utils import render_png_sequence_to_mp4
 
 RunMode = Literal["evaluate", "interactive"]
@@ -525,6 +531,7 @@ def _spawn_npc_vehicles(
     environment_config: EnvironmentConfigSpec | None,
     rng: random.Random,
     actors: list[Any],
+    spawned_actor_refs: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     if environment_config is None or not environment_config.npc_vehicles:
         return []
@@ -545,6 +552,8 @@ def _spawn_npc_vehicles(
         if actor is None:
             raise RuntimeError(f"Failed to spawn NPC vehicle at spawn index {npc_spec.spawn_index}.")
         actors.append(actor)
+        if spawned_actor_refs is not None:
+            spawned_actor_refs.append(actor)
 
         if profile is None or profile.enable_autopilot:
             actor.set_autopilot(True, traffic_manager.get_port())
@@ -564,6 +573,53 @@ def _spawn_npc_vehicles(
             }
         )
     return spawned
+
+
+def _collect_npc_vehicle_states(
+    *,
+    npc_actor_refs: list[Any],
+    npc_actor_metadata_by_id: dict[int, dict[str, Any]],
+) -> list[NPCVehicleStateSample]:
+    states: list[NPCVehicleStateSample] = []
+    for actor in npc_actor_refs:
+        try:
+            actor_id = int(actor.id)
+            transform = actor.get_transform()
+            location = transform.location
+            rotation = transform.rotation
+            actor_type_id = str(actor.type_id)
+            current_speed_mps = float(speed_mps(actor))
+        except RuntimeError as exc:
+            if "destroyed actor" in str(exc):
+                continue
+            raise
+        metadata = npc_actor_metadata_by_id.get(actor_id, {})
+        states.append(
+            NPCVehicleStateSample(
+                actor_id=actor_id,
+                type_id=actor_type_id,
+                spawn_index=(
+                    int(metadata["spawn_index"])
+                    if metadata.get("spawn_index") is not None
+                    else None
+                ),
+                target_speed_kmh=(
+                    float(metadata["target_speed_kmh"])
+                    if metadata.get("target_speed_kmh") is not None
+                    else None
+                ),
+                speed_mps=current_speed_mps,
+                pose={
+                    "x": float(location.x),
+                    "y": float(location.y),
+                    "z": float(location.z),
+                    "yaw_deg": float(rotation.yaw),
+                    "pitch_deg": float(rotation.pitch),
+                    "roll_deg": float(rotation.roll),
+                },
+            )
+        )
+    return states
 
 
 def _route_success_criteria(scenario: RouteLoopScenarioSpec) -> dict[str, float | int]:
@@ -813,6 +869,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     min_lead_distance_m = float("inf")
     _traffic_light_violation_active = False
     npc_actors_summary: list[dict[str, Any]] = []
+    npc_actor_refs: list[Any] = []
     traffic_light_phase_indices: dict[int, int] = {}
     traffic_light_runtime_groups: list[TrafficLightPhaseRuntimeGroup] = []
     controlled_cycle_actor_ids: set[int] = set()
@@ -923,7 +980,12 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             environment_config=environment_config,
             rng=random_seed,
             actors=actors,
+            spawned_actor_refs=npc_actor_refs,
         )
+        npc_actor_metadata_by_id = {
+            int(item["actor_id"]): item
+            for item in npc_actors_summary
+        }
 
         if policy.kind == "expert":
             stack = create_expert_collector_stack(
@@ -1068,6 +1130,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 mcap_segment_path: str | None = None
 
                 if mcap_writer is not None:
+                    npc_vehicle_states = _collect_npc_vehicle_states(
+                        npc_actor_refs=npc_actor_refs,
+                        npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+                    )
                     mcap_segment = mcap_writer.write_frame(
                         current_rgb=current_rgb,
                         ego_state=EgoStateSample(
@@ -1099,6 +1165,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                                 "brake": float(decision.command.brake),
                             },
                         ),
+                        npc_vehicle_states=npc_vehicle_states,
                     )
                     mcap_segment_index = mcap_segment.segment_index
                     mcap_segment_path = relative_to_project(mcap_segment.path)

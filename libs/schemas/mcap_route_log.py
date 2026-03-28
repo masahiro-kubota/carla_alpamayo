@@ -163,6 +163,46 @@ _EGO_PLANNING_JSON_SCHEMA = {
     "additionalProperties": False,
 }
 
+_NPC_VEHICLE_STATES_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "episode_id": {"type": "string"},
+        "frame_id": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"},
+        "vehicles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "actor_id": {"type": "integer"},
+                    "type_id": {"type": ["string", "null"]},
+                    "spawn_index": {"type": ["integer", "null"]},
+                    "target_speed_kmh": {"type": ["number", "null"]},
+                    "speed_mps": {"type": "number"},
+                    "pose": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                            "yaw_deg": {"type": "number"},
+                            "pitch_deg": {"type": "number"},
+                            "roll_deg": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z", "yaw_deg", "pitch_deg", "roll_deg"],
+                        "additionalProperties": False,
+                    },
+                },
+                "required": ["actor_id", "type_id", "spawn_index", "target_speed_kmh", "speed_mps", "pose"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["timestamp", "episode_id", "frame_id", "elapsed_seconds", "vehicles"],
+    "additionalProperties": False,
+}
+
 _FOXGLOVE_SCENE_UPDATE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -403,6 +443,16 @@ class EgoStateSample:
 
 
 @dataclass(slots=True)
+class NPCVehicleStateSample:
+    actor_id: int
+    type_id: str | None
+    spawn_index: int | None
+    target_speed_kmh: float | None
+    speed_mps: float
+    pose: dict[str, float]
+
+
+@dataclass(slots=True)
 class McapSegmentInfo:
     segment_index: int
     path: Path
@@ -497,6 +547,11 @@ class RouteLoopMcapWriter:
             encoding="jsonschema",
             data=json.dumps(_EGO_PLANNING_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
+        npc_vehicle_states_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.NpcVehicleStates",
+            encoding="jsonschema",
+            data=json.dumps(_NPC_VEHICLE_STATES_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
+        )
 
         self._front_rgb_channel_id = self._writer.register_channel(
             topic="/camera/front/compressed",
@@ -550,6 +605,11 @@ class RouteLoopMcapWriter:
             topic="/ego/planning",
             message_encoding="json",
             schema_id=ego_planning_schema_id,
+        )
+        self._npc_vehicle_states_channel_id = self._writer.register_channel(
+            topic="/world/npc_vehicles",
+            message_encoding="json",
+            schema_id=npc_vehicle_states_schema_id,
         )
 
         self._writer.add_metadata(
@@ -729,6 +789,7 @@ class RouteLoopMcapWriter:
         *,
         current_rgb: Any,
         ego_state: EgoStateSample,
+        npc_vehicle_states: list[NPCVehicleStateSample] | None = None,
     ) -> None:
         log_time_ns = int(round(ego_state.timestamp_s * 1_000_000_000))
         timestamp = _foxglove_time(ego_state.timestamp_s)
@@ -891,6 +952,39 @@ class RouteLoopMcapWriter:
             data=json.dumps(ego_planning_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
         )
 
+        if npc_vehicle_states is not None:
+            npc_vehicle_states_message = {
+                "timestamp": timestamp,
+                "episode_id": ego_state.episode_id,
+                "frame_id": ego_state.frame_id,
+                "elapsed_seconds": ego_state.elapsed_seconds,
+                "vehicles": [
+                    {
+                        "actor_id": int(vehicle.actor_id),
+                        "type_id": vehicle.type_id,
+                        "spawn_index": vehicle.spawn_index,
+                        "target_speed_kmh": vehicle.target_speed_kmh,
+                        "speed_mps": float(vehicle.speed_mps),
+                        "pose": {
+                            "x": float(vehicle.pose["x"]),
+                            "y": float(vehicle.pose["y"]),
+                            "z": float(vehicle.pose["z"]),
+                            "yaw_deg": float(vehicle.pose["yaw_deg"]),
+                            "pitch_deg": float(vehicle.pose["pitch_deg"]),
+                            "roll_deg": float(vehicle.pose["roll_deg"]),
+                        },
+                    }
+                    for vehicle in npc_vehicle_states
+                ],
+            }
+            self._writer.add_message(
+                channel_id=self._npc_vehicle_states_channel_id,
+                log_time=log_time_ns,
+                publish_time=log_time_ns,
+                sequence=ego_state.frame_id,
+                data=json.dumps(npc_vehicle_states_message, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            )
+
     def close(self) -> None:
         if self._closed:
             return
@@ -1046,6 +1140,7 @@ class RotatingRouteLoopMcapWriter:
         *,
         current_rgb: Any,
         ego_state: EgoStateSample,
+        npc_vehicle_states: list[NPCVehicleStateSample] | None = None,
     ) -> McapSegmentInfo:
         segment_index = self._segment_index_for_elapsed_seconds(ego_state.elapsed_seconds)
         if self._current_segment_index != segment_index:
@@ -1058,7 +1153,11 @@ class RotatingRouteLoopMcapWriter:
 
         assert self._current_writer is not None
         assert self._current_segment_index is not None
-        self._current_writer.write_frame(current_rgb=current_rgb, ego_state=ego_state)
+        self._current_writer.write_frame(
+            current_rgb=current_rgb,
+            ego_state=ego_state,
+            npc_vehicle_states=npc_vehicle_states,
+        )
         segment = self._segments[self._current_segment_index]
         segment.end_elapsed_seconds = float(ego_state.elapsed_seconds)
         segment.frame_count += 1
