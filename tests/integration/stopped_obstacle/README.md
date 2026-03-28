@@ -11,15 +11,15 @@
 suite location:
 
 - run-configs:
-  - [stopped_obstacle](/home/masa/carla_alpamayo/simulation/run_configs/stopped_obstacle)
+  - [run_configs](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs)
 - regression runner:
-  - [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/simulation/scripts/run_stopped_obstacle_regressions.sh)
+  - [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_stopped_obstacle_regressions.sh)
 
 baseline regression set:
 
-- [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/stopped_obstacle/town01_stopped_obstacle_clear_long_expert.json)
-- [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/stopped_obstacle/town01_stopped_obstacle_blocked_long_expert.json)
-- [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/stopped_obstacle/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
+- [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json)
+- [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
+- [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
 
 latest verified run set:
 
@@ -307,7 +307,7 @@ verification:
 新しい停止障害物変更を入れたときは、まず regression を回す。
 
 ```bash
-./simulation/scripts/run_stopped_obstacle_regressions.sh
+./tests/integration/stopped_obstacle/run_stopped_obstacle_regressions.sh
 ```
 
 その後、各 scenario について次だけを見る。
