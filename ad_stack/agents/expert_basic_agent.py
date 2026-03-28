@@ -215,6 +215,17 @@ class ExpertBasicAgent:
     def _start_overtake(self, direction: Literal["left", "right"], route_index: int | None) -> bool:
         if not self._base_trace:
             return False
+
+        def append_plan_segment(
+            target_plan: list[tuple[Any, Any]], segment: list[tuple[Any, Any]]
+        ) -> None:
+            for waypoint, option in segment:
+                if target_plan:
+                    tail_location = target_plan[-1][0].transform.location
+                    if tail_location.distance(waypoint.transform.location) <= 0.5:
+                        continue
+                target_plan.append((waypoint, option))
+
         current_waypoint = self._map.get_waypoint(self._vehicle.get_location())
         lane_change_path = self._agent._generate_lane_change_path(
             current_waypoint,
@@ -257,6 +268,20 @@ class ExpertBasicAgent:
             )
             hold_waypoint = preferred_waypoint
 
+        return_direction: Literal["left", "right"] = "right" if direction == "left" else "left"
+        return_path = self._agent._generate_lane_change_path(
+            hold_waypoint,
+            direction=return_direction,
+            distance_same_lane=self.config.lane_change_same_lane_distance_m,
+            distance_other_lane=self.config.lane_change_other_lane_distance_m,
+            lane_change_distance=self.config.lane_change_distance_m,
+            check=False,
+            lane_changes=1,
+            step_distance=self.config.sampling_resolution_m,
+        )
+        if return_path:
+            append_plan_segment(combined_plan, return_path[1:])
+
         trace_index = min(
             self._route_trace_index(route_index)
             + 8
@@ -268,12 +293,7 @@ class ExpertBasicAgent:
             ),
             len(self._base_trace) - 1,
         )
-        for waypoint, option in self._base_trace[trace_index:]:
-            if combined_plan:
-                tail_location = combined_plan[-1][0].transform.location
-                if tail_location.distance(waypoint.transform.location) <= 0.5:
-                    continue
-            combined_plan.append((waypoint, option))
+        append_plan_segment(combined_plan, self._base_trace[trace_index:])
         self._overtake_waypoints = deque(waypoint for waypoint, _option in combined_plan)
         return True
 
