@@ -5,9 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 RUN_CONFIGS=(
-  "simulation/run_configs/town01_stopped_obstacle_clear_long_expert.json"
-  "simulation/run_configs/town01_stopped_obstacle_blocked_long_expert.json"
-  "simulation/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json"
+  "simulation/run_configs/stopped_obstacle/town01_stopped_obstacle_clear_long_expert.json"
+  "simulation/run_configs/stopped_obstacle/town01_stopped_obstacle_blocked_long_expert.json"
+  "simulation/run_configs/stopped_obstacle/town01_stopped_obstacle_blocked_oncoming_long_expert.json"
 )
 
 SUMMARY_PATHS=()
