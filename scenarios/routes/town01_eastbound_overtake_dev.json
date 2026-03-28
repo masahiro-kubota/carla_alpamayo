@@ -1,0 +1,8 @@
+{
+  "name": "town01_eastbound_overtake_dev",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [207, 201],
+  "description": "Deterministic eastbound straight in Town01 for stopped-obstacle overtake development. The start point is close enough to spawn a stopped lead within the overtake trigger range."
+}

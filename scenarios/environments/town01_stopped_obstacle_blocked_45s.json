@@ -6,16 +6,16 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "stopped_obstacle_profile_v1",
-      "spawn_index": 217,
+      "spawn_index": 205,
       "lane_behavior": "keep_lane"
     },
     {
       "npc_profile_id": "lane_blocker_profile_v1",
-      "spawn_index": 216,
+      "spawn_index": 206,
       "lane_behavior": "keep_lane"
     }
   ],
   "traffic_light_overrides": [],
   "traffic_light_schedules": [],
-  "description": "Town01 northbound stopped-obstacle blocker scenario. A stationary obstacle is ahead in ego's lane while the opposing lane is occupied close by, so the expert should reject the bypass and wait conservatively. Use with town01_northbound_overtake_short."
+  "description": "Town01 eastbound stopped-obstacle blocker scenario. A stationary obstacle is just ahead in ego's lane while the opposing lane is occupied close by, so the expert should reject the bypass and wait conservatively. Use with town01_eastbound_overtake_dev."
 }
