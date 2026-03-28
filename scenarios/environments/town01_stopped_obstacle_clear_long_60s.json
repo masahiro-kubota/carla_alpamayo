@@ -1,0 +1,14 @@
+{
+  "name": "town01_stopped_obstacle_clear_long_60s",
+  "town": "Town01",
+  "max_seconds": 60.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 221,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "description": "Town01 northbound stopped-obstacle clear scenario on the long road-15 straight. A single stationary obstacle is placed far ahead in ego's lane to provide enough runway for lane change, pass, and rejoin. Use with town01_northbound_overtake_long and stopped_obstacle_dev expert config."
+}

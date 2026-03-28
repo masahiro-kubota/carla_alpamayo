@@ -1,0 +1,22 @@
+{
+  "mode": "evaluate",
+  "scenario": {
+    "type": "route_loop",
+    "route_config_path": "scenarios/routes/town01_northbound_overtake_long.json",
+    "environment_config_path": "scenarios/environments/town01_stopped_obstacle_clear_long_60s.json"
+  },
+  "runtime": {
+    "host": "localhost",
+    "port": 2000
+  },
+  "policy": {
+    "kind": "expert",
+    "expert_config_path": "ad_stack/configs/expert/stopped_obstacle_dev.json"
+  },
+  "artifacts": {
+    "record_video": false,
+    "record_mcap": true,
+    "record_hz": 10.0,
+    "record_preview": false
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "town01_northbound_overtake_long",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [215, 72],
+  "description": "Long northbound straight on Town01 road-15, used for stopped-obstacle overtake development with additional runway for pass and rejoin."
+}

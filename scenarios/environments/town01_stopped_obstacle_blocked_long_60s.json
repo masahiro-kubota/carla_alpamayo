@@ -1,0 +1,19 @@
+{
+  "name": "town01_stopped_obstacle_blocked_long_60s",
+  "town": "Town01",
+  "max_seconds": 60.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 221,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "lane_blocker_profile_v1",
+      "spawn_index": 216,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "description": "Town01 northbound stopped-obstacle blocked scenario on the long road-15 straight. The stopped obstacle is far ahead in ego's lane while the adjacent passing lane is occupied near ego, so the expert should reject the bypass and wait."
+}
