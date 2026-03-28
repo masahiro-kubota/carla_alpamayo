@@ -14,46 +14,20 @@ fi
 usage() {
   cat <<'EOF'
 Usage:
-  ./simulation/scripts/run_expert_town01.sh
+  ./simulation/scripts/run_expert_town01.sh <run-config.json>
 
-This wrapper accepts no positional CLI overrides.
-Configure it via environment variables instead:
-  CARLA_HOST
-  CARLA_PORT
-  CARLA_ROUTE_CONFIG
-  CARLA_ENVIRONMENT_CONFIG  (required)
-  CARLA_EXPERT_CONFIG
-  CARLA_CAMERA_WIDTH
-  CARLA_CAMERA_HEIGHT
+Every simulation setting must live in the JSON file.
+This wrapper only forwards the config to simulation.pipelines.run_route_loop.
 EOF
 }
 
-if [[ $# -gt 0 ]]; then
-  case "$1" in
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unexpected argument: $1" >&2
-      usage >&2
-      exit 2
-      ;;
-  esac
-fi
-
-if [[ -z "${CARLA_ENVIRONMENT_CONFIG:-}" ]]; then
-  echo "CARLA_ENVIRONMENT_CONFIG is required." >&2
+if [[ $# -ne 1 ]]; then
+  if [[ $# -eq 1 && ( "$1" == "-h" || "$1" == "--help" ) ]]; then
+    usage
+    exit 0
+  fi
   usage >&2
   exit 2
 fi
 
-PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
-  --policy-kind expert \
-  --host "${CARLA_HOST:-127.0.0.1}" \
-  --port "${CARLA_PORT:-2000}" \
-  --route-config "${CARLA_ROUTE_CONFIG:-scenarios/routes/town01_pilotnet_loop.json}" \
-  --environment-config "${CARLA_ENVIRONMENT_CONFIG}" \
-  --expert-config "${CARLA_EXPERT_CONFIG:-ad_stack/configs/expert/default.json}" \
-  --camera-width "${CARLA_CAMERA_WIDTH:-1280}" \
-  --camera-height "${CARLA_CAMERA_HEIGHT:-720}"
+PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop "$1"
