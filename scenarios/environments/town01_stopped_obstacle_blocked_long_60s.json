@@ -10,7 +10,7 @@
     },
     {
       "npc_profile_id": "lane_blocker_profile_v1",
-      "spawn_index": 216,
+      "spawn_index": 218,
       "lane_behavior": "keep_lane"
     }
   ],
