@@ -1,0 +1,35 @@
+{
+  "name": "town01_stopped_obstacle_double_stopped_separated_long_60s",
+  "town": "Town01",
+  "max_seconds": 60.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_transform": {
+        "x": -2.03,
+        "y": 137.96,
+        "z": 0.3,
+        "yaw_deg": 89.97
+      },
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_transform": {
+        "x": -2.02,
+        "y": 197.96,
+        "z": 0.3,
+        "yaw_deg": 89.97
+      },
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "stopped_obstacle_scenario": {
+    "scenario_kind": "double_stopped_separated",
+    "obstacle_npc_index": 0,
+    "blocker_npc_index": 1,
+    "route_aligned_adjacent_lane_available": true
+  },
+  "description": "Town01 northbound long straight with two separated stationary same-lane obstacles. The ego should overtake the first, rejoin, then reacquire the second."
+}
