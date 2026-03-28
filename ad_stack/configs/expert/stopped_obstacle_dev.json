@@ -21,5 +21,5 @@
   "lane_change_same_lane_distance_m": 6.0,
   "lane_change_distance_m": 14.0,
   "lane_change_other_lane_distance_m": 22.0,
-  "overtake_hold_distance_m": 30.0
+  "overtake_hold_distance_m": 8.0
 }
