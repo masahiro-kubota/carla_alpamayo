@@ -105,6 +105,7 @@ class PreflightValidationInput:
     scenario_kind: ScenarioKind
     ego_lane_id: str | None
     obstacle_lane_id: str | None
+    obstacle_route_lane_id: str | None = None
     blocker_lane_id: str | None = None
     ego_to_obstacle_longitudinal_distance_m: float | None = None
     ego_to_blocker_longitudinal_distance_m: float | None = None
@@ -282,7 +283,16 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
     errors: list[str] = []
     warnings: list[str] = []
 
-    if snapshot.obstacle_lane_id != snapshot.ego_lane_id:
+    obstacle_aligned_with_route = (
+        snapshot.obstacle_route_lane_id is not None
+        and snapshot.obstacle_lane_id == snapshot.obstacle_route_lane_id
+    )
+    obstacle_expected_in_current_or_future_lane = snapshot.obstacle_lane_id == snapshot.ego_lane_id
+    if snapshot.scenario_kind == "curve_clear":
+        obstacle_expected_in_current_or_future_lane = (
+            obstacle_expected_in_current_or_future_lane or obstacle_aligned_with_route
+        )
+    if not obstacle_expected_in_current_or_future_lane:
         errors.append("obstacle_not_in_ego_lane")
     if (
         snapshot.ego_to_obstacle_longitudinal_distance_m is None

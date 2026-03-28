@@ -152,6 +152,9 @@ def build_stopped_obstacle_scenario_validation(
         scenario_kind=scenario_config.scenario_kind,
         ego_lane_id=_lane_id(ego_waypoint),
         obstacle_lane_id=_lane_id(obstacle_waypoint),
+        obstacle_route_lane_id=_lane_id(
+            _nearest_route_waypoint(route_trace, location=obstacle_actor.get_location())
+        ),
         blocker_lane_id=_lane_id(blocker_waypoint),
         ego_to_obstacle_longitudinal_distance_m=_distance_ahead_m(
             origin_waypoint=ego_waypoint,
@@ -180,6 +183,7 @@ def build_stopped_obstacle_scenario_validation(
             "ego_lane_id": validation_input.ego_lane_id,
             "obstacle_actor_id": int(obstacle_actor.id),
             "obstacle_lane_id": validation_input.obstacle_lane_id,
+            "obstacle_route_lane_id": validation_input.obstacle_route_lane_id,
             "blocker_actor_id": blocker_actor_id,
             "blocker_lane_id": validation_input.blocker_lane_id,
             "ego_to_obstacle_longitudinal_distance_m": (

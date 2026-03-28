@@ -153,6 +153,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         self.assertEqual(result["snapshot"]["ego_lane_id"], "1:1")
         self.assertEqual(result["snapshot"]["obstacle_actor_id"], 201)
         self.assertEqual(result["snapshot"]["obstacle_lane_id"], "1:1")
+        self.assertEqual(result["snapshot"]["obstacle_route_lane_id"], "1:1")
         self.assertEqual(result["snapshot"]["route_target_lane_id"], "1:1")
         self.assertTrue(result["snapshot"]["left_lane_is_driving"])
         self.assertFalse(result["snapshot"]["right_lane_is_driving"])
@@ -245,6 +246,57 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
 
         self.assertTrue(result["valid"])
         self.assertEqual(result["snapshot"]["route_target_lane_id"], "1:1")
+
+    def test_curve_clear_allows_obstacle_on_future_route_lane(self) -> None:
+        ego_location = _FakeLocation(0.0, 0.0, 0.0)
+        obstacle_location = _FakeLocation(10.0, 10.0, 0.0)
+        ego_waypoint = _FakeWaypoint(road_id=15, lane_id=1, s=0.0, location=ego_location)
+        obstacle_waypoint = _FakeWaypoint(
+            road_id=13,
+            lane_id=-1,
+            s=4.0,
+            location=obstacle_location,
+        )
+        left_waypoint = _FakeWaypoint(
+            road_id=13,
+            lane_id=1,
+            s=4.0,
+            location=_FakeLocation(13.5, 10.0, 0.0),
+        )
+        obstacle_waypoint.set_left_lane(left_waypoint)
+        world_map = _FakeWorldMap(
+            {
+                (ego_location.x, ego_location.y, ego_location.z): ego_waypoint,
+                (obstacle_location.x, obstacle_location.y, obstacle_location.z): obstacle_waypoint,
+            }
+        )
+        ego_vehicle = _FakeActor(1, ego_location)
+        obstacle_actor = _FakeActor(201, obstacle_location)
+        route_curve_waypoint = _FakeWaypoint(
+            road_id=13,
+            lane_id=-1,
+            s=4.0,
+            location=_FakeLocation(10.0, 10.0, 0.0),
+        )
+        environment = EnvironmentConfigSpec(
+            name="curve_case",
+            town="Town01",
+            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="curve_clear"),
+        )
+
+        result = build_stopped_obstacle_scenario_validation(
+            environment_config=environment,
+            world_map=world_map,
+            route_trace=[(ego_waypoint, None), (route_curve_waypoint, None)],
+            ego_vehicle=ego_vehicle,
+            npc_actor_refs=[obstacle_actor],
+            driving_lane_type="Driving",
+        )
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["snapshot"]["obstacle_lane_id"], "13:-1")
+        self.assertEqual(result["snapshot"]["obstacle_route_lane_id"], "13:-1")
 
 
 if __name__ == "__main__":
