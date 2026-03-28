@@ -111,9 +111,18 @@ def _plot_background(ax: Any, lane_centerlines: list[list[tuple[float, float]]])
         ax.add_collection(
             LineCollection(
                 lane_segments,
-                colors="#d6d3d1",
-                linewidths=0.55,
-                alpha=0.8,
+                colors="#e7e5e4",
+                linewidths=8.0,
+                alpha=0.95,
+                zorder=0,
+            )
+        )
+        ax.add_collection(
+            LineCollection(
+                lane_segments,
+                colors="#cbd5e1",
+                linewidths=0.75,
+                alpha=0.9,
                 zorder=1,
             )
         )
