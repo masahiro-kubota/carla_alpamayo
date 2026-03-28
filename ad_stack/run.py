@@ -10,6 +10,7 @@ from math import inf
 from pathlib import Path
 from typing import Any, Literal
 
+from ad_stack.overtake import PreflightValidationInput, validate_preflight
 from ad_stack.api import (
     create_expert_collector_stack,
     create_interactive_pilotnet_controller,
@@ -49,6 +50,17 @@ from libs.schemas import (
     append_jsonl,
 )
 from libs.utils import render_png_sequence_to_mp4
+from simulation.environment_config import (
+    EnvironmentConfigSpec,
+    NPCProfileSpec,
+    NPCVehicleSpec,
+    StoppedObstacleScenarioConfig,
+    TrafficLightOverrideSpec,
+    TrafficLightPhaseCycleSpec,
+    TrafficLightScheduleSpec,
+    load_environment_config,
+    load_npc_profile,
+)
 
 RunMode = Literal["evaluate", "interactive"]
 PolicyKind = Literal["expert", "learned", "interactive"]
@@ -70,71 +82,9 @@ class RouteLoopScenarioSpec:
 
 
 @dataclass(slots=True)
-class NPCProfileSpec:
-    name: str
-    default_target_speed_kmh: float = 20.0
-    speed_jitter_kmh: float = 0.0
-    enable_autopilot: bool = True
-
-
-@dataclass(slots=True)
-class NPCVehicleSpec:
-    spawn_index: int
-    npc_profile_id: str | None = None
-    target_speed_kmh: float | None = None
-    lane_behavior: str = "keep_lane"
-    vehicle_filter: str = "vehicle.*"
-
-
-@dataclass(slots=True)
-class TrafficLightOverrideSpec:
-    actor_id: int
-    state: str
-    freeze: bool = True
-
-
-@dataclass(slots=True)
-class TrafficLightSchedulePhaseSpec:
-    at_seconds: float
-    state: str
-    freeze: bool = True
-
-
-@dataclass(slots=True)
-class TrafficLightScheduleSpec:
-    actor_id: int
-    phases: list[TrafficLightSchedulePhaseSpec] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class TrafficLightPhaseCycleSpec:
-    green_seconds: float
-    yellow_seconds: float
-    all_red_seconds: float
-    reset_groups: bool = True
-    initial_offset_seconds: float = 0.0
-
-
-@dataclass(slots=True)
 class TrafficLightPhaseRuntimeGroup:
     actor_ids: list[int]
     phase_actor_ids: list[list[int]]
-
-
-@dataclass(slots=True)
-class EnvironmentConfigSpec:
-    name: str
-    town: str
-    weather: str | None = None
-    goal_tolerance_m: float | None = None
-    max_stop_seconds: float | None = None
-    stationary_speed_threshold_mps: float | None = None
-    max_seconds: float | None = None
-    npc_vehicles: list[NPCVehicleSpec] = field(default_factory=list)
-    traffic_light_phase_cycle: TrafficLightPhaseCycleSpec | None = None
-    traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
-    traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
-    description: str = ""
 
 
 @dataclass(slots=True)
@@ -250,100 +200,6 @@ def _lane_id(waypoint: Any | None) -> str | None:
     if waypoint is None:
         return None
     return f"{waypoint.road_id}:{waypoint.lane_id}"
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
-
-
-def _load_npc_profile(profile_id: str) -> NPCProfileSpec:
-    profile_path = PROJECT_ROOT / "scenarios" / "npc_profiles" / f"{profile_id}.json"
-    raw = _load_json(profile_path)
-    return NPCProfileSpec(
-        name=str(raw["name"]),
-        default_target_speed_kmh=float(raw.get("default_target_speed_kmh", 20.0)),
-        speed_jitter_kmh=float(raw.get("speed_jitter_kmh", 0.0)),
-        enable_autopilot=bool(raw.get("enable_autopilot", True)),
-    )
-
-
-def _load_environment_config(path: Path) -> EnvironmentConfigSpec:
-    raw = _load_json(path)
-    raw_cycle = raw.get("traffic_light_phase_cycle")
-    if raw_cycle is None:
-        raw_cycle = raw.get("traffic_light_group_cycle")
-    all_red_seconds = None
-    if raw_cycle is not None:
-        all_red_seconds = raw_cycle.get("all_red_seconds")
-        if all_red_seconds is None:
-            all_red_seconds = raw_cycle["red_seconds"]
-    return EnvironmentConfigSpec(
-        name=str(raw["name"]),
-        town=str(raw["town"]),
-        weather=str(raw["weather"]) if raw.get("weather") is not None else None,
-        goal_tolerance_m=float(raw["goal_tolerance_m"])
-        if raw.get("goal_tolerance_m") is not None
-        else None,
-        max_stop_seconds=float(raw["max_stop_seconds"])
-        if raw.get("max_stop_seconds") is not None
-        else None,
-        stationary_speed_threshold_mps=(
-            float(raw["stationary_speed_threshold_mps"])
-            if raw.get("stationary_speed_threshold_mps") is not None
-            else None
-        ),
-        max_seconds=float(raw["max_seconds"]) if raw.get("max_seconds") is not None else None,
-        npc_vehicles=[
-            NPCVehicleSpec(
-                spawn_index=int(item["spawn_index"]),
-                npc_profile_id=str(item["npc_profile_id"]) if item.get("npc_profile_id") else None,
-                target_speed_kmh=float(item["target_speed_kmh"])
-                if item.get("target_speed_kmh") is not None
-                else None,
-                lane_behavior=str(item.get("lane_behavior", "keep_lane")),
-                vehicle_filter=str(item.get("vehicle_filter", "vehicle.*")),
-            )
-            for item in raw.get("npc_vehicles", [])
-        ],
-        traffic_light_phase_cycle=(
-            TrafficLightPhaseCycleSpec(
-                green_seconds=float(raw_cycle["green_seconds"]),
-                yellow_seconds=float(raw_cycle["yellow_seconds"]),
-                all_red_seconds=float(all_red_seconds),
-                reset_groups=bool(raw_cycle.get("reset_groups", True)),
-                initial_offset_seconds=float(raw_cycle.get("initial_offset_seconds", 0.0)),
-            )
-            if raw_cycle is not None
-            else None
-        ),
-        traffic_light_overrides=[
-            TrafficLightOverrideSpec(
-                actor_id=int(item["actor_id"]),
-                state=str(item["state"]),
-                freeze=bool(item.get("freeze", True)),
-            )
-            for item in raw.get("traffic_light_overrides", [])
-        ],
-        traffic_light_schedules=[
-            TrafficLightScheduleSpec(
-                actor_id=int(item["actor_id"]),
-                phases=[
-                    TrafficLightSchedulePhaseSpec(
-                        at_seconds=float(phase["at_seconds"]),
-                        state=str(phase["state"]),
-                        freeze=bool(phase.get("freeze", True)),
-                    )
-                    for phase in sorted(
-                        item.get("phases", []),
-                        key=lambda phase: float(phase["at_seconds"]),
-                    )
-                ],
-            )
-            for item in raw.get("traffic_light_schedules", [])
-        ],
-        description=str(raw.get("description", "")),
-    )
 
 
 def _resolved_npc_speed_kmh(
@@ -566,17 +422,38 @@ def _spawn_npc_vehicles(
     spawn_points = world.get_map().get_spawn_points()
     spawned: list[dict[str, Any]] = []
     for npc_spec in environment_config.npc_vehicles:
-        if npc_spec.spawn_index < 0 or npc_spec.spawn_index >= len(spawn_points):
+        if npc_spec.spawn_index is None and npc_spec.spawn_transform is None:
+            raise RuntimeError("NPC vehicle requires spawn_index or spawn_transform.")
+        if npc_spec.spawn_index is not None and (
+            npc_spec.spawn_index < 0 or npc_spec.spawn_index >= len(spawn_points)
+        ):
             raise RuntimeError(f"NPC spawn_index out of range: {npc_spec.spawn_index}")
-        profile = _load_npc_profile(npc_spec.npc_profile_id) if npc_spec.npc_profile_id else None
+        profile = load_npc_profile(npc_spec.npc_profile_id) if npc_spec.npc_profile_id else None
         desired_speed_kmh = _resolved_npc_speed_kmh(npc_spec, profile, rng)
         blueprint = require_blueprint(world, npc_spec.vehicle_filter, rng=rng)
         blueprint.set_attribute("role_name", "npc")
-        actor = world.try_spawn_actor(blueprint, spawn_points[npc_spec.spawn_index])
-        if actor is None:
-            raise RuntimeError(
-                f"Failed to spawn NPC vehicle at spawn index {npc_spec.spawn_index}."
+        if npc_spec.spawn_transform is not None:
+            spawn_transform = carla_module.Transform(
+                carla_module.Location(
+                    x=float(npc_spec.spawn_transform.x),
+                    y=float(npc_spec.spawn_transform.y),
+                    z=float(npc_spec.spawn_transform.z),
+                ),
+                carla_module.Rotation(
+                    pitch=float(npc_spec.spawn_transform.pitch_deg),
+                    yaw=float(npc_spec.spawn_transform.yaw_deg),
+                    roll=float(npc_spec.spawn_transform.roll_deg),
+                ),
             )
+        else:
+            spawn_transform = spawn_points[int(npc_spec.spawn_index)]
+        actor = world.try_spawn_actor(blueprint, spawn_transform)
+        if actor is None:
+            if npc_spec.spawn_index is not None:
+                raise RuntimeError(
+                    f"Failed to spawn NPC vehicle at spawn index {npc_spec.spawn_index}."
+                )
+            raise RuntimeError("Failed to spawn NPC vehicle at explicit transform.")
         actors.append(actor)
         if spawned_actor_refs is not None:
             spawned_actor_refs.append(actor)
@@ -599,6 +476,18 @@ def _spawn_npc_vehicles(
             {
                 "actor_id": int(actor.id),
                 "spawn_index": npc_spec.spawn_index,
+                "spawn_transform": (
+                    {
+                        "x": round(float(npc_spec.spawn_transform.x), 3),
+                        "y": round(float(npc_spec.spawn_transform.y), 3),
+                        "z": round(float(npc_spec.spawn_transform.z), 3),
+                        "yaw_deg": round(float(npc_spec.spawn_transform.yaw_deg), 3),
+                        "pitch_deg": round(float(npc_spec.spawn_transform.pitch_deg), 3),
+                        "roll_deg": round(float(npc_spec.spawn_transform.roll_deg), 3),
+                    }
+                    if npc_spec.spawn_transform is not None
+                    else None
+                ),
                 "target_speed_kmh": round(desired_speed_kmh, 2),
                 "lane_behavior": npc_spec.lane_behavior,
                 "npc_profile_id": npc_spec.npc_profile_id,
@@ -637,6 +526,11 @@ def _collect_npc_vehicle_states(
                 spawn_index=(
                     int(metadata["spawn_index"])
                     if metadata.get("spawn_index") is not None
+                    else None
+                ),
+                spawn_transform=(
+                    dict(metadata["spawn_transform"])
+                    if metadata.get("spawn_transform") is not None
                     else None
                 ),
                 target_speed_kmh=(
@@ -904,6 +798,177 @@ def _lane_centerlines_all_map(
     return centerlines
 
 
+def _distance_ahead_m(*, origin_waypoint: Any | None, target_waypoint: Any | None) -> float | None:
+    if origin_waypoint is None or target_waypoint is None:
+        return None
+    if (
+        int(origin_waypoint.road_id) == int(target_waypoint.road_id)
+        and int(origin_waypoint.lane_id) == int(target_waypoint.lane_id)
+    ):
+        origin_s = getattr(origin_waypoint, "s", None)
+        target_s = getattr(target_waypoint, "s", None)
+        if origin_s is not None and target_s is not None:
+            return float(target_s) - float(origin_s)
+    return float(origin_waypoint.transform.location.distance(target_waypoint.transform.location))
+
+
+def _nearest_junction_distance_along_route(
+    route_trace: list[tuple[Any, Any]],
+    *,
+    location: Any,
+) -> float | None:
+    if not route_trace:
+        return None
+    nearest_index = min(
+        range(len(route_trace)),
+        key=lambda index: float(route_trace[index][0].transform.location.distance(location)),
+    )
+    accumulated_distance_m = 0.0
+    previous_location = route_trace[nearest_index][0].transform.location
+    if bool(route_trace[nearest_index][0].is_junction):
+        return 0.0
+    for waypoint, _road_option in route_trace[nearest_index + 1 :]:
+        current_location = waypoint.transform.location
+        accumulated_distance_m += float(previous_location.distance(current_location))
+        if bool(waypoint.is_junction):
+            return accumulated_distance_m
+        previous_location = current_location
+    return None
+
+
+def _build_stopped_obstacle_scenario_validation(
+    *,
+    environment_config: EnvironmentConfigSpec | None,
+    world_map: Any,
+    route_trace: list[tuple[Any, Any]],
+    ego_vehicle: Any,
+    npc_actor_refs: list[Any],
+) -> dict[str, Any] | None:
+    scenario_config = (
+        environment_config.stopped_obstacle_scenario if environment_config is not None else None
+    )
+    if scenario_config is None:
+        return None
+
+    if not npc_actor_refs:
+        return {
+            "scenario_kind": scenario_config.scenario_kind,
+            "valid": False,
+            "errors": ["obstacle_actor_missing"],
+            "warnings": [],
+            "snapshot": None,
+        }
+
+    if (
+        scenario_config.obstacle_npc_index < 0
+        or scenario_config.obstacle_npc_index >= len(npc_actor_refs)
+    ):
+        return {
+            "scenario_kind": scenario_config.scenario_kind,
+            "valid": False,
+            "errors": ["obstacle_actor_missing"],
+            "warnings": [],
+            "snapshot": None,
+        }
+
+    ego_waypoint = world_map.get_waypoint(ego_vehicle.get_location())
+    obstacle_actor = npc_actor_refs[scenario_config.obstacle_npc_index]
+    obstacle_waypoint = world_map.get_waypoint(obstacle_actor.get_location())
+    blocker_waypoint = None
+    blocker_actor_id = None
+    if (
+        scenario_config.blocker_npc_index is not None
+        and 0 <= scenario_config.blocker_npc_index < len(npc_actor_refs)
+    ):
+        blocker_actor = npc_actor_refs[scenario_config.blocker_npc_index]
+        blocker_actor_id = int(blocker_actor.id)
+        blocker_waypoint = world_map.get_waypoint(blocker_actor.get_location())
+
+    left_waypoint = obstacle_waypoint.get_left_lane() if obstacle_waypoint is not None else None
+    right_waypoint = obstacle_waypoint.get_right_lane() if obstacle_waypoint is not None else None
+    carla_module = _require_carla()
+    left_lane_is_driving = (
+        left_waypoint is not None and left_waypoint.lane_type == carla_module.LaneType.Driving
+    )
+    right_lane_is_driving = (
+        right_waypoint is not None and right_waypoint.lane_type == carla_module.LaneType.Driving
+    )
+    route_aligned_adjacent_lane_available = (
+        bool(scenario_config.route_aligned_adjacent_lane_available)
+        if scenario_config.route_aligned_adjacent_lane_available is not None
+        else bool(left_lane_is_driving or right_lane_is_driving)
+    )
+    nearest_junction_distance_m = (
+        float(scenario_config.nearest_junction_distance_m)
+        if scenario_config.nearest_junction_distance_m is not None
+        else _nearest_junction_distance_along_route(route_trace, location=obstacle_actor.get_location())
+    )
+    nearest_signal_distance_m = (
+        float(scenario_config.nearest_signal_distance_m)
+        if scenario_config.nearest_signal_distance_m is not None
+        else None
+    )
+
+    validation_input = PreflightValidationInput(
+        scenario_kind=scenario_config.scenario_kind,
+        ego_lane_id=_lane_id(ego_waypoint),
+        obstacle_lane_id=_lane_id(obstacle_waypoint),
+        blocker_lane_id=_lane_id(blocker_waypoint),
+        ego_to_obstacle_longitudinal_distance_m=_distance_ahead_m(
+            origin_waypoint=ego_waypoint, target_waypoint=obstacle_waypoint
+        ),
+        ego_to_blocker_longitudinal_distance_m=_distance_ahead_m(
+            origin_waypoint=ego_waypoint, target_waypoint=blocker_waypoint
+        ),
+        left_lane_is_driving=bool(left_lane_is_driving),
+        right_lane_is_driving=bool(right_lane_is_driving),
+        route_target_lane_id=_lane_id(route_trace[0][0]) if route_trace else None,
+        nearest_signal_distance_m=nearest_signal_distance_m,
+        nearest_junction_distance_m=nearest_junction_distance_m,
+        route_aligned_adjacent_lane_available=route_aligned_adjacent_lane_available,
+    )
+    validation_result = validate_preflight(validation_input)
+    return {
+        "scenario_kind": scenario_config.scenario_kind,
+        "valid": bool(validation_result.is_valid),
+        "errors": list(validation_result.errors),
+        "warnings": list(validation_result.warnings),
+        "snapshot": {
+            "ego_lane_id": validation_input.ego_lane_id,
+            "obstacle_actor_id": int(obstacle_actor.id),
+            "obstacle_lane_id": validation_input.obstacle_lane_id,
+            "blocker_actor_id": blocker_actor_id,
+            "blocker_lane_id": validation_input.blocker_lane_id,
+            "ego_to_obstacle_longitudinal_distance_m": (
+                round(validation_input.ego_to_obstacle_longitudinal_distance_m, 3)
+                if validation_input.ego_to_obstacle_longitudinal_distance_m is not None
+                else None
+            ),
+            "ego_to_blocker_longitudinal_distance_m": (
+                round(validation_input.ego_to_blocker_longitudinal_distance_m, 3)
+                if validation_input.ego_to_blocker_longitudinal_distance_m is not None
+                else None
+            ),
+            "left_lane_is_driving": bool(validation_input.left_lane_is_driving),
+            "right_lane_is_driving": bool(validation_input.right_lane_is_driving),
+            "route_target_lane_id": validation_input.route_target_lane_id,
+            "route_aligned_adjacent_lane_available": bool(
+                validation_input.route_aligned_adjacent_lane_available
+            ),
+            "nearest_signal_distance_m": (
+                round(validation_input.nearest_signal_distance_m, 3)
+                if validation_input.nearest_signal_distance_m is not None
+                else None
+            ),
+            "nearest_junction_distance_m": (
+                round(validation_input.nearest_junction_distance_m, 3)
+                if validation_input.nearest_junction_distance_m is not None
+                else None
+            ),
+        },
+    }
+
+
 def _validate_route_loop_request(request: RunRequest) -> RouteLoopScenarioSpec:
     if not isinstance(request.scenario, RouteLoopScenarioSpec):
         raise TypeError(f"Mode {request.mode!r} requires RouteLoopScenarioSpec.")
@@ -936,7 +1001,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     route_config_path = Path(scenario.route_config_path).resolve()
     route_config = load_route_config(route_config_path)
     environment_config = (
-        _load_environment_config(Path(scenario.environment_config_path).resolve())
+        load_environment_config(Path(scenario.environment_config_path).resolve())
         if scenario.environment_config_path is not None
         else None
     )
@@ -1014,6 +1079,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     traffic_light_phase_indices: dict[int, int] = {}
     traffic_light_runtime_groups: list[TrafficLightPhaseRuntimeGroup] = []
     controlled_cycle_actor_ids: set[int] = set()
+    scenario_validation: dict[str, Any] | None = None
     explicit_traffic_light_actor_ids = {
         override.actor_id
         for override in (
@@ -1136,6 +1202,13 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             spawned_actor_refs=npc_actor_refs,
         )
         npc_actor_metadata_by_id = {int(item["actor_id"]): item for item in npc_actors_summary}
+        scenario_validation = _build_stopped_obstacle_scenario_validation(
+            environment_config=environment_config,
+            world_map=world.get_map(),
+            route_trace=planned_route.trace,
+            ego_vehicle=vehicle,
+            npc_actor_refs=npc_actor_refs,
+        )
         traffic_manager = client.get_trafficmanager(8000)
 
         if policy.kind == "expert":
@@ -1173,158 +1246,167 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
             stack_description = stack.describe()
 
-        world_frame = world.tick()
-        current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
-        if mcap_writer is not None:
-            lane_centerlines = (
-                _lane_centerlines_all_map(world.get_map())
-                if artifacts.mcap_map_scope == "full"
-                else _lane_centerlines_near_route(world.get_map(), planned_route.trace)
-            )
-            mcap_writer.write_static_scene(
-                timestamp_s=current_image.timestamp,
-                route_name=route_config.name,
-                route_points=_route_trace_xyz(planned_route.trace),
-                lane_centerlines=lane_centerlines,
-            )
-        preview_sink = policy.preview_sink
-        while True:
-            _apply_npc_target_speeds(
-                traffic_manager=traffic_manager,
-                npc_actor_refs=npc_actor_refs,
-                npc_actor_metadata_by_id=npc_actor_metadata_by_id,
-            )
-            _apply_derived_traffic_light_group_cycle(
-                carla,
-                lights_by_id,
-                traffic_light_runtime_groups,
-                environment_config.traffic_light_phase_cycle
-                if environment_config is not None
-                else None,
-                elapsed_seconds=elapsed_seconds,
-                applied_states=traffic_light_cycle_states,
-                excluded_actor_ids=explicit_traffic_light_actor_ids,
-            )
-            _apply_traffic_light_schedules(
-                carla,
-                lights_by_id,
-                environment_config.traffic_light_schedules
-                if environment_config is not None
-                else [],
-                elapsed_seconds=elapsed_seconds,
-                applied_phase_indices=traffic_light_phase_indices,
-            )
-            current_speed = speed_mps(vehicle)
-            vehicle_transform = vehicle.get_transform()
-            vehicle_location = vehicle_transform.location
-            current_rgb = (
-                _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
-            )
-
-            if policy.kind == "learned":
-                step_result = stack.run_step(
-                    timestamp_s=elapsed_seconds,
-                    vehicle_transform=vehicle_transform,
-                    speed_mps=current_speed,
-                    current_rgb=current_rgb,
-                    steering_smoothing=policy.steer_smoothing,
-                    max_steer_delta=policy.max_steer_delta,
+        should_skip_route_loop = bool(
+            scenario_validation is not None
+            and not bool(scenario_validation.get("valid", True))
+            and scenario_validation.get("scenario_kind") == "near_junction_preflight_reject"
+        )
+        if should_skip_route_loop:
+            failure_reason = "scenario_preflight_invalid"
+            distance_to_goal_m = float(vehicle.get_location().distance(goal_location))
+        else:
+            world_frame = world.tick()
+            current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
+            if mcap_writer is not None:
+                lane_centerlines = (
+                    _lane_centerlines_all_map(world.get_map())
+                    if artifacts.mcap_map_scope == "full"
+                    else _lane_centerlines_near_route(world.get_map(), planned_route.trace)
                 )
-            else:
-                step_result = stack.run_step(
-                    timestamp_s=elapsed_seconds,
-                    vehicle_transform=vehicle_transform,
-                    speed_mps=current_speed,
+                mcap_writer.write_static_scene(
+                    timestamp_s=current_image.timestamp,
+                    route_name=route_config.name,
+                    route_points=_route_trace_xyz(planned_route.trace),
+                    lane_centerlines=lane_centerlines,
+                )
+            preview_sink = policy.preview_sink
+            while True:
+                _apply_npc_target_speeds(
+                    traffic_manager=traffic_manager,
+                    npc_actor_refs=npc_actor_refs,
+                    npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+                )
+                _apply_derived_traffic_light_group_cycle(
+                    carla,
+                    lights_by_id,
+                    traffic_light_runtime_groups,
+                    environment_config.traffic_light_phase_cycle
+                    if environment_config is not None
+                    else None,
+                    elapsed_seconds=elapsed_seconds,
+                    applied_states=traffic_light_cycle_states,
+                    excluded_actor_ids=explicit_traffic_light_actor_ids,
+                )
+                _apply_traffic_light_schedules(
+                    carla,
+                    lights_by_id,
+                    environment_config.traffic_light_schedules
+                    if environment_config is not None
+                    else [],
+                    elapsed_seconds=elapsed_seconds,
+                    applied_phase_indices=traffic_light_phase_indices,
+                )
+                current_speed = speed_mps(vehicle)
+                vehicle_transform = vehicle.get_transform()
+                vehicle_location = vehicle_transform.location
+                current_rgb = (
+                    _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
                 )
 
-            decision = step_result.decision
-            control = to_carla_control(carla, decision.command)
-            vehicle.apply_control(control)
+                if policy.kind == "learned":
+                    step_result = stack.run_step(
+                        timestamp_s=elapsed_seconds,
+                        vehicle_transform=vehicle_transform,
+                        speed_mps=current_speed,
+                        current_rgb=current_rgb,
+                        steering_smoothing=policy.steer_smoothing,
+                        max_steer_delta=policy.max_steer_delta,
+                    )
+                else:
+                    step_result = stack.run_step(
+                        timestamp_s=elapsed_seconds,
+                        vehicle_transform=vehicle_transform,
+                        speed_mps=current_speed,
+                    )
 
-            collision, lane_invasion = frame_events.consume_frame_flags()
-            speed_sum += current_speed
-            frame_index += 1
-            elapsed_seconds = frame_index * runtime.fixed_delta_seconds
-            average_speed_mps = speed_sum / frame_index
+                decision = step_result.decision
+                control = to_carla_control(carla, decision.command)
+                vehicle.apply_control(control)
 
-            if current_speed < scenario.stationary_speed_threshold_mps:
-                current_stationary_seconds += runtime.fixed_delta_seconds
-            else:
-                current_stationary_seconds = 0.0
-            max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
+                collision, lane_invasion = frame_events.consume_frame_flags()
+                speed_sum += current_speed
+                frame_index += 1
+                elapsed_seconds = frame_index * runtime.fixed_delta_seconds
+                average_speed_mps = speed_sum / frame_index
 
-            current_completion_ratio = step_result.progress_ratio
-            max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
-            distance_to_goal_m = vehicle_location.distance(goal_location)
-            route_point = step_result.route_point
-            behavior = step_result.behavior or decision.behavior
-            planning_decision = step_result.expert_decision or decision
-            planning_debug = dict(planning_decision.debug or {})
-            should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
+                if current_speed < scenario.stationary_speed_threshold_mps:
+                    current_stationary_seconds += runtime.fixed_delta_seconds
+                else:
+                    current_stationary_seconds = 0.0
+                max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
 
-            traffic_light_stop_count += int(bool(planning_debug.get("event_traffic_light_stop")))
-            traffic_light_resume_count += int(
-                bool(planning_debug.get("event_traffic_light_resume"))
-            )
-            car_follow_event_count += int(bool(planning_debug.get("event_car_follow_start")))
-            overtake_attempt_count += int(bool(planning_debug.get("event_overtake_attempt")))
-            overtake_success_count += int(bool(planning_debug.get("event_overtake_success")))
-            overtake_abort_count += int(bool(planning_debug.get("event_overtake_abort")))
-            unsafe_lane_change_reject_count += int(
-                bool(planning_debug.get("event_unsafe_lane_change_reject"))
-            )
-            if (
-                bool(planning_debug.get("traffic_light_violation"))
-                and not _traffic_light_violation_active
-            ):
-                traffic_light_violation_count += 1
-                _traffic_light_violation_active = True
-            elif not bool(planning_debug.get("traffic_light_violation")):
-                _traffic_light_violation_active = False
-            if planning_debug.get("min_ttc") is not None:
-                min_ttc = min(min_ttc, float(planning_debug["min_ttc"]))
-            if planning_debug.get("lead_vehicle_distance_m") is not None:
-                min_lead_distance_m = min(
-                    min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"])
+                current_completion_ratio = step_result.progress_ratio
+                max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
+                distance_to_goal_m = vehicle_location.distance(goal_location)
+                route_point = step_result.route_point
+                behavior = step_result.behavior or decision.behavior
+                planning_decision = step_result.expert_decision or decision
+                planning_debug = dict(planning_decision.debug or {})
+                should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
+
+                traffic_light_stop_count += int(bool(planning_debug.get("event_traffic_light_stop")))
+                traffic_light_resume_count += int(
+                    bool(planning_debug.get("event_traffic_light_resume"))
                 )
-
-            if should_record:
-                if current_rgb is None:
-                    current_rgb = _carla_image_to_rgb_array(current_image)
-
-                image_path: Path | None = None
-                if artifacts.record_video and image_dir is not None:
-                    image_path = image_dir / f"{recorded_frame_index:06d}.png"
-                    current_image.save_to_disk(str(image_path))
-
-                mcap_segment_index: int | None = None
-                mcap_segment_path: str | None = None
-
-                if mcap_writer is not None:
-                    npc_vehicle_states = _collect_npc_vehicle_states(
-                        npc_actor_refs=npc_actor_refs,
-                        npc_actor_metadata_by_id=npc_actor_metadata_by_id,
-                        world_map=world.get_map(),
+                car_follow_event_count += int(bool(planning_debug.get("event_car_follow_start")))
+                overtake_attempt_count += int(bool(planning_debug.get("event_overtake_attempt")))
+                overtake_success_count += int(bool(planning_debug.get("event_overtake_success")))
+                overtake_abort_count += int(bool(planning_debug.get("event_overtake_abort")))
+                unsafe_lane_change_reject_count += int(
+                    bool(planning_debug.get("event_unsafe_lane_change_reject"))
+                )
+                if (
+                    bool(planning_debug.get("traffic_light_violation"))
+                    and not _traffic_light_violation_active
+                ):
+                    traffic_light_violation_count += 1
+                    _traffic_light_violation_active = True
+                elif not bool(planning_debug.get("traffic_light_violation")):
+                    _traffic_light_violation_active = False
+                if planning_debug.get("min_ttc") is not None:
+                    min_ttc = min(min_ttc, float(planning_debug["min_ttc"]))
+                if planning_debug.get("lead_vehicle_distance_m") is not None:
+                    min_lead_distance_m = min(
+                        min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"])
                     )
-                    tracked_vehicle_states = _collect_tracked_vehicle_states(
-                        scene_state=step_result.scene_state
-                    )
-                    traffic_light_states = _collect_traffic_light_states(
-                        scene_state=step_result.scene_state
-                    )
-                    planning_debug_mcap = {
-                        key: value
-                        for key, value in planning_debug.items()
-                        if key
-                        not in {
-                            "planner_state",
-                            "traffic_light_state",
-                            "overtake_state",
-                            "target_lane_id",
-                            "min_ttc",
+
+                if should_record:
+                    if current_rgb is None:
+                        current_rgb = _carla_image_to_rgb_array(current_image)
+
+                    image_path: Path | None = None
+                    if artifacts.record_video and image_dir is not None:
+                        image_path = image_dir / f"{recorded_frame_index:06d}.png"
+                        current_image.save_to_disk(str(image_path))
+
+                    mcap_segment_index: int | None = None
+                    mcap_segment_path: str | None = None
+
+                    if mcap_writer is not None:
+                        npc_vehicle_states = _collect_npc_vehicle_states(
+                            npc_actor_refs=npc_actor_refs,
+                            npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+                            world_map=world.get_map(),
+                        )
+                        tracked_vehicle_states = _collect_tracked_vehicle_states(
+                            scene_state=step_result.scene_state
+                        )
+                        traffic_light_states = _collect_traffic_light_states(
+                            scene_state=step_result.scene_state
+                        )
+                        planning_debug_mcap = {
+                            key: value
+                            for key, value in planning_debug.items()
+                            if key
+                            not in {
+                                "planner_state",
+                                "traffic_light_state",
+                                "overtake_state",
+                                "target_lane_id",
+                                "min_ttc",
+                            }
                         }
-                    }
-                    mcap_segment = mcap_writer.write_frame(
+                        mcap_segment = mcap_writer.write_frame(
                         current_rgb=current_rgb,
                         ego_state=EgoStateSample(
                             episode_id=episode_id,
@@ -1360,10 +1442,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                         tracked_vehicle_states=tracked_vehicle_states,
                         traffic_light_states=traffic_light_states,
                     )
-                    mcap_segment_index = mcap_segment.segment_index
-                    mcap_segment_path = relative_to_project(mcap_segment.path)
+                        mcap_segment_index = mcap_segment.segment_index
+                        mcap_segment_path = relative_to_project(mcap_segment.path)
 
-                record = EpisodeRecord(
+                    record = EpisodeRecord(
                     episode_id=episode_id,
                     frame_id=frame_index - 1,
                     town_id=route_config.town,
@@ -1425,49 +1507,49 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     mcap_segment_index=mcap_segment_index,
                     mcap_segment_path=mcap_segment_path,
                 )
-                append_jsonl(manifest_path, record)
+                    append_jsonl(manifest_path, record)
 
-                recorded_frame_index += 1
-                while next_record_elapsed_s <= elapsed_seconds + 1e-9:
-                    next_record_elapsed_s += record_period_s
+                    recorded_frame_index += 1
+                    while next_record_elapsed_s <= elapsed_seconds + 1e-9:
+                        next_record_elapsed_s += record_period_s
 
-            if preview_sink is not None:
-                if current_rgb is None:
-                    current_rgb = _carla_image_to_rgb_array(current_image)
-                behavior_label = behavior or "unknown"
-                status_core = (
-                    f"policy={policy.kind:<7} behavior={behavior_label:<12} "
-                    f"speed={current_speed * 3.6:5.1f} km/h progress={current_completion_ratio:5.3f} "
-                    f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
+                if preview_sink is not None:
+                    if current_rgb is None:
+                        current_rgb = _carla_image_to_rgb_array(current_image)
+                    behavior_label = behavior or "unknown"
+                    status_core = (
+                        f"policy={policy.kind:<7} behavior={behavior_label:<12} "
+                        f"speed={current_speed * 3.6:5.1f} km/h progress={current_completion_ratio:5.3f} "
+                        f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
+                    )
+                    keep_preview = preview_sink(current_rgb, status_core)
+                    if keep_preview is False:
+                        preview_sink = None
+
+                if collision:
+                    failure_reason = "collision"
+                    break
+
+                reached_success_goal = (
+                    current_completion_ratio >= success_criteria["route_completion_ratio_min"]
+                    and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
                 )
-                keep_preview = preview_sink(current_rgb, status_core)
-                if keep_preview is False:
-                    preview_sink = None
+                if reached_success_goal:
+                    break
 
-            if collision:
-                failure_reason = "collision"
-                break
+                if max_stationary_seconds >= scenario.max_stop_seconds:
+                    failure_reason = "stalled"
+                    break
 
-            reached_success_goal = (
-                current_completion_ratio >= success_criteria["route_completion_ratio_min"]
-                and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
-            )
-            if reached_success_goal:
-                break
+                if step_result.done:
+                    break
 
-            if max_stationary_seconds >= scenario.max_stop_seconds:
-                failure_reason = "stalled"
-                break
+                if elapsed_seconds >= scenario.max_seconds:
+                    failure_reason = "max_seconds_exceeded"
+                    break
 
-            if step_result.done:
-                break
-
-            if elapsed_seconds >= scenario.max_seconds:
-                failure_reason = "max_seconds_exceeded"
-                break
-
-            world_frame = world.tick()
-            current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
+                world_frame = world.tick()
+                current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
 
         max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
         distance_to_goal_m = vehicle.get_location().distance(goal_location)
@@ -1589,6 +1671,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         if not min_lead_distance_m < float("inf")
         else round(min_lead_distance_m, 3),
         "allow_overtake": allow_overtake,
+        "scenario_validation": scenario_validation,
         "max_stationary_seconds": round(max_stationary_seconds, 2),
         "route_completion_ratio": round(max_completion_ratio, 4),
         "distance_to_goal_m": round(distance_to_goal_m, 2),

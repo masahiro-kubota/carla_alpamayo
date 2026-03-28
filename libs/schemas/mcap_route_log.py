@@ -240,6 +240,19 @@ _NPC_VEHICLE_STATES_JSON_SCHEMA = {
                     "actor_id": {"type": "integer"},
                     "type_id": {"type": ["string", "null"]},
                     "spawn_index": {"type": ["integer", "null"]},
+                    "spawn_transform": {
+                        "type": ["object", "null"],
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "z": {"type": "number"},
+                            "yaw_deg": {"type": "number"},
+                            "pitch_deg": {"type": "number"},
+                            "roll_deg": {"type": "number"},
+                        },
+                        "required": ["x", "y", "z", "yaw_deg", "pitch_deg", "roll_deg"],
+                        "additionalProperties": False,
+                    },
                     "target_speed_kmh": {"type": ["number", "null"]},
                     "npc_profile_id": {"type": ["string", "null"]},
                     "lane_behavior": {"type": ["string", "null"]},
@@ -630,6 +643,7 @@ class NPCVehicleStateSample:
     actor_id: int
     type_id: str | None
     spawn_index: int | None
+    spawn_transform: dict[str, float] | None
     target_speed_kmh: float | None
     npc_profile_id: str | None
     lane_behavior: str | None
@@ -1260,6 +1274,7 @@ class RouteLoopMcapWriter:
                         "actor_id": int(vehicle.actor_id),
                         "type_id": vehicle.type_id,
                         "spawn_index": vehicle.spawn_index,
+                        "spawn_transform": vehicle.spawn_transform,
                         "target_speed_kmh": vehicle.target_speed_kmh,
                         "npc_profile_id": vehicle.npc_profile_id,
                         "lane_behavior": vehicle.lane_behavior,
