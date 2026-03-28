@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ad_stack import run
+from ad_stack.run import run
 from libs.project import PROJECT_ROOT, current_git_commit_short, ensure_clean_git_worktree
 from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
 from simulation.pipelines.route_loop_run_config import (
