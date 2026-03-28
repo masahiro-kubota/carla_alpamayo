@@ -20,9 +20,12 @@ ScenarioKind = Literal[
     "rejoin_blocked_then_release",
     "adjacent_lane_closed",
     "double_stopped_obstacle",
+    "double_stopped_separated",
+    "double_stopped_clustered",
     "curve_clear",
     "near_junction_preflight_reject",
 ]
+TargetKind = Literal["single_actor", "cluster"]
 
 
 @dataclass(slots=True)
@@ -32,6 +35,18 @@ class OvertakeLeadSnapshot:
     distance_m: float | None
     speed_mps: float
     relative_speed_mps: float
+    is_stopped: bool
+
+
+@dataclass(slots=True)
+class StoppedObstacleTargetSnapshot:
+    kind: TargetKind
+    primary_actor_id: int
+    member_actor_ids: tuple[int, ...]
+    lane_id: str
+    entry_distance_m: float
+    exit_distance_m: float
+    speed_mps: float
     is_stopped: bool
 
 
@@ -58,6 +73,7 @@ class StoppedObstacleContext:
     signal_stop_distance_m: float | None
     allow_overtake: bool
     preferred_direction: PreferredDirection
+    obstacle_target: StoppedObstacleTargetSnapshot | None = None
 
 
 @dataclass(slots=True)
@@ -71,6 +87,9 @@ class OvertakeMemory:
     target_actor_last_seen_s: float | None = None
     target_actor_last_seen_longitudinal_m: float | None = None
     target_actor_visibility_timeout_s: float = 1.0
+    target_kind: TargetKind = "single_actor"
+    target_member_actor_ids: tuple[int, ...] = ()
+    target_exit_distance_m: float | None = None
     pass_started_s: float | None = None
     pass_started_route_index: int | None = None
     target_passed: bool = False
@@ -149,13 +168,21 @@ def choose_overtake_action(
     overtake_min_rear_gap_m: float,
     signal_suppression_distance_m: float,
 ) -> OvertakeDecision:
+    active_target = context.obstacle_target
+    target_distance_m = active_target.entry_distance_m if active_target is not None else None
+    target_speed_mps = active_target.speed_mps if active_target is not None else None
+    target_is_stopped = active_target.is_stopped if active_target is not None else None
     if not context.allow_overtake:
         return OvertakeDecision("car_follow", reject_reason="overtake_disabled")
-    if context.lead is None or context.lead.distance_m is None:
+    if target_distance_m is None and context.lead is not None:
+        target_distance_m = context.lead.distance_m
+        target_speed_mps = context.lead.speed_mps
+        target_is_stopped = context.lead.is_stopped
+    if target_distance_m is None:
         return OvertakeDecision("car_follow", reject_reason="lead_distance_unavailable")
-    if context.lead.distance_m > overtake_trigger_distance_m:
+    if target_distance_m > overtake_trigger_distance_m:
         return OvertakeDecision("car_follow", reject_reason="lead_out_of_range")
-    if not context.lead.is_stopped and (context.lead.speed_mps * 3.6) > (
+    if not bool(target_is_stopped) and (float(target_speed_mps or 0.0) * 3.6) > (
         context.target_speed_kmh - overtake_speed_delta_kmh
     ):
         return OvertakeDecision("car_follow", reject_reason="lead_not_slow_enough")
@@ -202,13 +229,22 @@ def evaluate_pass_progress(
     target_actor_visible: bool,
     target_longitudinal_distance_m: float | None,
     overtake_resume_front_gap_m: float,
+    target_kind: TargetKind | None = None,
+    target_exit_longitudinal_distance_m: float | None = None,
 ) -> OvertakeMemory:
     updated = replace(memory)
-    if target_actor_visible and target_longitudinal_distance_m is not None:
+    effective_target_kind = target_kind or memory.target_kind
+    effective_target_longitudinal_distance_m = target_longitudinal_distance_m
+    if effective_target_kind == "cluster" and target_exit_longitudinal_distance_m is not None:
+        effective_target_longitudinal_distance_m = float(target_exit_longitudinal_distance_m)
+
+    if target_actor_visible and effective_target_longitudinal_distance_m is not None:
+        updated.target_kind = effective_target_kind
         updated.target_actor_last_seen_s = float(timestamp_s)
-        updated.target_actor_last_seen_longitudinal_m = float(target_longitudinal_distance_m)
-        if target_longitudinal_distance_m < 0.0:
-            distance_past_target_m = abs(float(target_longitudinal_distance_m))
+        updated.target_actor_last_seen_longitudinal_m = float(effective_target_longitudinal_distance_m)
+        updated.target_exit_distance_m = effective_target_longitudinal_distance_m
+        if effective_target_longitudinal_distance_m < 0.0:
+            distance_past_target_m = abs(float(effective_target_longitudinal_distance_m))
             updated.target_pass_distance_m = distance_past_target_m
             if distance_past_target_m >= overtake_resume_front_gap_m:
                 updated.target_passed = True
@@ -220,6 +256,75 @@ def evaluate_pass_progress(
     ):
         updated.target_passed = False
     return updated
+
+
+def build_stopped_obstacle_targets(
+    leads: list[OvertakeLeadSnapshot],
+    *,
+    cluster_merge_gap_m: float,
+    cluster_max_member_speed_mps: float,
+) -> list[StoppedObstacleTargetSnapshot]:
+    stopped_leads = [
+        lead
+        for lead in leads
+        if (
+            lead.actor_id is not None
+            and lead.lane_id is not None
+            and lead.distance_m is not None
+            and lead.is_stopped
+        )
+    ]
+    stopped_leads.sort(key=lambda lead: (lead.lane_id or "", float(lead.distance_m or 0.0)))
+    targets: list[StoppedObstacleTargetSnapshot] = []
+    current_cluster: list[OvertakeLeadSnapshot] = []
+    for lead in stopped_leads:
+        if not current_cluster:
+            current_cluster = [lead]
+            continue
+        previous = current_cluster[-1]
+        same_lane = previous.lane_id == lead.lane_id
+        gap_m = float(lead.distance_m) - float(previous.distance_m)
+        speed_ok = max(previous.speed_mps, lead.speed_mps) <= cluster_max_member_speed_mps
+        if same_lane and gap_m <= cluster_merge_gap_m and speed_ok:
+            current_cluster.append(lead)
+            continue
+        targets.append(_cluster_to_target(current_cluster))
+        current_cluster = [lead]
+    if current_cluster:
+        targets.append(_cluster_to_target(current_cluster))
+    return targets
+
+
+def next_stopped_obstacle_target(
+    targets: list[StoppedObstacleTargetSnapshot],
+    *,
+    current_primary_actor_id: int | None,
+) -> StoppedObstacleTargetSnapshot | None:
+    if current_primary_actor_id is None:
+        return targets[0] if targets else None
+    for index, target in enumerate(targets):
+        if target.primary_actor_id == current_primary_actor_id:
+            return targets[index + 1] if index + 1 < len(targets) else None
+    return targets[0] if targets else None
+
+
+def _cluster_to_target(cluster: list[OvertakeLeadSnapshot]) -> StoppedObstacleTargetSnapshot:
+    first = cluster[0]
+    last = cluster[-1]
+    member_actor_ids = tuple(
+        lead.actor_id for lead in cluster if lead.actor_id is not None
+    )
+    kind: TargetKind = "cluster" if len(member_actor_ids) > 1 else "single_actor"
+    return StoppedObstacleTargetSnapshot(
+        kind=kind,
+        primary_actor_id=int(first.actor_id),
+        member_actor_ids=member_actor_ids,
+        lane_id=str(first.lane_id),
+        entry_distance_m=float(first.distance_m),
+        exit_distance_m=float(last.distance_m),
+        speed_mps=max(lead.speed_mps for lead in cluster),
+        is_stopped=all(lead.is_stopped for lead in cluster),
+    )
 
 
 def should_begin_rejoin(
@@ -331,6 +436,10 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
     if snapshot.scenario_kind == "blocked_oncoming":
         if snapshot.blocker_lane_id is None:
             errors.append("oncoming_blocker_missing")
+
+    if snapshot.scenario_kind in {"double_stopped_separated", "double_stopped_clustered"}:
+        if snapshot.obstacle_lane_id is None:
+            errors.append("obstacle_actor_missing")
 
     if snapshot.scenario_kind == "adjacent_lane_closed":
         if snapshot.left_lane_is_driving or snapshot.right_lane_is_driving:

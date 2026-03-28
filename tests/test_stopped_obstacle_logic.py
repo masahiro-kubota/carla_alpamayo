@@ -8,11 +8,14 @@ from ad_stack.overtake import (
     OvertakeLeadSnapshot,
     OvertakeMemory,
     PreflightValidationInput,
+    StoppedObstacleTargetSnapshot,
     StoppedObstacleContext,
+    build_stopped_obstacle_targets,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
     lane_gap_for_lane_id,
+    next_stopped_obstacle_target,
     should_begin_rejoin,
     validate_preflight,
 )
@@ -32,6 +35,7 @@ def _context(
     right_front_gap_m: float | None = 40.0,
     right_rear_gap_m: float | None = 20.0,
     right_lane_open: bool = True,
+    obstacle_target: StoppedObstacleTargetSnapshot | None = None,
 ) -> StoppedObstacleContext:
     return StoppedObstacleContext(
         timestamp_s=0.0,
@@ -64,6 +68,7 @@ def _context(
         signal_stop_distance_m=signal_stop_distance_m,
         allow_overtake=True,
         preferred_direction=preferred_direction,  # type: ignore[arg-type]
+        obstacle_target=obstacle_target,
     )
 
 
@@ -226,6 +231,34 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         self.assertFalse(updated.target_passed)
         self.assertEqual(updated.state, "pass_vehicle")
 
+    def test_cluster_pass_does_not_complete_until_cluster_exit_gap_is_met(self) -> None:
+        memory = OvertakeMemory(target_actor_id=101, target_kind="cluster", target_member_actor_ids=(101, 102))
+        updated = evaluate_pass_progress(
+            memory,
+            timestamp_s=3.0,
+            target_actor_visible=True,
+            target_longitudinal_distance_m=-4.0,
+            target_exit_longitudinal_distance_m=-8.0,
+            target_kind="cluster",
+            overtake_resume_front_gap_m=12.0,
+        )
+        self.assertFalse(updated.target_passed)
+        self.assertEqual(updated.target_pass_distance_m, 8.0)
+
+    def test_cluster_pass_completes_once_cluster_exit_is_behind_and_resume_gap_is_met(self) -> None:
+        memory = OvertakeMemory(target_actor_id=101, target_kind="cluster", target_member_actor_ids=(101, 102))
+        updated = evaluate_pass_progress(
+            memory,
+            timestamp_s=3.0,
+            target_actor_visible=True,
+            target_longitudinal_distance_m=-4.0,
+            target_exit_longitudinal_distance_m=-14.0,
+            target_kind="cluster",
+            overtake_resume_front_gap_m=12.0,
+        )
+        self.assertTrue(updated.target_passed)
+        self.assertEqual(updated.target_pass_distance_m, 14.0)
+
     def test_rejoin_gap_uses_origin_lane_id_not_relation_name(self) -> None:
         lane_gaps = {
             "15:-1": AdjacentLaneGapSnapshot(
@@ -269,6 +302,68 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_rear_gap_m=15.0,
         )
         self.assertTrue(begin)
+
+    def test_separated_double_obstacle_rejoins_then_reacquires_second_target(self) -> None:
+        targets = build_stopped_obstacle_targets(
+            [
+                OvertakeLeadSnapshot(
+                    actor_id=101,
+                    lane_id="15:-1",
+                    distance_m=18.0,
+                    speed_mps=0.0,
+                    relative_speed_mps=4.0,
+                    is_stopped=True,
+                ),
+                OvertakeLeadSnapshot(
+                    actor_id=102,
+                    lane_id="15:-1",
+                    distance_m=42.0,
+                    speed_mps=0.0,
+                    relative_speed_mps=4.0,
+                    is_stopped=True,
+                ),
+            ],
+            cluster_merge_gap_m=10.0,
+            cluster_max_member_speed_mps=0.5,
+        )
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[0].kind, "single_actor")
+        self.assertEqual(targets[1].kind, "single_actor")
+        next_target = next_stopped_obstacle_target(
+            targets,
+            current_primary_actor_id=targets[0].primary_actor_id,
+        )
+        self.assertIsNotNone(next_target)
+        self.assertEqual(next_target.primary_actor_id, 102)
+
+    def test_clustered_double_obstacle_keeps_pass_vehicle_until_cluster_tail_is_cleared(self) -> None:
+        targets = build_stopped_obstacle_targets(
+            [
+                OvertakeLeadSnapshot(
+                    actor_id=101,
+                    lane_id="15:-1",
+                    distance_m=18.0,
+                    speed_mps=0.0,
+                    relative_speed_mps=4.0,
+                    is_stopped=True,
+                ),
+                OvertakeLeadSnapshot(
+                    actor_id=102,
+                    lane_id="15:-1",
+                    distance_m=24.0,
+                    speed_mps=0.0,
+                    relative_speed_mps=4.0,
+                    is_stopped=True,
+                ),
+            ],
+            cluster_merge_gap_m=10.0,
+            cluster_max_member_speed_mps=0.5,
+        )
+        self.assertEqual(len(targets), 1)
+        self.assertEqual(targets[0].kind, "cluster")
+        self.assertEqual(targets[0].member_actor_ids, (101, 102))
+        self.assertEqual(targets[0].entry_distance_m, 18.0)
+        self.assertEqual(targets[0].exit_distance_m, 24.0)
 
     def test_lane_change_plan_does_not_reverse_when_target_lane_native_direction_is_opposite(
         self,
@@ -413,6 +508,59 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         self.assertFalse(result.is_valid)
         self.assertIn("signal_nearby", result.errors)
         self.assertIn("junction_nearby", result.errors)
+
+    def test_preflight_accepts_double_stopped_separated(self) -> None:
+        result = validate_preflight(
+            PreflightValidationInput(
+                scenario_kind="double_stopped_separated",
+                ego_lane_id="15:-1",
+                obstacle_lane_id="15:-1",
+                ego_to_obstacle_longitudinal_distance_m=20.0,
+                left_lane_is_driving=True,
+                route_target_lane_id="15:-1",
+                route_aligned_adjacent_lane_available=True,
+            )
+        )
+        self.assertTrue(result.is_valid)
+        self.assertEqual(result.errors, [])
+
+    def test_preflight_accepts_double_stopped_clustered(self) -> None:
+        result = validate_preflight(
+            PreflightValidationInput(
+                scenario_kind="double_stopped_clustered",
+                ego_lane_id="15:-1",
+                obstacle_lane_id="15:-1",
+                ego_to_obstacle_longitudinal_distance_m=20.0,
+                left_lane_is_driving=True,
+                route_target_lane_id="15:-1",
+                route_aligned_adjacent_lane_available=True,
+            )
+        )
+        self.assertTrue(result.is_valid)
+        self.assertEqual(result.errors, [])
+
+    def test_overtake_action_uses_cluster_entry_distance_when_present(self) -> None:
+        decision = choose_overtake_action(
+            _context(
+                lead_distance_m=80.0,
+                obstacle_target=StoppedObstacleTargetSnapshot(
+                    kind="cluster",
+                    primary_actor_id=101,
+                    member_actor_ids=(101, 102),
+                    lane_id="15:-1",
+                    entry_distance_m=20.0,
+                    exit_distance_m=28.0,
+                    speed_mps=0.0,
+                    is_stopped=True,
+                ),
+            ),
+            overtake_trigger_distance_m=40.0,
+            overtake_speed_delta_kmh=8.0,
+            overtake_min_front_gap_m=35.0,
+            overtake_min_rear_gap_m=15.0,
+            signal_suppression_distance_m=35.0,
+        )
+        self.assertEqual(decision.planner_state, "lane_change_out")
 
 
 if __name__ == "__main__":
