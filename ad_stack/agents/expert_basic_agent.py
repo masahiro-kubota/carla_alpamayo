@@ -228,6 +228,17 @@ class ExpertBasicAgent:
         )
         self._overtake_waypoints = deque(waypoint for waypoint, _option in rejoin_plan)
 
+    def _resume_base_route(self, route_index: int | None) -> None:
+        if not self._base_trace:
+            return
+        trace_index = min(self._route_trace_index(route_index) + 1, len(self._base_trace) - 1)
+        remaining_plan = self._base_trace[trace_index:]
+        self._agent.set_global_plan(
+            remaining_plan,
+            stop_waypoint_creation=True,
+            clean_queue=True,
+        )
+
     def _adjacent_lane_waypoint(
         self, origin_waypoint: Any, direction: Literal["left", "right"]
     ) -> Any | None:
@@ -881,6 +892,7 @@ class ExpertBasicAgent:
                 self._overtake_aborted = False
                 self._overtake_waypoints.clear()
                 self._overtake_memory = OvertakeMemory()
+                self._resume_base_route(route_index)
                 planner_state = "nominal_cruise"
 
         stop_for_light = self._should_stop_for_light(active_light, current_speed_mps)
