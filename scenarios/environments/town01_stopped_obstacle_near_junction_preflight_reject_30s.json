@@ -1,0 +1,20 @@
+{
+  "name": "town01_stopped_obstacle_near_junction_preflight_reject_30s",
+  "town": "Town01",
+  "max_seconds": 30.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 225,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "stopped_obstacle_scenario": {
+    "scenario_kind": "near_junction_preflight_reject",
+    "obstacle_npc_index": 0,
+    "route_aligned_adjacent_lane_available": true,
+    "nearest_junction_distance_m": 16.0
+  },
+  "description": "Town01 stopped-obstacle scenario intentionally placed too close to the next junction so preflight validation should mark it invalid instead of treating it as a baseline bypass corridor."
+}

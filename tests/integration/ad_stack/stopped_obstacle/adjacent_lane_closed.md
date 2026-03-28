@@ -6,6 +6,12 @@
 
 - planned
 
+現状メモ:
+
+- route 候補は [town01_adjacent_lane_closed_corridor.json](/home/masa/carla_alpamayo/scenarios/routes/town01_adjacent_lane_closed_corridor.json)
+- ただし停止障害物を置く exact transform はまだ未確定
+- `adjacent_lane_closed` だけは CARLA 上で corridor を再確認してから environment / run-config を追加する
+
 ## Planned Run Config
 
 - `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json`

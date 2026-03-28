@@ -28,6 +28,16 @@
 - [curve_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/curve_clear.md)
 - [near_junction_preflight_reject.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/near_junction_preflight_reject.md)
 
+このうち
+
+- `signal_suppressed`
+- `rejoin_blocked_then_release`
+- `double_stopped_obstacle`
+- `curve_clear`
+- `near_junction_preflight_reject`
+
+は JSON / config まで実装済みです。`adjacent_lane_closed` だけは exact transform の最終確認待ちです。
+
 ## Deferred / Exploratory Scenarios
 
 - [right_first_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/right_first_clear.md)

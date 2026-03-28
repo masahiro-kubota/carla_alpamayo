@@ -1,0 +1,36 @@
+{
+  "name": "town01_stopped_obstacle_signal_suppressed_45s",
+  "town": "Town01",
+  "max_seconds": 45.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 225,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [
+    {
+      "actor_id": 57,
+      "state": "red",
+      "freeze": true
+    },
+    {
+      "actor_id": 58,
+      "state": "red",
+      "freeze": true
+    },
+    {
+      "actor_id": 59,
+      "state": "red",
+      "freeze": true
+    }
+  ],
+  "stopped_obstacle_scenario": {
+    "scenario_kind": "signal_suppressed",
+    "obstacle_npc_index": 0,
+    "route_aligned_adjacent_lane_available": true,
+    "nearest_signal_distance_m": 20.0
+  },
+  "description": "Town01 northbound stopped-obstacle scenario on the signal-conflict route. A stationary obstacle is ahead in ego's lane but a nearby frozen red signal should suppress overtaking."
+}

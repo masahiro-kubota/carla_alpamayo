@@ -1,0 +1,8 @@
+{
+  "name": "town01_adjacent_lane_closed_corridor",
+  "town": "Town01",
+  "closed_loop": false,
+  "sampling_resolution_m": 2.0,
+  "anchor_spawn_indices": [230, 88],
+  "description": "Candidate Town01 corridor with a junction-internal segment where adjacent driving lanes disappear, intended for adjacent-lane-closed stopped-obstacle validation."
+}
