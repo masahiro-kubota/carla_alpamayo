@@ -1,169 +1,85 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
+from datetime import datetime
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
+from typing import Any
 
-from ad_stack import ArtifactSpec, PolicySpec, RouteLoopScenarioSpec, RunRequest, RuntimeSpec, run
+from ad_stack import run
+from libs.project import PROJECT_ROOT, current_git_commit_short
 from simulation.pipelines.front_camera_preview import FrontCameraPreview, has_display
-
-DEFAULT_ROUTE_CONFIG_PATH = Path("scenarios/routes/town01_pilotnet_loop.json")
-
-
-def _jsonable(value):
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    return value
-
-
-def _build_resolved_request_payload(request: RunRequest) -> dict[str, object]:
-    return {
-        "mode": request.mode,
-        "scenario": _jsonable(asdict(request.scenario)),
-        "runtime": _jsonable(asdict(request.runtime)),
-        "policy": {
-            "kind": request.policy.kind,
-            "checkpoint_path": str(request.policy.checkpoint_path) if request.policy.checkpoint_path else None,
-            "expert_config_path": str(request.policy.expert_config_path) if request.policy.expert_config_path else None,
-            "device": request.policy.device,
-            "steer_smoothing": request.policy.steer_smoothing,
-            "max_steer_delta": request.policy.max_steer_delta,
-            "ignore_traffic_lights": request.policy.ignore_traffic_lights,
-            "ignore_stop_signs": request.policy.ignore_stop_signs,
-            "ignore_vehicles": request.policy.ignore_vehicles,
-            "preview_enabled": request.policy.preview_sink is not None,
-        },
-        "artifacts": _jsonable(asdict(request.artifacts)),
-    }
-
-
-def _write_run_metadata(
-    *,
-    output_dir: Path,
-    args: argparse.Namespace,
-    request: RunRequest,
-    summary_path: Path | None,
-) -> tuple[Path, Path]:
-    cli_args_path = output_dir / "cli_args.json"
-    run_request_path = output_dir / "run_request.json"
-
-    cli_args_payload = {
-        "entrypoint": "simulation.pipelines.run_route_loop",
-        "argv": sys.argv[1:],
-        "parsed_args": _jsonable(vars(args)),
-    }
-    with cli_args_path.open("w", encoding="utf-8") as handle:
-        json.dump(cli_args_payload, handle, indent=2)
-        handle.write("\n")
-
-    with run_request_path.open("w", encoding="utf-8") as handle:
-        json.dump(_build_resolved_request_payload(request), handle, indent=2)
-        handle.write("\n")
-
-    if summary_path is not None and summary_path.exists():
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        summary["cli_args_path"] = str(cli_args_path.relative_to(output_dir.parent.parent.parent))
-        summary["run_request_path"] = str(run_request_path.relative_to(output_dir.parent.parent.parent))
-        summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-
-    return cli_args_path, run_request_path
+from simulation.pipelines.route_loop_run_config import (
+    ROUTE_LOOP_ENTRYPOINT,
+    load_route_loop_run_config,
+    write_route_loop_run_metadata,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the Town01 fixed loop via ad_stack.run(request)."
+        description=(
+            "Run one or more route-loop JSON configs. "
+            "Every simulation setting must come from the config file; no CLI overrides are accepted."
+        )
     )
-    parser.add_argument("--checkpoint", default=None)
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=2000)
-    parser.add_argument("--route-config", default=str(DEFAULT_ROUTE_CONFIG_PATH))
-    parser.add_argument("--environment-config", default=None)
-    parser.add_argument("--expert-config", default="ad_stack/configs/expert/default.json")
-    parser.add_argument("--policy-kind", choices=("expert", "learned"), default=None)
-    parser.add_argument("--vehicle-filter", default="vehicle.tesla.model3")
-    parser.add_argument("--fixed-delta-seconds", type=float, default=0.05)
-    parser.add_argument("--sensor-timeout", type=float, default=2.0)
-    parser.add_argument("--camera-width", type=int, default=1280)
-    parser.add_argument("--camera-height", type=int, default=720)
-    parser.add_argument("--camera-fov", type=int, default=90)
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--device", default=None)
-    parser.add_argument("--steer-smoothing", type=float, default=1.0)
-    parser.add_argument("--max-steer-delta", type=float, default=None)
-    parser.add_argument(
-        "--record-video",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-    )
-    parser.add_argument("--video-fps", type=float, default=None)
-    parser.add_argument("--video-crf", type=int, default=23)
-    parser.add_argument("--record-hz", type=float, default=10.0)
-    parser.add_argument(
-        "--record-mcap",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-    )
-    parser.add_argument("--mcap-jpeg-quality", type=int, default=85)
-    parser.add_argument("--mcap-segment-seconds", type=float, default=600.0)
-    parser.add_argument("--mcap-map-scope", choices=("full", "near_route"), default="full")
-    parser.add_argument(
-        "--show-front-camera",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
-    parser.add_argument("--preview-scale", type=float, default=1.0)
-    parser.add_argument(
-        "--ignore-traffic-lights",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
-    parser.add_argument(
-        "--ignore-stop-signs",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-    )
-    parser.add_argument(
-        "--ignore-vehicles",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-    )
+    parser.add_argument("config_paths", nargs="+", help="Path(s) to route-loop run config JSON files.")
     return parser
 
 
-def main() -> None:
-    parser = build_parser()
-    args = parser.parse_args()
+def _project_relative_or_absolute(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path.resolve())
+
+
+def _build_launcher_output_dir() -> Path:
+    run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_route_loop_batch_{current_git_commit_short()}"
+    output_dir = PROJECT_ROOT / "outputs" / "launcher_runs" / run_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def _write_launcher_manifest(
+    *,
+    output_dir: Path,
+    argv: list[str],
+    loaded_configs: list[Any],
+    worker_records: list[dict[str, Any]],
+) -> Path:
+    manifest_path = output_dir / "launcher_manifest.json"
+    payload = {
+        "entrypoint": ROUTE_LOOP_ENTRYPOINT,
+        "argv": argv,
+        "config_paths": [_project_relative_or_absolute(config.config_path) for config in loaded_configs],
+        "workers": worker_records,
+    }
+    manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return manifest_path
+
+
+def _run_single_config(config_path: Path, argv: list[str]) -> dict[str, Any]:
+    loaded_config = load_route_loop_run_config(config_path)
+    request = loaded_config.request
     preview: FrontCameraPreview | None = None
-    preview_enabled = args.show_front_camera
+    preview_requested = loaded_config.preview.show_front_camera
+    preview_enabled = preview_requested
     if preview_enabled and not has_display():
         print("DISPLAY is not set, disabling front camera preview. Export DISPLAY=:1 to enable it.")
         preview_enabled = False
 
-    policy_kind = args.policy_kind
-    if policy_kind is None:
-        policy_kind = "learned" if args.checkpoint else "expert"
-    args.policy_kind = policy_kind
-
-    if policy_kind == "learned" and not args.checkpoint:
-        parser.error("--checkpoint is required when --policy-kind=learned")
-    if policy_kind == "expert" and args.checkpoint:
-        parser.error("--checkpoint is only valid for learned evaluation")
-
     try:
         if preview_enabled:
             preview = FrontCameraPreview(
-                source_width=args.camera_width,
-                source_height=args.camera_height,
-                display_scale=args.preview_scale,
+                source_width=request.runtime.camera_width,
+                source_height=request.runtime.camera_height,
+                display_scale=loaded_config.preview.preview_scale,
                 title="CARLA Front Camera (Route Loop)",
             )
-        args.show_front_camera = preview_enabled
 
         def preview_sink(rgb_array, status_text: str) -> bool | None:
             if preview is not None and not preview.closed:
@@ -173,61 +89,108 @@ def main() -> None:
                 return False
             return True
 
-        request = RunRequest(
-            mode="evaluate",
-            scenario=RouteLoopScenarioSpec(
-                route_config_path=Path(args.route_config),
-                environment_config_path=Path(args.environment_config) if args.environment_config else None,
-            ),
-            runtime=RuntimeSpec(
-                host=args.host,
-                port=args.port,
-                vehicle_filter=args.vehicle_filter,
-                fixed_delta_seconds=args.fixed_delta_seconds,
-                sensor_timeout=args.sensor_timeout,
-                camera_width=args.camera_width,
-                camera_height=args.camera_height,
-                camera_fov=args.camera_fov,
-                seed=args.seed,
-            ),
-            policy=PolicySpec(
-                kind=policy_kind,
-                checkpoint_path=Path(args.checkpoint) if args.checkpoint else None,
-                expert_config_path=Path(args.expert_config) if args.expert_config else None,
-                device=args.device,
-                steer_smoothing=args.steer_smoothing,
-                max_steer_delta=args.max_steer_delta,
-                ignore_traffic_lights=args.ignore_traffic_lights,
-                ignore_stop_signs=args.ignore_stop_signs,
-                ignore_vehicles=args.ignore_vehicles,
-                preview_sink=preview_sink if preview_enabled else None,
-            ),
-            artifacts=ArtifactSpec(
-                record_video=args.record_video,
-                video_fps=args.video_fps,
-                video_crf=args.video_crf,
-                record_mcap=args.record_mcap,
-                mcap_jpeg_quality=args.mcap_jpeg_quality,
-                mcap_segment_seconds=args.mcap_segment_seconds,
-                record_hz=args.record_hz,
-                mcap_map_scope=args.mcap_map_scope,
-            ),
-        )
+        request.policy.preview_sink = preview_sink if preview_enabled else None
         result = run(request)
         if result.output_dir is not None:
-            cli_args_path, run_request_path = _write_run_metadata(
+            cli_args_path, run_request_path, run_config_path = write_route_loop_run_metadata(
                 output_dir=result.output_dir,
-                args=args,
+                argv=argv,
                 request=request,
+                config_path=loaded_config.config_path,
+                config_payload=loaded_config.config_payload,
                 summary_path=result.summary_path,
+                preview_requested=preview_requested,
+                preview_enabled=preview_enabled,
             )
-            result.summary["cli_args_path"] = str(cli_args_path.relative_to(result.output_dir.parent.parent.parent))
-            result.summary["run_request_path"] = str(run_request_path.relative_to(result.output_dir.parent.parent.parent))
+            result.summary["cli_args_path"] = _project_relative_or_absolute(cli_args_path)
+            result.summary["run_request_path"] = _project_relative_or_absolute(run_request_path)
+            result.summary["run_config_path"] = _project_relative_or_absolute(run_config_path)
+            result.summary["run_config_source_path"] = _project_relative_or_absolute(loaded_config.config_path)
+            result.summary["front_camera_preview_requested"] = preview_requested
+            result.summary["front_camera_preview_enabled"] = preview_enabled
     finally:
         if preview is not None:
             preview.close()
 
     print(json.dumps(result.summary, indent=2))
+    return result.summary
+
+
+def _run_parallel_configs(config_paths: list[Path], argv: list[str]) -> None:
+    loaded_configs = [load_route_loop_run_config(path) for path in config_paths]
+    launcher_dir = _build_launcher_output_dir()
+    worker_records: list[dict[str, Any]] = []
+    processes: list[subprocess.Popen] = []
+    log_handles = []
+    child_env = os.environ.copy()
+    child_env["PYTHONPATH"] = ""
+
+    try:
+        for index, config in enumerate(loaded_configs, start=1):
+            log_path = launcher_dir / f"worker_{index}.log"
+            log_handle = log_path.open("w", encoding="utf-8")
+            log_handles.append(log_handle)
+            command = [sys.executable, "-m", ROUTE_LOOP_ENTRYPOINT, str(config.config_path)]
+            process = subprocess.Popen(
+                command,
+                cwd=PROJECT_ROOT,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                env=child_env,
+            )
+            processes.append(process)
+            worker_records.append(
+                {
+                    "worker_id": index,
+                    "name": config.name,
+                    "config_path": _project_relative_or_absolute(config.config_path),
+                    "port": config.request.runtime.port,
+                    "route_config_path": str(config.request.scenario.route_config_path),
+                    "log_path": _project_relative_or_absolute(log_path),
+                    "pid": process.pid,
+                }
+            )
+
+        manifest_path = _write_launcher_manifest(
+            output_dir=launcher_dir,
+            argv=argv,
+            loaded_configs=loaded_configs,
+            worker_records=worker_records,
+        )
+
+        for process, worker in zip(processes, worker_records, strict=True):
+            worker["exit_code"] = process.wait()
+
+        _write_launcher_manifest(
+            output_dir=launcher_dir,
+            argv=argv,
+            loaded_configs=loaded_configs,
+            worker_records=worker_records,
+        )
+    finally:
+        for log_handle in log_handles:
+            log_handle.close()
+
+    print(
+        json.dumps(
+            {
+                "launcher_manifest_path": _project_relative_or_absolute(manifest_path),
+                "workers": worker_records,
+            },
+            indent=2,
+        )
+    )
+    if any(worker["exit_code"] != 0 for worker in worker_records):
+        raise SystemExit(1)
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    config_paths = [Path(path) for path in args.config_paths]
+    if len(config_paths) == 1:
+        _run_single_config(config_paths[0], sys.argv[1:])
+        return
+    _run_parallel_configs(config_paths, sys.argv[1:])
 
 
 if __name__ == "__main__":
