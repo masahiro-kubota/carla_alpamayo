@@ -15,6 +15,7 @@ from ad_stack.overtake import (
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
+    should_begin_rejoin,
 )
 from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
 
@@ -214,6 +215,8 @@ class ExpertBasicAgent:
         return self._route_point_to_trace_index[bounded_index]
 
     def _set_rejoin_plan(self, route_index: int | None) -> None:
+        if self._start_rejoin(route_index):
+            return
         if not self._base_trace:
             return
         trace_index = min(self._route_trace_index(route_index) + 8, len(self._base_trace) - 1)
@@ -503,6 +506,88 @@ class ExpertBasicAgent:
                 rear_gap_m = min(rear_gap_m, abs(longitudinal_distance))
         return front_gap_m, rear_gap_m
 
+    @staticmethod
+    def _lane_gaps_for_lane_id(
+        tracked_objects: tuple[DynamicVehicleStateView, ...],
+        lane_id: str | None,
+    ) -> tuple[float, float]:
+        if lane_id is None:
+            return float("inf"), float("inf")
+        front_gap_m = float("inf")
+        rear_gap_m = float("inf")
+        for actor in tracked_objects:
+            if actor.lane_id != lane_id or actor.longitudinal_distance_m is None:
+                continue
+            longitudinal_distance = float(actor.longitudinal_distance_m)
+            if longitudinal_distance >= 0.0:
+                front_gap_m = min(front_gap_m, longitudinal_distance)
+            else:
+                rear_gap_m = min(rear_gap_m, abs(longitudinal_distance))
+        return front_gap_m, rear_gap_m
+
+    def _start_rejoin(self, route_index: int | None) -> bool:
+        if (
+            not self._base_trace
+            or self._overtake_direction is None
+            or self._overtake_origin_lane_id is None
+            or self._overtake_target_lane_id is None
+        ):
+            self._lane_change_path_available = False
+            self._lane_change_path_failure_reason = "missing_rejoin_context"
+            return False
+
+        (
+            origin_samples,
+            target_samples,
+            waypoint_lookup,
+            target_lane_id,
+        ) = self._build_route_aligned_lane_samples(
+            direction=self._overtake_direction,
+            route_index=route_index,
+        )
+        if (
+            not origin_samples
+            or not target_samples
+            or target_lane_id is None
+            or target_lane_id != self._overtake_target_lane_id
+        ):
+            self._lane_change_path_available = False
+            self._lane_change_path_failure_reason = "rejoin_lane_sample_missing"
+            return False
+
+        rejoin_plan = build_route_aligned_lane_change_plan(
+            target_samples,
+            origin_samples,
+            distance_same_lane_m=0.0,
+            lane_change_distance_m=self.config.lane_change_distance_m,
+            distance_other_lane_m=max(self.config.sampling_resolution_m, 0.1),
+        )
+        if not rejoin_plan.available:
+            self._lane_change_path_available = False
+            self._lane_change_path_failure_reason = rejoin_plan.failure_reason
+            return False
+
+        materialized = self._materialize_plan_waypoints(rejoin_plan.points, waypoint_lookup)
+        if not materialized:
+            self._lane_change_path_available = False
+            self._lane_change_path_failure_reason = "rejoin_materialization_failed"
+            return False
+
+        last_route_index = rejoin_plan.points[-1].route_index
+        trace_resume_index = min(self._route_trace_index(last_route_index) + 1, len(self._base_trace) - 1)
+        for waypoint, _option in self._base_trace[trace_resume_index:]:
+            if materialized:
+                tail_location = materialized[-1].transform.location
+                if tail_location.distance(waypoint.transform.location) <= 0.05:
+                    continue
+            materialized.append(self._route_aligned_waypoint(waypoint, waypoint))
+
+        self._overtake_waypoints = deque(materialized)
+        self._overtake_target_lane_id = self._overtake_origin_lane_id
+        self._lane_change_path_available = True
+        self._lane_change_path_failure_reason = None
+        return True
+
     def _choose_overtake_direction(
         self,
         scene_state: SceneState,
@@ -690,6 +775,8 @@ class ExpertBasicAgent:
         right_front_gap_m, right_rear_gap_m = self._lane_gaps(
             scene_state.tracked_objects, "right_lane"
         )
+        rejoin_front_gap_m = float("inf")
+        rejoin_rear_gap_m = float("inf")
         overtake_reject_reason: str | None = None
         overtake_considered = False
         event_flags = {
@@ -703,13 +790,17 @@ class ExpertBasicAgent:
         }
 
         if self._overtake_state != "idle":
-            if self._overtake_aborted:
-                planner_state = "abort_return"
-            elif current_lane_id is not None and current_lane_id == self._overtake_target_lane_id:
+            if (
+                self._overtake_state == "lane_change_out"
+                and current_lane_id is not None
+                and current_lane_id == self._overtake_target_lane_id
+            ):
                 self._overtake_state = "pass_vehicle"
                 planner_state = "pass_vehicle"
+            elif self._overtake_state == "lane_change_back":
+                planner_state = "abort_return" if self._overtake_aborted else "lane_change_back"
             else:
-                planner_state = self._overtake_state
+                planner_state = "abort_return" if self._overtake_aborted else self._overtake_state
 
             if self._overtake_state in {"lane_change_out", "abort_return"}:
                 lane_change_target_speed_kmh = min(
@@ -738,7 +829,7 @@ class ExpertBasicAgent:
                 current_lane_id is not None
                 and self._overtake_origin_lane_id is not None
                 and current_lane_id == self._overtake_origin_lane_id
-                and self._overtake_state in {"pass_vehicle", "abort_return"}
+                and self._overtake_state in {"lane_change_back", "abort_return"}
             ):
                 if not self._overtake_aborted:
                     event_flags["event_overtake_success"] = True
@@ -873,6 +964,29 @@ class ExpertBasicAgent:
                 ),
                 overtake_resume_front_gap_m=self.config.overtake_resume_front_gap_m,
             )
+            if self._overtake_origin_lane_id is not None:
+                rejoin_front_gap_m, rejoin_rear_gap_m = self._lane_gaps_for_lane_id(
+                    scene_state.tracked_objects,
+                    self._overtake_origin_lane_id,
+                )
+            if (
+                self._overtake_state == "pass_vehicle"
+                and not self._overtake_aborted
+                and should_begin_rejoin(
+                    self._overtake_memory,
+                    rejoin_front_gap_m=(
+                        None if not math.isfinite(rejoin_front_gap_m) else rejoin_front_gap_m
+                    ),
+                    rejoin_rear_gap_m=(
+                        None if not math.isfinite(rejoin_rear_gap_m) else rejoin_rear_gap_m
+                    ),
+                    overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
+                    overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
+                )
+                and self._start_rejoin(route_index)
+            ):
+                self._overtake_state = "lane_change_back"
+                planner_state = "lane_change_back"
             self._overtake_memory.state = self._overtake_state
 
         if planner_state == "car_follow" and not self._car_follow_active:
@@ -998,6 +1112,12 @@ class ExpertBasicAgent:
                 "right_lane_rear_gap_m": None
                 if not math.isfinite(right_rear_gap_m)
                 else float(right_rear_gap_m),
+                "rejoin_front_gap_m": None
+                if not math.isfinite(rejoin_front_gap_m)
+                else float(rejoin_front_gap_m),
+                "rejoin_rear_gap_m": None
+                if not math.isfinite(rejoin_rear_gap_m)
+                else float(rejoin_rear_gap_m),
                 "overtake_considered": overtake_considered,
                 "overtake_reject_reason": overtake_reject_reason,
                 "overtake_state": self._overtake_state,
