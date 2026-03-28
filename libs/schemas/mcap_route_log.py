@@ -777,7 +777,7 @@ class RouteLoopMcapWriter:
                     "translation": {
                         "x": 1.5,
                         "y": 0.0,
-                        "z": 2.4,
+                        "z": 1.5,
                     },
                     "rotation": {
                         "x": 0.0,
