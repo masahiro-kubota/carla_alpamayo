@@ -23,7 +23,7 @@ from ad_stack.overtake import (
 
 def _context(
     *,
-    lead_distance_m: float = 20.0,
+    lead_distance_m: float | None = 20.0,
     lead_speed_mps: float = 0.0,
     lead_is_stopped: bool = True,
     preferred_direction: str = "left_first",
@@ -44,13 +44,17 @@ def _context(
         route_target_lane_id="15:-1",
         target_speed_kmh=30.0,
         stopped_speed_threshold_mps=0.3,
-        lead=OvertakeLeadSnapshot(
-            actor_id=101,
-            lane_id="15:-1",
-            distance_m=lead_distance_m,
-            speed_mps=lead_speed_mps,
-            relative_speed_mps=2.0,
-            is_stopped=lead_is_stopped,
+        lead=(
+            OvertakeLeadSnapshot(
+                actor_id=101,
+                lane_id="15:-1",
+                distance_m=lead_distance_m,
+                speed_mps=lead_speed_mps,
+                relative_speed_mps=2.0,
+                is_stopped=lead_is_stopped,
+            )
+            if lead_distance_m is not None
+            else None
         ),
         left_lane=AdjacentLaneGapSnapshot(
             lane_id="15:1",
@@ -133,6 +137,30 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         self.assertEqual(decision.planner_state, "lane_change_out")
         self.assertEqual(decision.direction, "left")
         self.assertEqual(decision.target_lane_id, "15:1")
+
+    def test_overtake_accepts_route_aligned_obstacle_target_without_same_lane_lead(self) -> None:
+        decision = choose_overtake_action(
+            _context(
+                lead_distance_m=None,
+                obstacle_target=StoppedObstacleTargetSnapshot(
+                    kind="single_actor",
+                    primary_actor_id=301,
+                    member_actor_ids=(301,),
+                    lane_id="13:-1",
+                    entry_distance_m=24.0,
+                    exit_distance_m=24.0,
+                    speed_mps=0.0,
+                    is_stopped=True,
+                ),
+            ),
+            overtake_trigger_distance_m=40.0,
+            overtake_speed_delta_kmh=8.0,
+            overtake_min_front_gap_m=35.0,
+            overtake_min_rear_gap_m=15.0,
+            signal_suppression_distance_m=35.0,
+        )
+        self.assertEqual(decision.planner_state, "lane_change_out")
+        self.assertEqual(decision.direction, "left")
 
     def test_overtake_prefers_left_when_both_sides_are_open(self) -> None:
         decision = choose_overtake_action(
@@ -490,6 +518,23 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         )
         self.assertFalse(result.is_valid)
         self.assertIn("adjacent_lane_not_closed", result.errors)
+
+    def test_preflight_accepts_adjacent_lane_closed_when_no_adjacent_lane_is_available(self) -> None:
+        result = validate_preflight(
+            PreflightValidationInput(
+                scenario_kind="adjacent_lane_closed",
+                ego_lane_id="2:1",
+                obstacle_lane_id="2:1",
+                obstacle_route_lane_id="2:1",
+                ego_to_obstacle_longitudinal_distance_m=16.0,
+                left_lane_is_driving=False,
+                right_lane_is_driving=False,
+                route_target_lane_id="2:1",
+                route_aligned_adjacent_lane_available=False,
+            )
+        )
+        self.assertTrue(result.is_valid)
+        self.assertEqual(result.errors, [])
 
     def test_preflight_invalidates_near_junction_reject_scenario_when_hazard_is_close(self) -> None:
         result = validate_preflight(

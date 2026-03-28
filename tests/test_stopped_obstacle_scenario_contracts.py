@@ -213,8 +213,8 @@ _CASES: tuple[ScenarioContractCase, ...] = (
             route_target_lane_id="2:1",
             route_aligned_adjacent_lane_available=False,
         ),
-        expected_valid=False,
-        expected_errors=("no_adjacent_driving_lane", "route_aligned_adjacent_lane_unavailable"),
+        expected_valid=True,
+        expected_errors=(),
         expected_warnings=(),
     ),
 )

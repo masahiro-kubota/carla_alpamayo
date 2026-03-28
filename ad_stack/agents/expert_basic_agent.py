@@ -121,6 +121,7 @@ class ExpertBasicAgent:
         )
         self._base_trace: list[tuple[Any, Any]] = []
         self._route_point_to_trace_index: list[int] = []
+        self._route_point_progress_m: list[float] = []
         self._max_route_index: int = 0
         self._overtake_state = "idle"
         self._overtake_direction: Literal["left", "right"] | None = None
@@ -143,7 +144,9 @@ class ExpertBasicAgent:
     def set_global_plan(self, trace: list[tuple[Any, Any]]) -> None:
         self._base_trace = list(trace)
         self._route_point_to_trace_index = []
+        self._route_point_progress_m = []
         last_point: tuple[float, float] | None = None
+        cumulative_progress_m = 0.0
         for trace_index, (waypoint, _option) in enumerate(self._base_trace):
             location = waypoint.transform.location
             point = (location.x, location.y)
@@ -151,7 +154,13 @@ class ExpertBasicAgent:
                 last_point is None
                 or math.hypot(point[0] - last_point[0], point[1] - last_point[1]) > 0.05
             ):
+                if last_point is not None:
+                    cumulative_progress_m += math.hypot(
+                        point[0] - last_point[0],
+                        point[1] - last_point[1],
+                    )
                 self._route_point_to_trace_index.append(trace_index)
+                self._route_point_progress_m.append(cumulative_progress_m)
                 last_point = point
         self._agent.set_global_plan(trace, stop_waypoint_creation=True, clean_queue=True)
 
@@ -524,6 +533,79 @@ class ExpertBasicAgent:
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
         )
 
+    def _nearest_route_point_index_for_actor(
+        self,
+        *,
+        actor: DynamicVehicleStateView,
+        start_route_index: int,
+        max_search_points: int = 120,
+    ) -> tuple[int | None, float]:
+        if not self._route_point_to_trace_index:
+            return None, float("inf")
+        start_index = max(0, min(start_route_index, len(self._route_point_to_trace_index) - 1))
+        end_index = min(len(self._route_point_to_trace_index), start_index + max_search_points)
+        best_route_index: int | None = None
+        best_distance_m = float("inf")
+        for route_point_index in range(start_index, end_index):
+            trace_index = self._route_point_to_trace_index[route_point_index]
+            route_location = self._base_trace[trace_index][0].transform.location
+            distance_m = math.hypot(route_location.x - actor.x_m, route_location.y - actor.y_m)
+            if distance_m < best_distance_m:
+                best_distance_m = distance_m
+                best_route_index = route_point_index
+        return best_route_index, best_distance_m
+
+    def _route_aligned_stopped_targets(
+        self,
+        tracked_objects: tuple[DynamicVehicleStateView, ...],
+        *,
+        route_index: int | None,
+    ) -> list[StoppedObstacleTargetSnapshot]:
+        if (
+            route_index is None
+            or not self._base_trace
+            or not self._route_point_to_trace_index
+            or not self._route_point_progress_m
+        ):
+            return []
+
+        bounded_route_index = max(0, min(route_index, len(self._route_point_to_trace_index) - 1))
+        ego_route_progress_m = self._route_point_progress_m[bounded_route_index]
+        leads: list[OvertakeLeadSnapshot] = []
+        for actor in tracked_objects:
+            if actor.actor_id is None or actor.lane_id is None:
+                continue
+            if float(actor.speed_mps) > self.config.stopped_speed_threshold_mps:
+                continue
+            actor_route_index, route_distance_to_centerline_m = self._nearest_route_point_index_for_actor(
+                actor=actor,
+                start_route_index=bounded_route_index,
+            )
+            if actor_route_index is None or route_distance_to_centerline_m > 4.0:
+                continue
+            trace_index = self._route_point_to_trace_index[actor_route_index]
+            route_lane_id = _lane_id(self._base_trace[trace_index][0])
+            if route_lane_id != actor.lane_id:
+                continue
+            route_distance_m = self._route_point_progress_m[actor_route_index] - ego_route_progress_m
+            if route_distance_m <= 0.0:
+                continue
+            leads.append(
+                OvertakeLeadSnapshot(
+                    actor_id=actor.actor_id,
+                    lane_id=actor.lane_id,
+                    distance_m=float(route_distance_m),
+                    speed_mps=float(actor.speed_mps),
+                    relative_speed_mps=0.0,
+                    is_stopped=True,
+                )
+            )
+        return build_stopped_obstacle_targets(
+            leads,
+            cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
+            cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
+        )
+
     def _visible_overtake_target_actors(
         self,
         tracked_objects: tuple[DynamicVehicleStateView, ...],
@@ -838,16 +920,35 @@ class ExpertBasicAgent:
             timestamp_s=scene_state.timestamp_s,
         )
         lead_vehicle = self._nearest_lead(scene_state.tracked_objects, relation="same_lane")
-        stopped_targets = self._same_lane_stopped_targets(scene_state.tracked_objects)
+        same_lane_stopped_targets = self._same_lane_stopped_targets(scene_state.tracked_objects)
+        route_aligned_stopped_targets = self._route_aligned_stopped_targets(
+            scene_state.tracked_objects,
+            route_index=route_index,
+        )
+        stopped_targets = (
+            same_lane_stopped_targets if same_lane_stopped_targets else route_aligned_stopped_targets
+        )
         active_overtake_target = stopped_targets[0] if stopped_targets else None
         lead_distance_m = (
             float(lead_vehicle.longitudinal_distance_m)
             if lead_vehicle and lead_vehicle.longitudinal_distance_m is not None
-            else None
+            else (
+                float(active_overtake_target.entry_distance_m)
+                if active_overtake_target is not None
+                else None
+            )
         )
-        lead_speed_mps = float(lead_vehicle.speed_mps) if lead_vehicle is not None else 0.0
-        lead_speed_kmh = _speed_kmh(lead_speed_mps) if lead_vehicle is not None else 0.0
-        closing_speed_mps = current_speed_mps - lead_speed_mps if lead_vehicle is not None else 0.0
+        lead_speed_mps = (
+            float(lead_vehicle.speed_mps)
+            if lead_vehicle is not None
+            else (
+                float(active_overtake_target.speed_mps)
+                if active_overtake_target is not None
+                else 0.0
+            )
+        )
+        lead_speed_kmh = _speed_kmh(lead_speed_mps) if lead_distance_m is not None else 0.0
+        closing_speed_mps = current_speed_mps - lead_speed_mps if lead_distance_m is not None else 0.0
         min_ttc = float("inf")
         if lead_distance_m is not None and closing_speed_mps > 1e-3:
             min_ttc = lead_distance_m / closing_speed_mps
@@ -976,7 +1077,7 @@ class ExpertBasicAgent:
                         overtake_reject_reason = "signal_suppressed"
                         event_flags["event_unsafe_lane_change_reject"] = True
         elif (
-            lead_vehicle is not None
+            (lead_vehicle is not None or active_overtake_target is not None)
             and not self.config.ignore_vehicles
             and self._overtake_state == "idle"
         ):
@@ -1006,8 +1107,20 @@ class ExpertBasicAgent:
                     target_speed_kmh=self.config.target_speed_kmh,
                     stopped_speed_threshold_mps=0.3,
                     lead=OvertakeLeadSnapshot(
-                        actor_id=lead_vehicle.actor_id,
-                        lane_id=lead_vehicle.lane_id,
+                        actor_id=(
+                            lead_vehicle.actor_id
+                            if lead_vehicle is not None
+                            else active_overtake_target.primary_actor_id
+                            if active_overtake_target is not None
+                            else None
+                        ),
+                        lane_id=(
+                            lead_vehicle.lane_id
+                            if lead_vehicle is not None
+                            else active_overtake_target.lane_id
+                            if active_overtake_target is not None
+                            else None
+                        ),
                         distance_m=lead_distance_m,
                         speed_mps=lead_speed_mps,
                         relative_speed_mps=closing_speed_mps,
@@ -1261,13 +1374,25 @@ class ExpertBasicAgent:
                 "traffic_light_stop_buffer_m": self.config.traffic_light_stop_buffer_m,
                 "traffic_light_stop_target_distance_m": stop_target_distance_m,
                 "target_speed_kmh": target_speed_kmh,
-                "lead_vehicle_id": lead_vehicle.actor_id if lead_vehicle is not None else None,
+                "lead_vehicle_id": (
+                    lead_vehicle.actor_id
+                    if lead_vehicle is not None
+                    else active_overtake_target.primary_actor_id
+                    if active_overtake_target is not None
+                    else None
+                ),
                 "lead_vehicle_distance_m": lead_distance_m,
                 "lead_vehicle_speed_mps": lead_speed_mps if lead_vehicle is not None else None,
                 "lead_vehicle_relative_speed_mps": closing_speed_mps
                 if lead_vehicle is not None
                 else None,
-                "lead_vehicle_lane_id": lead_vehicle.lane_id if lead_vehicle is not None else None,
+                "lead_vehicle_lane_id": (
+                    lead_vehicle.lane_id
+                    if lead_vehicle is not None
+                    else active_overtake_target.lane_id
+                    if active_overtake_target is not None
+                    else None
+                ),
                 "left_lane_front_gap_m": None
                 if not math.isfinite(left_front_gap_m)
                 else float(left_front_gap_m),

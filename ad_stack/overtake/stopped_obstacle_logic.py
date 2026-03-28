@@ -404,10 +404,11 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
         or snapshot.ego_to_obstacle_longitudinal_distance_m <= 0.0
     ):
         errors.append("obstacle_not_ahead")
-    if not (snapshot.left_lane_is_driving or snapshot.right_lane_is_driving):
-        errors.append("no_adjacent_driving_lane")
-    if not snapshot.route_aligned_adjacent_lane_available:
-        errors.append("route_aligned_adjacent_lane_unavailable")
+    if snapshot.scenario_kind != "adjacent_lane_closed":
+        if not (snapshot.left_lane_is_driving or snapshot.right_lane_is_driving):
+            errors.append("no_adjacent_driving_lane")
+        if not snapshot.route_aligned_adjacent_lane_available:
+            errors.append("route_aligned_adjacent_lane_unavailable")
     if (
         snapshot.route_target_lane_id is not None
         and snapshot.ego_lane_id is not None
@@ -442,7 +443,9 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
             errors.append("obstacle_actor_missing")
 
     if snapshot.scenario_kind == "adjacent_lane_closed":
-        if snapshot.left_lane_is_driving or snapshot.right_lane_is_driving:
+        if snapshot.route_aligned_adjacent_lane_available or (
+            snapshot.left_lane_is_driving or snapshot.right_lane_is_driving
+        ):
             errors.append("adjacent_lane_not_closed")
 
     if snapshot.scenario_kind == "near_junction_preflight_reject":
