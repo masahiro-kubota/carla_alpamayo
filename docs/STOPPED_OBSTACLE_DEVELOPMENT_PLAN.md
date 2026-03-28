@@ -42,6 +42,19 @@
 
 以後の停止障害物開発では、`northbound` を canonical とする。`road12` は比較用に残すが、新規調整の基準にはしない。
 
+## 1.1 canonical regression set
+
+停止障害物回避の baseline は次の 3 本とする。
+
+- clear:
+  - [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/town01_stopped_obstacle_clear_long_expert.json)
+- blocked_static:
+  - [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
+- blocked_oncoming:
+  - [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
+
+これらは [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/simulation/scripts/run_stopped_obstacle_regressions.sh) で一括実行する。以後、停止障害物回避の調整ではこの 3 本が崩れないことを最低条件にする。
+
 ## 2. 環境として必要なもの
 
 ### 2.1 deterministic environment
