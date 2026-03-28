@@ -10,6 +10,10 @@
   - [run_configs](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs)
 - regression runner:
   - [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_stopped_obstacle_regressions.sh)
+- scenario inspector:
+  - [inspect_stopped_obstacle_scenario.py](/home/masa/carla_alpamayo/simulation/pipelines/inspect_stopped_obstacle_scenario.py)
+- next steps:
+  - [NEXT_STEPS.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/NEXT_STEPS.md)
 
 ## Verified Baseline Scenarios
 
