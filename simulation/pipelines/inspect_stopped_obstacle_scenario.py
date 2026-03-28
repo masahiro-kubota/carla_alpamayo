@@ -203,6 +203,8 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
             actors=actors,
             spawned_actor_refs=npc_actor_refs,
         )
+        for _ in range(3):
+            world.tick()
 
         ego_waypoint = world.get_map().get_waypoint(vehicle.get_location())
         scenario_validation = build_stopped_obstacle_scenario_validation(

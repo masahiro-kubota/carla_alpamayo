@@ -1032,6 +1032,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             spawned_actor_refs=npc_actor_refs,
         )
         npc_actor_metadata_by_id = {int(item["actor_id"]): item for item in npc_actors_summary}
+        for _ in range(3):
+            world.tick()
         scenario_validation = build_stopped_obstacle_scenario_validation(
             environment_config=environment_config,
             world_map=world.get_map(),
