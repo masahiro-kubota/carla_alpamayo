@@ -908,6 +908,20 @@ class ExpertBasicAgent:
                 # Without this cap, the light-stop profile can keep throttle applied until the ego
                 # reaches the stop line even when a stationary obstacle is sitting well before it.
                 target_speed_kmh = min(target_speed_kmh, follow_target_speed_kmh)
+                if (
+                    self.config.allow_overtake
+                    and active_light is not None
+                    and active_light.state in {"red", "yellow"}
+                ):
+                    stop_distance = (
+                        active_light.stop_line_distance_m
+                        if active_light.stop_line_distance_m is not None
+                        else active_light.distance_m
+                    )
+                    if stop_distance <= self.config.overtake_signal_suppression_distance_m:
+                        overtake_considered = True
+                        overtake_reject_reason = "signal_suppressed"
+                        event_flags["event_unsafe_lane_change_reject"] = True
         elif (
             lead_vehicle is not None
             and not self.config.ignore_vehicles
