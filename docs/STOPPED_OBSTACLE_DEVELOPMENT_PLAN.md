@@ -15,7 +15,7 @@
 - [TOWN01_OVERTAKE_PARAMETER_DECISIONS.md](/home/masa/carla_alpamayo/docs/TOWN01_OVERTAKE_PARAMETER_DECISIONS.md)
 - [STOPPED_OBSTACLE_LOGIC_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_LOGIC_DESIGN.md)
 - [STOPPED_OBSTACLE_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_TEST_DESIGN.md)
-- [README.md](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/README.md)
+- [README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/README.md)
 
 ## 1. まず成立させるシナリオ
 
@@ -48,13 +48,13 @@
 停止障害物回避の baseline は次の 3 本とする。
 
 - clear:
-  - [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json)
+  - [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json)
 - blocked_static:
-  - [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
+  - [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
 - blocked_oncoming:
-  - [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
+  - [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
 
-これらは [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_stopped_obstacle_regressions.sh) で一括実行する。以後、停止障害物回避の調整ではこの 3 本が崩れないことを最低条件にする。
+これらは [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_stopped_obstacle_regressions.sh) で一括実行する。以後、停止障害物回避の調整ではこの 3 本が崩れないことを最低条件にする。
 
 ## 2. 環境として必要なもの
 
@@ -149,9 +149,9 @@
 
 必要な run-config:
 
-- [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json)
-- [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
-- [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
+- [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json)
+- [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
+- [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
 
 含めるべき設定:
 

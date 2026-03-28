@@ -267,7 +267,7 @@ integration は少数精鋭にする。
 
 run-config:
 
-- `tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json`
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json`
 
 見ること:
 
@@ -281,7 +281,7 @@ run-config:
 
 run-config:
 
-- `tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json`
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json`
 
 見ること:
 
@@ -293,7 +293,7 @@ run-config:
 
 run-config:
 
-- `tests/integration/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json`
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json`
 
 見ること:
 
