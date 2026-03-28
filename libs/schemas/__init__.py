@@ -7,6 +7,8 @@ from .mcap_route_log import (
     NPCVehicleStateSample,
     RotatingRouteLoopMcapWriter,
     RouteLoopMcapWriter,
+    TrackedVehicleStateSample,
+    TrafficLightObservationSample,
 )
 
 __all__ = [
@@ -16,5 +18,7 @@ __all__ = [
     "NPCVehicleStateSample",
     "RotatingRouteLoopMcapWriter",
     "RouteLoopMcapWriter",
+    "TrackedVehicleStateSample",
+    "TrafficLightObservationSample",
     "append_jsonl",
 ]

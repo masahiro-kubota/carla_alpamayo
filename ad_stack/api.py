@@ -106,6 +106,7 @@ class StackStepResult:
     progress_ratio: float = 0.0
     done: bool = False
     route_point: tuple[float, float] | None = None
+    scene_state: Any | None = None
 
 
 @dataclass(slots=True)
@@ -474,6 +475,7 @@ class ExpertCollectorStack(_RouteSceneMixin):
             progress_ratio=progress_ratio,
             done=self._agent.done() or progress_ratio >= 0.995,
             route_point=route_point,
+            scene_state=scene_state,
         )
 
 
@@ -585,6 +587,7 @@ class PilotNetEvalStack(_RouteSceneMixin):
             progress_ratio=progress_ratio,
             done=self._expert_agent.done() or progress_ratio >= 0.995,
             route_point=route_point,
+            scene_state=scene_state,
         )
 
 

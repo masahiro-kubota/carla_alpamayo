@@ -357,15 +357,15 @@ class ExpertBasicAgent:
         self,
         scene_state: SceneState,
         active_light: TrafficLightStateView | None,
-    ) -> tuple[Literal["left", "right"] | None, bool]:
+    ) -> tuple[Literal["left", "right"] | None, bool, str | None]:
         if not self.config.allow_overtake:
-            return None, False
+            return None, False, "overtake_disabled"
         if self.config.ignore_vehicles:
-            return None, False
+            return None, False, "ignore_vehicles_enabled"
         if active_light is not None and active_light.state in {"red", "yellow"}:
             stop_distance = active_light.stop_line_distance_m or active_light.distance_m
             if stop_distance <= self.config.overtake_signal_suppression_distance_m:
-                return None, False
+                return None, False, "signal_suppressed"
 
         ordered_directions: tuple[Literal["left", "right"], Literal["left", "right"]]
         if self.config.preferred_overtake_direction == "left_first":
@@ -374,6 +374,7 @@ class ExpertBasicAgent:
             ordered_directions = ("right", "left")
 
         any_lane_open = False
+        reject_reason: str | None = None
         for direction in ordered_directions:
             if not scene_state.ego.adjacent_lanes_open.get(direction, False):
                 continue
@@ -384,8 +385,16 @@ class ExpertBasicAgent:
                 front_gap_m >= self.config.overtake_min_front_gap_m
                 and rear_gap_m >= self.config.overtake_min_rear_gap_m
             ):
-                return direction, True
-        return None, any_lane_open
+                return direction, True, None
+            if front_gap_m < self.config.overtake_min_front_gap_m:
+                reject_reason = "adjacent_front_gap_insufficient"
+            elif rear_gap_m < self.config.overtake_min_rear_gap_m:
+                reject_reason = "adjacent_rear_gap_insufficient"
+            else:
+                reject_reason = "adjacent_lane_gap_insufficient"
+        if not any_lane_open:
+            reject_reason = "adjacent_lane_closed"
+        return None, any_lane_open, reject_reason
 
     def _should_stop_for_light(
         self,
@@ -526,6 +535,12 @@ class ExpertBasicAgent:
         target_speed_kmh = self.config.target_speed_kmh
         target_lane_id = scene_state.route.target_lane_id or scene_state.ego.lane_id
         current_lane_id = scene_state.ego.lane_id
+        left_front_gap_m, left_rear_gap_m = self._lane_gaps(scene_state.tracked_objects, "left_lane")
+        right_front_gap_m, right_rear_gap_m = self._lane_gaps(
+            scene_state.tracked_objects, "right_lane"
+        )
+        overtake_reject_reason: str | None = None
+        overtake_considered = False
         event_flags = {
             "event_traffic_light_stop": False,
             "event_traffic_light_resume": False,
@@ -605,7 +620,8 @@ class ExpertBasicAgent:
                 <= (self.config.target_speed_kmh - self.config.overtake_speed_delta_kmh)
             )
             if should_overtake:
-                direction, lane_safe_or_open = self._choose_overtake_direction(
+                overtake_considered = True
+                direction, lane_safe_or_open, overtake_reject_reason = self._choose_overtake_direction(
                     scene_state, active_light
                 )
                 if direction is not None:
@@ -623,10 +639,12 @@ class ExpertBasicAgent:
                         self._overtake_aborted = False
                         planner_state = "lane_change_out"
                         event_flags["event_overtake_attempt"] = True
+                        overtake_reject_reason = None
                     else:
                         event_flags["event_unsafe_lane_change_reject"] = True
                         planner_state = "car_follow"
                         target_speed_kmh = follow_target_speed_kmh
+                        overtake_reject_reason = "lane_change_path_failed"
                 elif lane_safe_or_open:
                     planner_state = "car_follow"
                     target_speed_kmh = follow_target_speed_kmh
@@ -637,6 +655,16 @@ class ExpertBasicAgent:
             else:
                 planner_state = "car_follow"
                 target_speed_kmh = follow_target_speed_kmh
+                if not self.config.allow_overtake:
+                    overtake_reject_reason = "overtake_disabled"
+                elif lead_distance_m is None:
+                    overtake_reject_reason = "lead_distance_unavailable"
+                elif lead_distance_m > self.config.overtake_trigger_distance_m:
+                    overtake_reject_reason = "lead_out_of_range"
+                elif lead_speed_kmh > (
+                    self.config.target_speed_kmh - self.config.overtake_speed_delta_kmh
+                ):
+                    overtake_reject_reason = "lead_not_slow_enough"
 
         if planner_state == "car_follow" and not self._car_follow_active:
             event_flags["event_car_follow_start"] = True
@@ -749,6 +777,20 @@ class ExpertBasicAgent:
                 if lead_vehicle is not None
                 else None,
                 "lead_vehicle_lane_id": lead_vehicle.lane_id if lead_vehicle is not None else None,
+                "left_lane_front_gap_m": None
+                if not math.isfinite(left_front_gap_m)
+                else float(left_front_gap_m),
+                "left_lane_rear_gap_m": None
+                if not math.isfinite(left_rear_gap_m)
+                else float(left_rear_gap_m),
+                "right_lane_front_gap_m": None
+                if not math.isfinite(right_front_gap_m)
+                else float(right_front_gap_m),
+                "right_lane_rear_gap_m": None
+                if not math.isfinite(right_rear_gap_m)
+                else float(right_rear_gap_m),
+                "overtake_considered": overtake_considered,
+                "overtake_reject_reason": overtake_reject_reason,
                 "overtake_state": self._overtake_state,
                 "overtake_direction": self._overtake_direction,
                 "overtake_target_lane_id": self._overtake_target_lane_id,

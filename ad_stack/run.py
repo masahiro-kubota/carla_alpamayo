@@ -44,6 +44,8 @@ from libs.schemas import (
     EpisodeRecord,
     NPCVehicleStateSample,
     RotatingRouteLoopMcapWriter,
+    TrackedVehicleStateSample,
+    TrafficLightObservationSample,
     append_jsonl,
 )
 from libs.utils import render_png_sequence_to_mp4
@@ -673,6 +675,59 @@ def _collect_npc_vehicle_states(
     return states
 
 
+def _collect_tracked_vehicle_states(*, scene_state: Any | None) -> list[TrackedVehicleStateSample]:
+    if scene_state is None:
+        return []
+    tracked_states: list[TrackedVehicleStateSample] = []
+    for actor in getattr(scene_state, "tracked_objects", ()) or ():
+        tracked_states.append(
+            TrackedVehicleStateSample(
+                actor_id=int(actor.actor_id),
+                relation=str(actor.relation),
+                lane_id=str(actor.lane_id) if actor.lane_id is not None else None,
+                speed_mps=float(actor.speed_mps),
+                longitudinal_distance_m=(
+                    float(actor.longitudinal_distance_m)
+                    if actor.longitudinal_distance_m is not None
+                    else None
+                ),
+                lateral_distance_m=(
+                    float(actor.lateral_distance_m) if actor.lateral_distance_m is not None else None
+                ),
+                is_ahead=bool(actor.is_ahead),
+                pose={
+                    "x": float(actor.x_m),
+                    "y": float(actor.y_m),
+                    "yaw_deg": float(actor.yaw_deg),
+                },
+            )
+        )
+    return tracked_states
+
+
+def _collect_traffic_light_states(
+    *, scene_state: Any | None
+) -> list[TrafficLightObservationSample]:
+    if scene_state is None:
+        return []
+    traffic_light_states: list[TrafficLightObservationSample] = []
+    for light in getattr(scene_state, "traffic_lights", ()) or ():
+        traffic_light_states.append(
+            TrafficLightObservationSample(
+                actor_id=int(light.actor_id),
+                state=str(light.state),
+                affects_ego=bool(light.affects_ego),
+                distance_m=float(light.distance_m),
+                stop_line_distance_m=(
+                    float(light.stop_line_distance_m)
+                    if light.stop_line_distance_m is not None
+                    else None
+                ),
+            )
+        )
+    return traffic_light_states
+
+
 def _apply_npc_target_speeds(
     *,
     traffic_manager: Any,
@@ -1251,6 +1306,24 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                         npc_actor_metadata_by_id=npc_actor_metadata_by_id,
                         world_map=world.get_map(),
                     )
+                    tracked_vehicle_states = _collect_tracked_vehicle_states(
+                        scene_state=step_result.scene_state
+                    )
+                    traffic_light_states = _collect_traffic_light_states(
+                        scene_state=step_result.scene_state
+                    )
+                    planning_debug_mcap = {
+                        key: value
+                        for key, value in planning_debug.items()
+                        if key
+                        not in {
+                            "planner_state",
+                            "traffic_light_state",
+                            "overtake_state",
+                            "target_lane_id",
+                            "min_ttc",
+                        }
+                    }
                     mcap_segment = mcap_writer.write_frame(
                         current_rgb=current_rgb,
                         ego_state=EgoStateSample(
@@ -1281,13 +1354,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                                 "throttle": float(decision.command.throttle),
                                 "brake": float(decision.command.brake),
                             },
-                            planning_debug={
-                                "planner_state": planning_decision.planner_state,
-                                "behavior": behavior,
-                                **planning_debug,
-                            },
+                            planning_debug=planning_debug_mcap,
                         ),
                         npc_vehicle_states=npc_vehicle_states,
+                        tracked_vehicle_states=tracked_vehicle_states,
+                        traffic_light_states=traffic_light_states,
                     )
                     mcap_segment_index = mcap_segment.segment_index
                     mcap_segment_path = relative_to_project(mcap_segment.path)
@@ -1335,8 +1406,15 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     lead_vehicle_relative_speed_mps=planning_debug.get(
                         "lead_vehicle_relative_speed_mps"
                     ),
+                    lead_vehicle_lane_id=planning_debug.get("lead_vehicle_lane_id"),
+                    left_lane_front_gap_m=planning_debug.get("left_lane_front_gap_m"),
+                    left_lane_rear_gap_m=planning_debug.get("left_lane_rear_gap_m"),
+                    right_lane_front_gap_m=planning_debug.get("right_lane_front_gap_m"),
+                    right_lane_rear_gap_m=planning_debug.get("right_lane_rear_gap_m"),
                     overtake_state=planning_debug.get("overtake_state"),
+                    overtake_considered=planning_debug.get("overtake_considered"),
                     overtake_direction=planning_debug.get("overtake_direction"),
+                    overtake_reject_reason=planning_debug.get("overtake_reject_reason"),
                     overtake_target_lane_id=planning_debug.get("overtake_target_lane_id"),
                     current_lane_id=planning_debug.get("current_lane_id"),
                     route_target_lane_id=planning_debug.get("route_target_lane_id"),

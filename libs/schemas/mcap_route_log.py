@@ -184,10 +184,8 @@ _EGO_PLANNING_DEBUG_JSON_SCHEMA = {
         "episode_id": {"type": "string"},
         "frame_id": {"type": "integer"},
         "elapsed_seconds": {"type": "number"},
-        "planner_state": {"type": ["string", "null"]},
         "current_lane_id": {"type": ["string", "null"]},
         "route_target_lane_id": {"type": ["string", "null"]},
-        "target_lane_id": {"type": ["string", "null"]},
         "left_lane_open": {"type": ["boolean", "null"]},
         "right_lane_open": {"type": ["boolean", "null"]},
         "target_speed_kmh": {"type": ["number", "null"]},
@@ -195,17 +193,22 @@ _EGO_PLANNING_DEBUG_JSON_SCHEMA = {
         "lead_vehicle_distance_m": {"type": ["number", "null"]},
         "lead_vehicle_speed_mps": {"type": ["number", "null"]},
         "lead_vehicle_relative_speed_mps": {"type": ["number", "null"]},
+        "lead_vehicle_lane_id": {"type": ["string", "null"]},
         "traffic_light_actor_id": {"type": ["integer", "null"]},
-        "traffic_light_state": {"type": ["string", "null"]},
         "traffic_light_distance_m": {"type": ["number", "null"]},
         "traffic_light_stop_line_distance_m": {"type": ["number", "null"]},
         "traffic_light_stop_target_distance_m": {"type": ["number", "null"]},
         "traffic_light_red_latched": {"type": ["boolean", "null"]},
         "traffic_light_violation": {"type": ["boolean", "null"]},
-        "overtake_state": {"type": ["string", "null"]},
+        "traffic_light_stop_buffer_m": {"type": ["number", "null"]},
+        "left_lane_front_gap_m": {"type": ["number", "null"]},
+        "left_lane_rear_gap_m": {"type": ["number", "null"]},
+        "right_lane_front_gap_m": {"type": ["number", "null"]},
+        "right_lane_rear_gap_m": {"type": ["number", "null"]},
+        "overtake_considered": {"type": ["boolean", "null"]},
         "overtake_direction": {"type": ["string", "null"]},
+        "overtake_reject_reason": {"type": ["string", "null"]},
         "overtake_target_lane_id": {"type": ["string", "null"]},
-        "min_ttc": {"type": ["number", "null"]},
         "emergency_stop": {"type": ["boolean", "null"]},
         "event_traffic_light_stop": {"type": ["boolean", "null"]},
         "event_traffic_light_resume": {"type": ["boolean", "null"]},
@@ -285,6 +288,87 @@ _NPC_VEHICLE_STATES_JSON_SCHEMA = {
         },
     },
     "required": ["timestamp", "episode_id", "frame_id", "elapsed_seconds", "vehicles"],
+    "additionalProperties": False,
+}
+
+_TRACKED_VEHICLE_STATES_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "episode_id": {"type": "string"},
+        "frame_id": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"},
+        "vehicles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "actor_id": {"type": "integer"},
+                    "relation": {"type": "string"},
+                    "lane_id": {"type": ["string", "null"]},
+                    "speed_mps": {"type": "number"},
+                    "longitudinal_distance_m": {"type": ["number", "null"]},
+                    "lateral_distance_m": {"type": ["number", "null"]},
+                    "is_ahead": {"type": "boolean"},
+                    "pose": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "number"},
+                            "y": {"type": "number"},
+                            "yaw_deg": {"type": "number"},
+                        },
+                        "required": ["x", "y", "yaw_deg"],
+                        "additionalProperties": False,
+                    },
+                },
+                "required": [
+                    "actor_id",
+                    "relation",
+                    "lane_id",
+                    "speed_mps",
+                    "longitudinal_distance_m",
+                    "lateral_distance_m",
+                    "is_ahead",
+                    "pose",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["timestamp", "episode_id", "frame_id", "elapsed_seconds", "vehicles"],
+    "additionalProperties": False,
+}
+
+_TRAFFIC_LIGHT_OBSERVATIONS_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "timestamp": _foxglove_time_schema(),
+        "episode_id": {"type": "string"},
+        "frame_id": {"type": "integer"},
+        "elapsed_seconds": {"type": "number"},
+        "lights": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "actor_id": {"type": "integer"},
+                    "state": {"type": "string"},
+                    "affects_ego": {"type": "boolean"},
+                    "distance_m": {"type": "number"},
+                    "stop_line_distance_m": {"type": ["number", "null"]},
+                },
+                "required": [
+                    "actor_id",
+                    "state",
+                    "affects_ego",
+                    "distance_m",
+                    "stop_line_distance_m",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["timestamp", "episode_id", "frame_id", "elapsed_seconds", "lights"],
     "additionalProperties": False,
 }
 
@@ -557,6 +641,27 @@ class NPCVehicleStateSample:
 
 
 @dataclass(slots=True)
+class TrackedVehicleStateSample:
+    actor_id: int
+    relation: str
+    lane_id: str | None
+    speed_mps: float
+    longitudinal_distance_m: float | None
+    lateral_distance_m: float | None
+    is_ahead: bool
+    pose: dict[str, float]
+
+
+@dataclass(slots=True)
+class TrafficLightObservationSample:
+    actor_id: int
+    state: str
+    affects_ego: bool
+    distance_m: float
+    stop_line_distance_m: float | None
+
+
+@dataclass(slots=True)
 class McapSegmentInfo:
     segment_index: int
     path: Path
@@ -665,6 +770,20 @@ class RouteLoopMcapWriter:
             encoding="jsonschema",
             data=json.dumps(_NPC_VEHICLE_STATES_JSON_SCHEMA, ensure_ascii=False).encode("utf-8"),
         )
+        tracked_vehicle_states_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.TrackedVehicleStates",
+            encoding="jsonschema",
+            data=json.dumps(_TRACKED_VEHICLE_STATES_JSON_SCHEMA, ensure_ascii=False).encode(
+                "utf-8"
+            ),
+        )
+        traffic_light_observations_schema_id = self._writer.register_schema(
+            name="carla_alpamayo.TrafficLightObservations",
+            encoding="jsonschema",
+            data=json.dumps(
+                _TRAFFIC_LIGHT_OBSERVATIONS_JSON_SCHEMA, ensure_ascii=False
+            ).encode("utf-8"),
+        )
 
         self._front_rgb_channel_id = self._writer.register_channel(
             topic="/camera/front/compressed",
@@ -734,6 +853,16 @@ class RouteLoopMcapWriter:
             topic="/world/npc_vehicles",
             message_encoding="json",
             schema_id=npc_vehicle_states_schema_id,
+        )
+        self._tracked_vehicle_states_channel_id = self._writer.register_channel(
+            topic="/world/tracked_vehicles",
+            message_encoding="json",
+            schema_id=tracked_vehicle_states_schema_id,
+        )
+        self._traffic_light_observations_channel_id = self._writer.register_channel(
+            topic="/world/traffic_lights",
+            message_encoding="json",
+            schema_id=traffic_light_observations_schema_id,
         )
 
         self._writer.add_metadata(
@@ -926,6 +1055,8 @@ class RouteLoopMcapWriter:
         current_rgb: Any,
         ego_state: EgoStateSample,
         npc_vehicle_states: list[NPCVehicleStateSample] | None = None,
+        tracked_vehicle_states: list[TrackedVehicleStateSample] | None = None,
+        traffic_light_states: list[TrafficLightObservationSample] | None = None,
     ) -> None:
         log_time_ns = int(round(ego_state.timestamp_s * 1_000_000_000))
         timestamp = _foxglove_time(ego_state.timestamp_s)
@@ -1221,6 +1352,81 @@ class RouteLoopMcapWriter:
                 ).encode("utf-8"),
             )
 
+        if tracked_vehicle_states is not None:
+            tracked_vehicle_states_message = {
+                "timestamp": timestamp,
+                "episode_id": ego_state.episode_id,
+                "frame_id": ego_state.frame_id,
+                "elapsed_seconds": ego_state.elapsed_seconds,
+                "vehicles": [
+                    {
+                        "actor_id": int(vehicle.actor_id),
+                        "relation": str(vehicle.relation),
+                        "lane_id": vehicle.lane_id,
+                        "speed_mps": float(vehicle.speed_mps),
+                        "longitudinal_distance_m": (
+                            float(vehicle.longitudinal_distance_m)
+                            if vehicle.longitudinal_distance_m is not None
+                            else None
+                        ),
+                        "lateral_distance_m": (
+                            float(vehicle.lateral_distance_m)
+                            if vehicle.lateral_distance_m is not None
+                            else None
+                        ),
+                        "is_ahead": bool(vehicle.is_ahead),
+                        "pose": {
+                            "x": float(vehicle.pose["x"]),
+                            "y": float(vehicle.pose["y"]),
+                            "yaw_deg": float(vehicle.pose["yaw_deg"]),
+                        },
+                    }
+                    for vehicle in tracked_vehicle_states
+                ],
+            }
+            self._writer.add_message(
+                channel_id=self._tracked_vehicle_states_channel_id,
+                log_time=log_time_ns,
+                publish_time=log_time_ns,
+                sequence=ego_state.frame_id,
+                data=json.dumps(
+                    tracked_vehicle_states_message, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8"),
+            )
+
+        if traffic_light_states is not None:
+            traffic_light_observations_message = {
+                "timestamp": timestamp,
+                "episode_id": ego_state.episode_id,
+                "frame_id": ego_state.frame_id,
+                "elapsed_seconds": ego_state.elapsed_seconds,
+                "lights": [
+                    {
+                        "actor_id": int(light.actor_id),
+                        "state": str(light.state),
+                        "affects_ego": bool(light.affects_ego),
+                        "distance_m": float(light.distance_m),
+                        "stop_line_distance_m": (
+                            float(light.stop_line_distance_m)
+                            if light.stop_line_distance_m is not None
+                            else None
+                        ),
+                    }
+                    for light in traffic_light_states
+                ],
+            }
+            self._writer.add_message(
+                channel_id=self._traffic_light_observations_channel_id,
+                log_time=log_time_ns,
+                publish_time=log_time_ns,
+                sequence=ego_state.frame_id,
+                data=json.dumps(
+                    traffic_light_observations_message,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8"),
+            )
+
     def close(self) -> None:
         if self._closed:
             return
@@ -1379,6 +1585,8 @@ class RotatingRouteLoopMcapWriter:
         current_rgb: Any,
         ego_state: EgoStateSample,
         npc_vehicle_states: list[NPCVehicleStateSample] | None = None,
+        tracked_vehicle_states: list[TrackedVehicleStateSample] | None = None,
+        traffic_light_states: list[TrafficLightObservationSample] | None = None,
     ) -> McapSegmentInfo:
         segment_index = self._segment_index_for_elapsed_seconds(ego_state.elapsed_seconds)
         if self._current_segment_index != segment_index:
@@ -1395,6 +1603,8 @@ class RotatingRouteLoopMcapWriter:
             current_rgb=current_rgb,
             ego_state=ego_state,
             npc_vehicle_states=npc_vehicle_states,
+            tracked_vehicle_states=tracked_vehicle_states,
+            traffic_light_states=traffic_light_states,
         )
         segment = self._segments[self._current_segment_index]
         segment.end_elapsed_seconds = float(ego_state.elapsed_seconds)

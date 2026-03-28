@@ -44,8 +44,15 @@ class EpisodeRecord:
     lead_vehicle_id: int | None = None
     lead_vehicle_speed_mps: float | None = None
     lead_vehicle_relative_speed_mps: float | None = None
+    lead_vehicle_lane_id: str | None = None
+    left_lane_front_gap_m: float | None = None
+    left_lane_rear_gap_m: float | None = None
+    right_lane_front_gap_m: float | None = None
+    right_lane_rear_gap_m: float | None = None
     overtake_state: str | None = None
+    overtake_considered: bool | None = None
     overtake_direction: str | None = None
+    overtake_reject_reason: str | None = None
     overtake_target_lane_id: str | None = None
     current_lane_id: str | None = None
     route_target_lane_id: str | None = None
