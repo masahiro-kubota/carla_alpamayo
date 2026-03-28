@@ -1,9 +1,9 @@
 {
   "name": "town01_stopped_obstacle_clear_expert",
-  "description": "Expert smoke test for a clear stopped-obstacle bypass on Town01 road 12.",
+  "description": "Expert smoke test for a clear stopped-obstacle bypass on the Town01 northbound straight.",
   "mode": "evaluate",
   "scenario": {
-    "route_config_path": "scenarios/routes/town01_road12_overtake_short.json",
+    "route_config_path": "scenarios/routes/town01_northbound_overtake_short.json",
     "weather": "ClearNoon",
     "goal_tolerance_m": 10.0,
     "max_stop_seconds": 20.0,
