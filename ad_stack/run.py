@@ -22,6 +22,7 @@ from libs.carla_utils import (
     build_planned_route,
     load_default_topdown_map_asset,
     destroy_actors,
+    ensure_carla_agents_on_path,
     load_route_config,
     relative_to_project,
     require_blueprint,
@@ -29,6 +30,12 @@ from libs.carla_utils import (
     setup_world,
     speed_mps,
     wait_for_image,
+)
+from libs.carla_utils.traffic_light_phasing import (
+    TrafficLightApproach,
+    TrafficLightPhaseCycle,
+    build_opposing_phase_groups,
+    compute_phase_states,
 )
 from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree
 from libs.schemas import EgoStateSample, EpisodeRecord, RotatingRouteLoopMcapWriter, append_jsonl
@@ -97,6 +104,12 @@ class TrafficLightGroupCycleSpec:
     red_seconds: float
     reset_groups: bool = True
     initial_offset_seconds: float = 0.0
+
+
+@dataclass(slots=True)
+class TrafficLightPhaseRuntimeGroup:
+    actor_ids: list[int]
+    phase_actor_ids: list[list[int]]
 
 
 @dataclass(slots=True)
@@ -380,11 +393,16 @@ def _apply_traffic_light_overrides(
 def _apply_traffic_light_group_cycle(
     world: Any,
     cycle: TrafficLightGroupCycleSpec | None,
-) -> dict[int, Any]:
+) -> tuple[dict[int, Any], list[TrafficLightPhaseRuntimeGroup]]:
     lights_by_id = _traffic_lights_by_id(world)
     if cycle is None:
-        return lights_by_id
+        return lights_by_id, []
 
+    ensure_carla_agents_on_path()
+    from agents.tools.misc import get_trafficlight_trigger_location
+
+    world_map = world.get_map()
+    runtime_groups: list[TrafficLightPhaseRuntimeGroup] = []
     visited_groups: set[tuple[int, ...]] = set()
     for traffic_light in lights_by_id.values():
         group = list(traffic_light.get_group_traffic_lights())
@@ -395,14 +413,67 @@ def _apply_traffic_light_group_cycle(
             continue
         visited_groups.add(group_key)
 
+        approaches: list[TrafficLightApproach] = []
         for actor in group:
             actor.freeze(False)
-            actor.set_green_time(float(cycle.green_seconds))
-            actor.set_yellow_time(float(cycle.yellow_seconds))
-            actor.set_red_time(float(cycle.red_seconds))
-        if cycle.reset_groups:
-            group[0].reset_group()
-    return lights_by_id
+            trigger_location = get_trafficlight_trigger_location(actor)
+            trigger_waypoint = world_map.get_waypoint(trigger_location)
+            approaches.append(
+                TrafficLightApproach(
+                    actor_id=int(actor.id),
+                    heading_deg=float(trigger_waypoint.transform.rotation.yaw),
+                )
+            )
+        runtime_groups.append(
+            TrafficLightPhaseRuntimeGroup(
+                actor_ids=list(group_key),
+                phase_actor_ids=build_opposing_phase_groups(approaches),
+            )
+        )
+    return lights_by_id, runtime_groups
+
+
+def _apply_derived_traffic_light_group_cycle(
+    carla_module: Any,
+    lights_by_id: dict[int, Any],
+    runtime_groups: list[TrafficLightPhaseRuntimeGroup],
+    cycle: TrafficLightGroupCycleSpec | None,
+    *,
+    elapsed_seconds: float,
+    applied_states: dict[int, str],
+    excluded_actor_ids: set[int],
+) -> None:
+    if cycle is None or not runtime_groups:
+        return
+
+    phase_cycle = TrafficLightPhaseCycle(
+        green_seconds=float(cycle.green_seconds),
+        yellow_seconds=float(cycle.yellow_seconds),
+        red_seconds=float(cycle.red_seconds),
+        initial_offset_seconds=float(cycle.initial_offset_seconds),
+    )
+    for runtime_group in runtime_groups:
+        actor_states = compute_phase_states(
+            runtime_group.phase_actor_ids,
+            elapsed_seconds=elapsed_seconds,
+            cycle=phase_cycle,
+        )
+        for actor_id in runtime_group.actor_ids:
+            if actor_id in excluded_actor_ids:
+                continue
+            state_name = actor_states.get(actor_id, "red")
+            if applied_states.get(actor_id) == state_name:
+                continue
+            traffic_light = lights_by_id.get(actor_id)
+            if traffic_light is None:
+                continue
+            _set_traffic_light_state(
+                carla_module,
+                traffic_light,
+                state_name=state_name,
+                freeze=True,
+            )
+            applied_states[actor_id] = state_name
 
 
 def _apply_traffic_light_schedules(
@@ -736,6 +807,19 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     _traffic_light_violation_active = False
     npc_actors_summary: list[dict[str, Any]] = []
     traffic_light_phase_indices: dict[int, int] = {}
+    traffic_light_runtime_groups: list[TrafficLightPhaseRuntimeGroup] = []
+    controlled_cycle_actor_ids: set[int] = set()
+    explicit_traffic_light_actor_ids = (
+        {
+            override.actor_id
+            for override in (environment_config.traffic_light_overrides if environment_config is not None else [])
+        }
+        | {
+            schedule.actor_id
+            for schedule in (environment_config.traffic_light_schedules if environment_config is not None else [])
+        }
+    )
+    traffic_light_cycle_states: dict[int, str] = {}
 
     planned_route = build_planned_route(world.get_map(), route_config)
     topdown_map_asset = load_default_topdown_map_asset(route_config.town)
@@ -795,9 +879,23 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         actors.append(lane_sensor)
         lane_sensor.listen(lambda _event: frame_events.mark_lane_invasion())
 
-        lights_by_id = _apply_traffic_light_group_cycle(
+        lights_by_id, traffic_light_runtime_groups = _apply_traffic_light_group_cycle(
             world,
             environment_config.traffic_light_group_cycle if environment_config is not None else None,
+        )
+        controlled_cycle_actor_ids = {
+            actor_id
+            for runtime_group in traffic_light_runtime_groups
+            for actor_id in runtime_group.actor_ids
+        }
+        _apply_derived_traffic_light_group_cycle(
+            carla,
+            lights_by_id,
+            traffic_light_runtime_groups,
+            environment_config.traffic_light_group_cycle if environment_config is not None else None,
+            elapsed_seconds=0.0,
+            applied_states=traffic_light_cycle_states,
+            excluded_actor_ids=explicit_traffic_light_actor_ids,
         )
         lights_by_id = _apply_traffic_light_overrides(
             carla,
@@ -855,21 +953,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
             stack_description = stack.describe()
 
-        group_cycle = environment_config.traffic_light_group_cycle if environment_config is not None else None
-        if group_cycle is not None and group_cycle.initial_offset_seconds > 0.0:
-            warmup_ticks = max(0, round(group_cycle.initial_offset_seconds / runtime.fixed_delta_seconds))
-            warmup_elapsed = 0.0
-            for _ in range(warmup_ticks):
-                world.tick()
-                warmup_elapsed += runtime.fixed_delta_seconds
-                _apply_traffic_light_schedules(
-                    carla,
-                    lights_by_id,
-                    environment_config.traffic_light_schedules if environment_config is not None else [],
-                    elapsed_seconds=warmup_elapsed,
-                    applied_phase_indices=traffic_light_phase_indices,
-                )
-
         world_frame = world.tick()
         current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
         if mcap_writer is not None:
@@ -886,6 +969,15 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
         preview_sink = policy.preview_sink
         while True:
+            _apply_derived_traffic_light_group_cycle(
+                carla,
+                lights_by_id,
+                traffic_light_runtime_groups,
+                environment_config.traffic_light_group_cycle if environment_config is not None else None,
+                elapsed_seconds=elapsed_seconds,
+                applied_states=traffic_light_cycle_states,
+                excluded_actor_ids=explicit_traffic_light_actor_ids,
+            )
             _apply_traffic_light_schedules(
                 carla,
                 lights_by_id,
@@ -1114,13 +1206,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             except Exception as exc:  # pragma: no cover - depends on runtime environment
                 mcap_error = str(exc)
         if environment_config is not None:
-            scheduled_or_overridden_ids = {
-                override.actor_id for override in environment_config.traffic_light_overrides
-            } | {
-                schedule.actor_id for schedule in environment_config.traffic_light_schedules
-            }
+            managed_traffic_light_actor_ids = controlled_cycle_actor_ids | explicit_traffic_light_actor_ids
             for actor in world.get_actors().filter("*traffic_light*"):
-                if int(actor.id) in scheduled_or_overridden_ids:
+                if int(actor.id) in managed_traffic_light_actor_ids:
                     actor.freeze(False)
         client.get_trafficmanager(8000).set_synchronous_mode(False)
         world.apply_settings(original_settings)

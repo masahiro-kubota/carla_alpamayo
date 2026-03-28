@@ -10,6 +10,14 @@ class TrafficLightApproach:
     heading_deg: float
 
 
+@dataclass(frozen=True, slots=True)
+class TrafficLightPhaseCycle:
+    green_seconds: float
+    yellow_seconds: float
+    red_seconds: float
+    initial_offset_seconds: float = 0.0
+
+
 def _normalize_heading_deg(heading_deg: float) -> float:
     wrapped = heading_deg % 360.0
     if wrapped < 0.0:
@@ -56,3 +64,35 @@ def build_opposing_phase_groups(
 
     axis_clusters.sort(key=lambda cluster: min(cluster[0]))
     return [sorted(actor_ids) for _axes_deg, actor_ids in axis_clusters]
+
+
+def compute_phase_states(
+    phase_actor_ids: list[list[int]],
+    *,
+    elapsed_seconds: float,
+    cycle: TrafficLightPhaseCycle,
+) -> dict[int, str]:
+    if not phase_actor_ids:
+        return {}
+    if cycle.green_seconds < 0.0 or cycle.yellow_seconds < 0.0 or cycle.red_seconds < 0.0:
+        raise ValueError("TrafficLightPhaseCycle durations must be non-negative.")
+
+    phase_window_seconds = cycle.green_seconds + cycle.yellow_seconds
+    full_cycle_seconds = (len(phase_actor_ids) * phase_window_seconds) + cycle.red_seconds
+    if full_cycle_seconds <= 0.0:
+        raise ValueError("TrafficLightPhaseCycle must have positive total duration.")
+
+    cycle_elapsed_seconds = (elapsed_seconds + cycle.initial_offset_seconds) % full_cycle_seconds
+    all_actor_ids = [actor_id for actor_ids in phase_actor_ids for actor_id in actor_ids]
+
+    if cycle_elapsed_seconds >= len(phase_actor_ids) * phase_window_seconds:
+        return {actor_id: "red" for actor_id in all_actor_ids}
+
+    active_phase_index = int(cycle_elapsed_seconds // phase_window_seconds) if phase_window_seconds > 0.0 else 0
+    active_phase_elapsed = cycle_elapsed_seconds - (active_phase_index * phase_window_seconds)
+    active_state = "green" if active_phase_elapsed < cycle.green_seconds else "yellow"
+
+    states = {actor_id: "red" for actor_id in all_actor_ids}
+    for actor_id in phase_actor_ids[active_phase_index]:
+        states[actor_id] = active_state
+    return states
