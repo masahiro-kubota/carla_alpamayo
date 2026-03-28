@@ -158,6 +158,94 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         self.assertFalse(result["snapshot"]["right_lane_is_driving"])
         self.assertAlmostEqual(result["snapshot"]["ego_to_obstacle_longitudinal_distance_m"], 10.0)
 
+    def test_uses_forward_projection_when_same_lane_s_is_not_progressive(self) -> None:
+        ego_location = _FakeLocation(0.0, 0.0, 0.0)
+        obstacle_location = _FakeLocation(0.0, 10.0, 0.0)
+        ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=5.0, location=ego_location)
+        ego_waypoint.transform.rotation.yaw = 90.0
+        obstacle_waypoint = _FakeWaypoint(
+            road_id=1,
+            lane_id=1,
+            s=5.0,
+            location=obstacle_location,
+        )
+        left_waypoint = _FakeWaypoint(
+            road_id=1,
+            lane_id=-1,
+            s=5.0,
+            location=_FakeLocation(3.5, 10.0, 0.0),
+        )
+        obstacle_waypoint.set_left_lane(left_waypoint)
+        world_map = _FakeWorldMap(
+            {
+                (ego_location.x, ego_location.y, ego_location.z): ego_waypoint,
+                (obstacle_location.x, obstacle_location.y, obstacle_location.z): obstacle_waypoint,
+            }
+        )
+        ego_vehicle = _FakeActor(1, ego_location)
+        obstacle_actor = _FakeActor(201, obstacle_location)
+        environment = EnvironmentConfigSpec(
+            name="clear_case",
+            town="Town01",
+            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+        )
+
+        result = build_stopped_obstacle_scenario_validation(
+            environment_config=environment,
+            world_map=world_map,
+            route_trace=[(ego_waypoint, None), (obstacle_waypoint, None)],
+            ego_vehicle=ego_vehicle,
+            npc_actor_refs=[obstacle_actor],
+            driving_lane_type="Driving",
+        )
+
+        self.assertTrue(result["valid"])
+        self.assertAlmostEqual(result["snapshot"]["ego_to_obstacle_longitudinal_distance_m"], 10.0)
+
+    def test_route_target_lane_uses_nearest_route_waypoint_to_ego(self) -> None:
+        ego_location = _FakeLocation(0.0, 0.0, 0.0)
+        obstacle_location = _FakeLocation(10.0, 0.0, 0.0)
+        ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=0.0, location=ego_location)
+        obstacle_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=10.0, location=obstacle_location)
+        left_waypoint = _FakeWaypoint(
+            road_id=1,
+            lane_id=-1,
+            s=10.0,
+            location=_FakeLocation(10.0, 3.5, 0.0),
+        )
+        route_future_waypoint = _FakeWaypoint(
+            road_id=2,
+            lane_id=-1,
+            s=40.0,
+            location=_FakeLocation(100.0, 100.0, 0.0),
+        )
+        obstacle_waypoint.set_left_lane(left_waypoint)
+        world_map = _FakeWorldMap(
+            {
+                (ego_location.x, ego_location.y, ego_location.z): ego_waypoint,
+                (obstacle_location.x, obstacle_location.y, obstacle_location.z): obstacle_waypoint,
+            }
+        )
+        ego_vehicle = _FakeActor(1, ego_location)
+        obstacle_actor = _FakeActor(201, obstacle_location)
+        environment = EnvironmentConfigSpec(
+            name="clear_case",
+            town="Town01",
+            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+        )
+
+        result = build_stopped_obstacle_scenario_validation(
+            environment_config=environment,
+            world_map=world_map,
+            route_trace=[(route_future_waypoint, None), (ego_waypoint, None), (obstacle_waypoint, None)],
+            ego_vehicle=ego_vehicle,
+            npc_actor_refs=[obstacle_actor],
+            driving_lane_type="Driving",
+        )
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["snapshot"]["route_target_lane_id"], "1:1")
+
 
 if __name__ == "__main__":
     unittest.main()

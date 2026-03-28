@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Sequence
 
-from ad_stack.overtake import PreflightValidationInput, validate_preflight
+from ad_stack.overtake.stopped_obstacle_logic import (
+    PreflightValidationInput,
+    validate_preflight,
+)
 from simulation.environment_config import EnvironmentConfigSpec
 
 
@@ -22,8 +26,31 @@ def _distance_ahead_m(*, origin_waypoint: Any | None, target_waypoint: Any | Non
         origin_s = getattr(origin_waypoint, "s", None)
         target_s = getattr(target_waypoint, "s", None)
         if origin_s is not None and target_s is not None:
-            return float(target_s) - float(origin_s)
+            longitudinal_distance_m = float(target_s) - float(origin_s)
+            if abs(longitudinal_distance_m) > 1e-3:
+                return longitudinal_distance_m
+    origin_rotation = getattr(origin_waypoint.transform, "rotation", None)
+    yaw_deg = getattr(origin_rotation, "yaw", None)
+    if yaw_deg is not None:
+        heading_rad = math.radians(float(yaw_deg))
+        forward_x = math.cos(heading_rad)
+        forward_y = math.sin(heading_rad)
+        delta_x = float(target_waypoint.transform.location.x) - float(origin_waypoint.transform.location.x)
+        delta_y = float(target_waypoint.transform.location.y) - float(origin_waypoint.transform.location.y)
+        forward_projection_m = (delta_x * forward_x) + (delta_y * forward_y)
+        if abs(forward_projection_m) > 1e-3:
+            return float(forward_projection_m)
     return float(origin_waypoint.transform.location.distance(target_waypoint.transform.location))
+
+
+def _nearest_route_waypoint(route_trace: list[tuple[Any, Any]], *, location: Any) -> Any | None:
+    if not route_trace:
+        return None
+    nearest_index = min(
+        range(len(route_trace)),
+        key=lambda index: float(route_trace[index][0].transform.location.distance(location)),
+    )
+    return route_trace[nearest_index][0]
 
 
 def _nearest_junction_distance_along_route(
@@ -136,7 +163,9 @@ def build_stopped_obstacle_scenario_validation(
         ),
         left_lane_is_driving=bool(left_lane_is_driving),
         right_lane_is_driving=bool(right_lane_is_driving),
-        route_target_lane_id=_lane_id(route_trace[0][0]) if route_trace else None,
+        route_target_lane_id=_lane_id(
+            _nearest_route_waypoint(route_trace, location=ego_vehicle.get_location())
+        ),
         nearest_signal_distance_m=nearest_signal_distance_m,
         nearest_junction_distance_m=nearest_junction_distance_m,
         route_aligned_adjacent_lane_available=route_aligned_adjacent_lane_available,
