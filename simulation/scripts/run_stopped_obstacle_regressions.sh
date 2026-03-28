@@ -19,9 +19,10 @@ for run_config in "${RUN_CONFIGS[@]}"; do
   summary_path="$(RUN_OUTPUT="${output}" python - <<'PY'
 import json
 import os
+from pathlib import Path
 
 payload = json.loads(os.environ["RUN_OUTPUT"])
-print(payload["summary_path"])
+print(Path("outputs/evaluate") / payload["episode_id"] / "summary.json")
 PY
 )"
   SUMMARY_PATHS+=("${summary_path}")
