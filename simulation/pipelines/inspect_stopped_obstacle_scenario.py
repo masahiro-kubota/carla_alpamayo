@@ -118,6 +118,44 @@ def _spawn_candidates_near_start(*, world_map: Any, ego_waypoint: Any, limit: in
     }
 
 
+def _forward_lane_samples(
+    start_waypoint: Any | None,
+    *,
+    step_m: float = 5.0,
+    count: int = 8,
+) -> list[dict[str, Any]]:
+    if start_waypoint is None:
+        return []
+    samples: list[dict[str, Any]] = []
+    current_waypoint = start_waypoint
+    progress_m = 0.0
+    for sample_index in range(count):
+        location = current_waypoint.transform.location
+        rotation = current_waypoint.transform.rotation
+        samples.append(
+            {
+                "sample_index": sample_index,
+                "progress_m": round(progress_m, 3),
+                "lane_id": _lane_id(current_waypoint),
+                "s": round(float(getattr(current_waypoint, "s", 0.0)), 3),
+                "transform": {
+                    "x": round(float(location.x), 3),
+                    "y": round(float(location.y), 3),
+                    "z": round(float(location.z), 3),
+                    "yaw_deg": round(float(rotation.yaw), 3),
+                    "pitch_deg": round(float(rotation.pitch), 3),
+                    "roll_deg": round(float(rotation.roll), 3),
+                },
+            }
+        )
+        next_waypoints = current_waypoint.next(step_m)
+        if not next_waypoints:
+            break
+        current_waypoint = next_waypoints[0]
+        progress_m += step_m
+    return samples
+
+
 def _inspect_single_config(config_path: Path) -> dict[str, Any]:
     loaded_config = load_route_loop_run_config(config_path)
     request = loaded_config.request
@@ -175,10 +213,20 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
             npc_actor_refs=npc_actor_refs,
             driving_lane_type=carla.LaneType.Driving,
         )
+        left_waypoint = ego_waypoint.get_left_lane()
+        right_waypoint = ego_waypoint.get_right_lane()
         spawn_candidates = _spawn_candidates_near_start(
             world_map=world.get_map(),
             ego_waypoint=ego_waypoint,
         )
+        lane_samples = {
+            "ego_lane_id": _lane_id(ego_waypoint),
+            "left_lane_id": _lane_id(left_waypoint),
+            "right_lane_id": _lane_id(right_waypoint),
+            "same_lane_ahead": _forward_lane_samples(ego_waypoint),
+            "left_lane_ahead": _forward_lane_samples(left_waypoint),
+            "right_lane_ahead": _forward_lane_samples(right_waypoint),
+        }
     finally:
         world.apply_settings(original_settings)
         destroy_actors(reversed(actors))
@@ -199,6 +247,7 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
         "npc_vehicles": npc_actors_summary,
         "scenario_validation": scenario_validation,
         "spawn_candidates": spawn_candidates,
+        "lane_samples": lane_samples,
     }
     output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     payload["output_path"] = _project_relative_or_absolute(output_path)
