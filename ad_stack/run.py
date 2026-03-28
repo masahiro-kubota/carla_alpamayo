@@ -560,9 +560,7 @@ def _spawn_npc_vehicles(
             traffic_manager.auto_lane_change(actor, npc_spec.lane_behavior != "keep_lane")
             traffic_manager.ignore_lights_percentage(actor, 0.0)
             traffic_manager.ignore_vehicles_percentage(actor, 0.0)
-            speed_limit_kmh = max(1.0, float(actor.get_speed_limit()))
-            speed_diff_percent = max(-100.0, min(95.0, ((speed_limit_kmh - desired_speed_kmh) / speed_limit_kmh) * 100.0))
-            traffic_manager.vehicle_percentage_speed_difference(actor, speed_diff_percent)
+            traffic_manager.set_desired_speed(actor, float(desired_speed_kmh))
         spawned.append(
             {
                 "actor_id": int(actor.id),
@@ -620,6 +618,33 @@ def _collect_npc_vehicle_states(
             )
         )
     return states
+
+
+def _apply_npc_target_speeds(
+    *,
+    traffic_manager: Any,
+    npc_actor_refs: list[Any],
+    npc_actor_metadata_by_id: dict[int, dict[str, Any]],
+) -> None:
+    for actor in npc_actor_refs:
+        try:
+            actor_id = int(actor.id)
+        except RuntimeError as exc:
+            if "destroyed actor" in str(exc):
+                continue
+            raise
+        metadata = npc_actor_metadata_by_id.get(actor_id)
+        if not metadata:
+            continue
+        target_speed_kmh = metadata.get("target_speed_kmh")
+        if target_speed_kmh is None:
+            continue
+        try:
+            traffic_manager.set_desired_speed(actor, float(target_speed_kmh))
+        except RuntimeError as exc:
+            if "destroyed actor" in str(exc):
+                continue
+            raise
 
 
 def _route_success_criteria(scenario: RouteLoopScenarioSpec) -> dict[str, float | int]:
@@ -986,6 +1011,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             int(item["actor_id"]): item
             for item in npc_actors_summary
         }
+        traffic_manager = client.get_trafficmanager(8000)
 
         if policy.kind == "expert":
             stack = create_expert_collector_stack(
@@ -1038,6 +1064,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
         preview_sink = policy.preview_sink
         while True:
+            _apply_npc_target_speeds(
+                traffic_manager=traffic_manager,
+                npc_actor_refs=npc_actor_refs,
+                npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+            )
             _apply_derived_traffic_light_group_cycle(
                 carla,
                 lights_by_id,
