@@ -55,17 +55,13 @@
 - max seconds
 - traffic light condition
 
-現時点の候補:
+現時点の canonical 候補:
 
-- [town01_stopped_obstacle_clear_45s.json](/home/masa/carla_alpamayo/scenarios/environments/town01_stopped_obstacle_clear_45s.json)
-- [town01_stopped_obstacle_blocked_45s.json](/home/masa/carla_alpamayo/scenarios/environments/town01_stopped_obstacle_blocked_45s.json)
+- [town01_stopped_obstacle_clear_long_60s.json](/home/masa/carla_alpamayo/scenarios/environments/town01_stopped_obstacle_clear_long_60s.json)
+- [town01_stopped_obstacle_blocked_long_60s.json](/home/masa/carla_alpamayo/scenarios/environments/town01_stopped_obstacle_blocked_long_60s.json)
+- [town01_stopped_obstacle_blocked_oncoming_long_60s.json](/home/masa/carla_alpamayo/scenarios/environments/town01_stopped_obstacle_blocked_oncoming_long_60s.json)
 
-`town01_stopped_obstacle_blocked_45s.json` は暫定の blocked 環境で、最終的には
-
-- `town01_stopped_obstacle_blocked_static_45s.json`
-- `town01_stopped_obstacle_blocked_oncoming_45s.json`
-
-へ分離する。
+`town01_stopped_obstacle_clear_45s.json` / `town01_stopped_obstacle_blocked_45s.json` は短い初期案として残すが、以後の調整基準は long シナリオに寄せる。
 
 ### 2.1.1 scenario contract
 
@@ -139,11 +135,9 @@
 
 必要な run-config:
 
-- `town01_stopped_obstacle_clear_expert`
-- `town01_stopped_obstacle_blocked_static_expert`
-- `town01_stopped_obstacle_blocked_oncoming_expert`
-
-現在の `town01_stopped_obstacle_blocked_expert` は暫定名として扱い、最終的には `blocked_static` へ寄せる。
+- [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/town01_stopped_obstacle_clear_long_expert.json)
+- [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
+- [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/simulation/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
 
 含めるべき設定:
 

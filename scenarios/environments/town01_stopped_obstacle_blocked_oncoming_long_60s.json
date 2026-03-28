@@ -1,0 +1,19 @@
+{
+  "name": "town01_stopped_obstacle_blocked_oncoming_long_60s",
+  "town": "Town01",
+  "max_seconds": 60.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_index": 221,
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "oncoming_profile_v1",
+      "spawn_index": 223,
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "description": "Town01 northbound stopped-obstacle blocked-oncoming scenario on the long road-15 straight. A single stationary obstacle is in ego's lane while an oncoming vehicle approaches in the opposite lane, forcing the expert to wait for a safe rejoin gap before bypassing."
+}
