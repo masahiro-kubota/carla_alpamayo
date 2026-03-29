@@ -44,8 +44,17 @@ def resolve_overtake_runtime_transition(
     planner_state: PlannerState | Literal["nominal_cruise"] = (
         "abort_return" if aborted else state
     )
+    lane_change_out_completed = (
+        current_lane_id is not None
+        and target_lane_id is not None
+        and current_lane_id == target_lane_id
+    ) or (
+        next_state == "lane_change_out"
+        and lane_center_offset_m is not None
+        and lane_center_offset_m >= 1.0
+    )
 
-    if next_state == "lane_change_out" and current_lane_id is not None and current_lane_id == target_lane_id:
+    if next_state == "lane_change_out" and lane_change_out_completed:
         next_state = "pass_vehicle"
         planner_state = "pass_vehicle"
     elif next_state == "lane_change_back":
