@@ -3,10 +3,8 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
+from ad_stack.overtake.infrastructure.carla import build_stopped_obstacle_scenario_validation
 from simulation.environment_config import EnvironmentConfigSpec, StoppedObstacleScenarioConfig
-from simulation.stopped_obstacle_scenario_validation import (
-    build_stopped_obstacle_scenario_validation,
-)
 
 
 @dataclass

@@ -1,3 +1,4 @@
+from .preflight_validation import build_stopped_obstacle_scenario_validation
 from .route_alignment import (
     RouteAlignedWaypoint,
     adjacent_lane_waypoint,
@@ -26,6 +27,7 @@ from .telemetry_mapper import (
 __all__ = [
     "RouteAlignedWaypoint",
     "adjacent_lane_waypoint",
+    "build_stopped_obstacle_scenario_validation",
     "build_route_aligned_lane_samples",
     "build_route_aligned_stopped_targets",
     "build_same_lane_stopped_targets",

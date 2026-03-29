@@ -8,11 +8,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ad_stack.overtake.infrastructure.carla import build_stopped_obstacle_scenario_validation
 from libs.carla_utils import build_planned_route, destroy_actors, load_route_config, require_blueprint, setup_world
 from libs.project import PROJECT_ROOT, current_git_commit_short, ensure_clean_git_worktree, relative_to_project
 from simulation.environment_config import load_environment_config
 from simulation.pipelines.route_loop_run_config import load_route_loop_run_config
-from simulation.stopped_obstacle_scenario_validation import build_stopped_obstacle_scenario_validation
 
 route_run = importlib.import_module("ad_stack.run")
 

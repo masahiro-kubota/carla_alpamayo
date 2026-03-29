@@ -68,7 +68,7 @@
 - expectation
   - `tests/integration/ad_stack/stopped_obstacle/*.md`
 - validation / inspector
-  - [stopped_obstacle_scenario_validation.py](/home/masa/carla_alpamayo/simulation/stopped_obstacle_scenario_validation.py)
+  - [preflight_validation.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/preflight_validation.py)
   - [inspect_stopped_obstacle_scenario.py](/home/masa/carla_alpamayo/simulation/pipelines/inspect_stopped_obstacle_scenario.py)
 
 この分離自体は正しいが、
@@ -485,8 +485,8 @@ moving vehicle 追い越しでは、停止障害物よりも
 
 - [simulation/tests](/home/masa/carla_alpamayo/simulation/tests)
   - ほぼ使っていない中途半端な場所になっている
-- [stopped_obstacle_scenario_validation.py](/home/masa/carla_alpamayo/simulation/stopped_obstacle_scenario_validation.py)
-  - integration scenario contract の検査なので、production package ではなく test/tooling 側に残したほうが clean
+- [preflight_validation.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/preflight_validation.py)
+  - `run.py` / inspector が使う feature 固有 preflight の CARLA adapter
 - [run.py](/home/masa/carla_alpamayo/ad_stack/run.py)
   - telemetry 組み立てと scenario preflight の feature 固有処理がまだ多い
 - [expert_basic_agent.py](/home/masa/carla_alpamayo/ad_stack/agents/expert_basic_agent.py)

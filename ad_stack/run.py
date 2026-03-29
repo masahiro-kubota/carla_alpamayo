@@ -49,6 +49,7 @@ from ad_stack.overtake.infrastructure.carla import (
     RouteLoopTelemetryAccumulator,
     build_ego_state_sample,
     build_episode_record,
+    build_stopped_obstacle_scenario_validation,
 )
 from libs.utils import render_png_sequence_to_mp4
 from simulation.environment_config import (
@@ -61,10 +62,6 @@ from simulation.environment_config import (
     load_environment_config,
     load_npc_profile,
 )
-from simulation.stopped_obstacle_scenario_validation import (
-    build_stopped_obstacle_scenario_validation,
-)
-
 RunMode = Literal["evaluate", "interactive"]
 PolicyKind = Literal["expert", "learned", "interactive"]
 McapMapScope = Literal["full", "near_route"]
