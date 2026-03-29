@@ -12,10 +12,6 @@
   - [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_stopped_obstacle_regressions.sh)
 - scenario inspector:
   - [inspect_scenarios.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py)
-- next steps:
-  - [NEXT_STEPS.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/NEXT_STEPS.md)
-- refactor plan:
-  - [REFACTOR_PLAN.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/REFACTOR_PLAN.md)
 
 ## Verified Scenarios
 
@@ -43,6 +39,8 @@
 - [STOPPED_OBSTACLE_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_TEST_DESIGN.md)
 - [STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md)
 - [STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md)
+- [NEXT_STEPS.md](/home/masa/carla_alpamayo/docs/stopped_obstacle/NEXT_STEPS.md)
+- [REFACTOR_PLAN.md](/home/masa/carla_alpamayo/docs/stopped_obstacle/REFACTOR_PLAN.md)
 
 ## Regression Set
 
@@ -62,6 +60,8 @@
 ```bash
 ./tests/integration/ad_stack/stopped_obstacle/run_stopped_obstacle_regressions.sh
 ```
+
+`near_junction_preflight_reject` は route-loop summary ではなく inspector contract で検証します。
 
 ```bash
 python tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py \

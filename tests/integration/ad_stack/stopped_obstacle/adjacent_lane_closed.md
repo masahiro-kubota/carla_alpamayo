@@ -46,7 +46,6 @@
 ## Verification Verdict
 
 - `PASS`
-- `scenario_validation.valid = true`
 - `overtake_attempt_count = 0`
 - `unsafe_lane_change_reject_count = 417`
 - manifest 上でも `overtake_reject_reason = adjacent_lane_closed`

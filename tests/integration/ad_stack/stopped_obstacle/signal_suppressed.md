@@ -46,7 +46,6 @@
 ## Verification Verdict
 
 - `PASS`
-- `scenario_validation.valid = true`
 - `failure_reason = stalled`
 - `overtake_attempt_count = 0`
 - `collision_count = 0`

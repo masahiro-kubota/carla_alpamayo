@@ -2,6 +2,10 @@
 
 停止障害物回避の integration suite を次にどう進めるかの作業メモです。
 
+この文書は historical memo です。現在の suite status の正本は
+[README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/README.md)
+を見ます。
+
 ## 現状
 
 ### Verified baseline

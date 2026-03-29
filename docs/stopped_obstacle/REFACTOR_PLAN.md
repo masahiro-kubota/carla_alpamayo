@@ -2,6 +2,10 @@
 
 停止車両回避を今後継続的に開発できる形へ寄せるためのリファクタ計画です。
 
+この文書は historical memo です。現在の architecture refactor の正本は
+[OVERTAKE_ARCHITECTURE_REFACTOR_PLAN.md](/home/masa/carla_alpamayo/docs/OVERTAKE_ARCHITECTURE_REFACTOR_PLAN.md)
+を見ます。
+
 この文書の目的:
 
 - `clear / blocked_static / blocked_oncoming` でたまたま通った状態から抜ける
@@ -11,7 +15,7 @@
 関連:
 
 - [README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/README.md)
-- [NEXT_STEPS.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/NEXT_STEPS.md)
+- [NEXT_STEPS.md](/home/masa/carla_alpamayo/docs/stopped_obstacle/NEXT_STEPS.md)
 - [STOPPED_OBSTACLE_LOGIC_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_LOGIC_DESIGN.md)
 - [STOPPED_OBSTACLE_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_TEST_DESIGN.md)
 
@@ -109,7 +113,6 @@
 - run-config
 - regression runner
 - suite 固有 inspector
-- refactor / next-steps tracking
 
 ここに置くもの:
 
@@ -117,7 +120,6 @@
 - scenario ごとの markdown
 - `run_stopped_obstacle_regressions.sh`
 - `inspect_scenarios.py`
-- この `REFACTOR_PLAN.md`
 
 ## 5. リファクタ方針
 

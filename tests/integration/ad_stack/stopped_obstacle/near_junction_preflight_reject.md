@@ -12,7 +12,7 @@
 
 ## Verified Artifacts
 
-- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_074401_town01_signal_conflict_short_expert_eval_133397cc9280/summary.json)
+- [inspection.json](/home/masa/carla_alpamayo/outputs/inspect/stopped_obstacle/20260329_063304_town01_stopped_obstacle_near_junction_preflight_reject_long_expert_inspect_1ef07664deb9.json)
 
 ## Scenario Contract
 
@@ -29,16 +29,11 @@
 ### Runtime
 
 - baseline regression runner には含めない
-- 実行する場合でも scenario が invalid と分かる
-
-### Summary Acceptance
-
-- `summary.scenario_validation` が充実している
+- route-loop 実行前に inspector contract で invalid と分かる
 
 ## Verification Verdict
 
 - `PASS`
-- `failure_reason = scenario_preflight_invalid`
 - `scenario_validation.valid = false`
 - `scenario_validation.errors = [\"junction_nearby\"]`
 
