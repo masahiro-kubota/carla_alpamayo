@@ -43,6 +43,29 @@ class BehaviorPathPlannerTests(unittest.TestCase):
         self.assertEqual(plan.reject_reason, "adjacent_lane_closed")
         self.assertEqual(trajectory.trajectory_id, "car_follow")
 
+    def test_stopped_target_outside_trigger_stays_in_lane_follow_even_if_adjacent_lane_closed(self) -> None:
+        planner = BehaviorPathPlanner()
+        plan, trajectory = planner.plan(
+            route_backbone=make_straight_route_backbone(),
+            scene=make_scene(
+                tracked_targets=(
+                    TrackedTarget(
+                        actor_id=11,
+                        lane_id="15:-1",
+                        longitudinal_distance_m=30.0,
+                        speed_mps=0.0,
+                    ),
+                ),
+                left_open=False,
+                right_open=False,
+            ),
+        )
+
+        self.assertEqual(plan.state, "lane_follow")
+        self.assertEqual(plan.active_target_id, 11)
+        self.assertIsNone(plan.reject_reason)
+        self.assertEqual(trajectory.trajectory_id, "lane_follow")
+
     def test_lane_change_out_uses_active_target_kind(self) -> None:
         planner = BehaviorPathPlanner()
         plan, trajectory = planner.plan(

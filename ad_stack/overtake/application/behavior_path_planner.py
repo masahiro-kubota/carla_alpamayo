@@ -121,6 +121,23 @@ class BehaviorPathPlanner:
                 resample_interval_m=self.config.resample_interval_m,
             )
 
+        if lead_target.longitudinal_distance_m > self.config.overtake_trigger_distance_m:
+            plan = BehaviorPlan(
+                state="lane_follow",
+                route_command=route_command,
+                active_target_id=lead_target.actor_id,
+                active_target_kind=lead_target.target_kind,
+            )
+            return plan, build_route_backbone_trajectory(
+                route_backbone=route_backbone,
+                start_route_index=scene.route_index,
+                desired_speed_mps=self.config.cruise_speed_mps,
+                trajectory_id="lane_follow",
+                horizon_m=self.config.trajectory_horizon_m,
+                minimum_horizon_m=self.config.minimum_horizon_m,
+                resample_interval_m=self.config.resample_interval_m,
+            )
+
         if (
             lead_target.longitudinal_distance_m <= self.config.overtake_trigger_distance_m
             and (scene.adjacent_lane_availability.left_open or scene.adjacent_lane_availability.right_open)
@@ -361,4 +378,3 @@ def _select_lead_target(scene: PlanningScene) -> TrackedTarget | None:
     if not candidates:
         return None
     return min(candidates, key=lambda target: target.longitudinal_distance_m)
-

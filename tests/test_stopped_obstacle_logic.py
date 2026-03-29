@@ -96,6 +96,24 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         self.assertEqual(decision.planner_state, "nominal_cruise")
         self.assertEqual(decision.reject_reason, "target_out_of_range")
 
+    def test_overtake_does_not_check_adjacent_lane_gaps_before_trigger_distance(self) -> None:
+        decision = choose_overtake_action(
+            _context(
+                lead_distance_m=50.0,
+                left_front_gap_m=10.0,
+                left_rear_gap_m=10.0,
+                right_lane_open=False,
+            ),
+            overtake_trigger_distance_m=40.0,
+            overtake_target_speed_kmh=30.0,
+            overtake_min_front_gap_m=35.0,
+            overtake_min_rear_gap_m=15.0,
+            signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
+        )
+        self.assertEqual(decision.planner_state, "nominal_cruise")
+        self.assertEqual(decision.reject_reason, "target_out_of_range")
+
     def test_overtake_rejects_when_adjacent_front_gap_insufficient(self) -> None:
         decision = choose_overtake_action(
             _context(left_front_gap_m=10.0, right_lane_open=False),
