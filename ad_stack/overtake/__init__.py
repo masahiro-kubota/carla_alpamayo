@@ -19,7 +19,12 @@ from .domain import (
     TargetKind,
     lane_gap_for_lane_id,
 )
-from .policies import build_stopped_obstacle_targets, next_stopped_obstacle_target
+from .policies import (
+    build_moving_overtake_targets,
+    build_stopped_obstacle_targets,
+    next_moving_overtake_target,
+    next_stopped_obstacle_target,
+)
 from .validation import (
     PreflightValidationInput,
     ScenarioValidationResult,
@@ -41,11 +46,13 @@ __all__ = [
     "StoppedObstacleTargetSnapshot",
     "StoppedObstacleContext",
     "TargetKind",
+    "build_moving_overtake_targets",
     "build_stopped_obstacle_targets",
     "build_route_aligned_lane_change_plan",
     "choose_overtake_action",
     "evaluate_pass_progress",
     "lane_gap_for_lane_id",
+    "next_moving_overtake_target",
     "next_stopped_obstacle_target",
     "should_begin_rejoin",
     "validate_preflight",
