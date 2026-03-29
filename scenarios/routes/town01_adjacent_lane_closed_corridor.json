@@ -3,6 +3,6 @@
   "town": "Town01",
   "closed_loop": false,
   "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [230, 88],
-  "description": "Candidate Town01 corridor with a junction-internal segment where adjacent driving lanes disappear, intended for adjacent-lane-closed stopped-obstacle validation."
+  "anchor_spawn_indices": [33, 230],
+  "description": "Town01 northbound corridor that starts on road-24 lane 1 and passes through road-272 lane 1, where adjacent driving lanes disappear before the route rejoins road-22."
 }

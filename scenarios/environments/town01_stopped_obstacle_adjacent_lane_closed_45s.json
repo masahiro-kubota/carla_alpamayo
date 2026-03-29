@@ -5,7 +5,12 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "stopped_obstacle_profile_v1",
-      "spawn_index": 88,
+      "spawn_transform": {
+        "x": 92.401,
+        "y": 206.33,
+        "z": 0.3,
+        "yaw_deg": -90.009
+      },
       "lane_behavior": "keep_lane"
     }
   ],
@@ -15,5 +20,5 @@
     "obstacle_npc_index": 0,
     "route_aligned_adjacent_lane_available": false
   },
-  "description": "Candidate Town01 corridor where a stopped obstacle is ahead but the adjacent lane should be treated as unavailable. This asset exists for non-CARLA contract tests and runtime verification remains pending."
+  "description": "Town01 closed-lane corridor where the route enters road-272 lane 1, a segment with no adjacent driving lane. The stopped obstacle sits on that closed segment and should suppress overtaking."
 }
