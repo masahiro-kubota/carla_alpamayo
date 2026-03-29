@@ -17,7 +17,7 @@
       "npc_profile_id": "lane_blocker_profile_v1",
       "spawn_transform": {
         "x": 1.56,
-        "y": 120.02,
+        "y": 151.02,
         "z": 0.3,
         "yaw_deg": -90.0
       },
@@ -31,5 +31,5 @@
     "route_aligned_adjacent_lane_available": true
   },
   "traffic_light_overrides": [],
-  "description": "Town01 northbound stopped-obstacle blocked scenario on the long road-15 straight. The stopped obstacle is far ahead in ego's lane while the adjacent passing lane is occupied near ego, so the expert should reject the bypass and wait."
+  "description": "Town01 northbound stopped-obstacle blocked scenario on the long road-15 straight. The stopped obstacle is far ahead in ego's lane while a static blocker sits alongside the pass corridor on the adjacent lane, so the expert should reject the bypass and wait."
 }
