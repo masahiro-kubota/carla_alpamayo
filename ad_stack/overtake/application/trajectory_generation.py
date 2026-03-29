@@ -113,16 +113,17 @@ def build_pose_trajectory(
         pose_samples,
         spacing_m=resample_interval_m,
     )
+    normalized_yaws_deg = _trajectory_yaws_from_pose_samples(resampled_samples)
     return Trajectory(
         points=tuple(
             TrajectoryPoint(
                 x=sample.x,
                 y=sample.y,
                 z=sample.z,
-                yaw_deg=sample.yaw_deg,
+                yaw_deg=normalized_yaws_deg[index],
                 longitudinal_velocity_mps=max(0.0, desired_speed_mps),
             )
-            for sample in resampled_samples
+            for index, sample in enumerate(resampled_samples)
         ),
         trajectory_id=trajectory_id,
         origin_lane_id=origin_lane_id,
@@ -301,3 +302,18 @@ def interpolate_yaw(a_deg: float, b_deg: float, ratio: float) -> float:
     b_rad = math.radians(b_deg)
     delta = (b_rad - a_rad + math.pi) % (2.0 * math.pi) - math.pi
     return math.degrees(a_rad + delta * ratio)
+
+
+def _trajectory_yaws_from_pose_samples(samples: tuple[Pose3D, ...]) -> tuple[float, ...]:
+    if len(samples) < 2:
+        return tuple(sample.yaw_deg for sample in samples)
+    yaws_deg: list[float] = []
+    for index, sample in enumerate(samples):
+        if index < len(samples) - 1:
+            next_sample = samples[index + 1]
+            yaw_deg = math.degrees(math.atan2(next_sample.y - sample.y, next_sample.x - sample.x))
+        else:
+            previous_sample = samples[index - 1]
+            yaw_deg = math.degrees(math.atan2(sample.y - previous_sample.y, sample.x - previous_sample.x))
+        yaws_deg.append(yaw_deg)
+    return tuple(yaws_deg)
