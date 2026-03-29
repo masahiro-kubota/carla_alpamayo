@@ -5,6 +5,7 @@
   "npc_vehicles": [
     {
       "npc_profile_id": "stopped_obstacle_profile_v1",
+      "lateral_offset_m": 1.0,
       "spawn_index": 221,
       "lane_behavior": "keep_lane"
     },

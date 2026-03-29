@@ -11,6 +11,7 @@
         "z": 0.3,
         "yaw_deg": 89.97
       },
+      "lateral_offset_m": 1.0,
       "lane_behavior": "keep_lane"
     },
     {
@@ -21,6 +22,7 @@
         "z": 0.3,
         "yaw_deg": 89.97
       },
+      "lateral_offset_m": 1.0,
       "lane_behavior": "keep_lane"
     }
   ],
