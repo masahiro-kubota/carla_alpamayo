@@ -535,8 +535,6 @@ runtime 中にこの区別が失われないようにする。
 - `rejoin_rear_gap_m`
 - `target_actor_visible`
 - `target_actor_last_seen_s`
-- `lane_change_path_available`
-- `lane_change_path_failed_reason`
 
 ### 7.2 `/world/tracked_vehicles`
 
