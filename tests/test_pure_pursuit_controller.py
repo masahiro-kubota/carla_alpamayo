@@ -81,3 +81,14 @@ class PurePursuitControllerTests(unittest.TestCase):
                 trajectory=_straight_trajectory(),
                 behavior_state="lane_follow",
             )
+
+    def test_nearest_index_is_clamped_when_previous_index_exceeds_new_trajectory_length(self) -> None:
+        controller = PurePursuitController(previous_nearest_index=100)
+
+        result = controller.step(
+            ego_pose=Pose3D(x=0.0, y=0.0, z=0.0, yaw_deg=0.0),
+            ego_speed_mps=5.0,
+            trajectory=_left_curve_trajectory(),
+        )
+
+        self.assertLess(result.nearest_index, len(_left_curve_trajectory().points))

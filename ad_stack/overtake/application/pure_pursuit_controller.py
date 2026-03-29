@@ -28,9 +28,10 @@ def find_nearest_point_index(
     *,
     start_index: int = 0,
 ) -> int:
-    best_index = start_index
+    bounded_start_index = max(0, min(start_index, len(trajectory.points) - 1))
+    best_index = bounded_start_index
     best_distance = float("inf")
-    for index in range(start_index, len(trajectory.points)):
+    for index in range(bounded_start_index, len(trajectory.points)):
         point = trajectory.points[index]
         distance = math.hypot(point.x - ego_pose.x, point.y - ego_pose.y)
         if distance < best_distance:
