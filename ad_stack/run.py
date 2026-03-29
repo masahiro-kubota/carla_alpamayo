@@ -215,6 +215,7 @@ def _resolved_npc_speed_kmh(
 
 def _apply_lateral_offset_to_transform(
     carla_module: Any,
+    world_map: Any,
     transform: Any,
     lateral_offset_m: float,
 ) -> Any:
@@ -231,13 +232,28 @@ def _apply_lateral_offset_to_transform(
                 roll=float(transform.rotation.roll),
             ),
         )
+    waypoint = world_map.get_waypoint(transform.location)
+    offset_sign = 1.0
+    if waypoint is not None:
+        left_lane = waypoint.get_left_lane()
+        right_lane = waypoint.get_right_lane()
+        left_is_driving = (
+            left_lane is not None and left_lane.lane_type == carla_module.LaneType.Driving
+        )
+        right_is_driving = (
+            right_lane is not None and right_lane.lane_type == carla_module.LaneType.Driving
+        )
+        if left_is_driving and not right_is_driving:
+            offset_sign = 1.0
+        elif right_is_driving and not left_is_driving:
+            offset_sign = -1.0
     yaw_rad = math.radians(float(transform.rotation.yaw))
     right_x = math.sin(yaw_rad)
     right_y = -math.cos(yaw_rad)
     return carla_module.Transform(
         carla_module.Location(
-            x=float(transform.location.x) + (lateral_offset_m * right_x),
-            y=float(transform.location.y) + (lateral_offset_m * right_y),
+            x=float(transform.location.x) + (offset_sign * lateral_offset_m * right_x),
+            y=float(transform.location.y) + (offset_sign * lateral_offset_m * right_y),
             z=float(transform.location.z),
         ),
         carla_module.Rotation(
@@ -484,6 +500,7 @@ def _spawn_npc_vehicles(
             spawn_transform = spawn_points[int(npc_spec.spawn_index)]
         spawn_transform = _apply_lateral_offset_to_transform(
             carla_module,
+            world.get_map(),
             spawn_transform,
             float(npc_spec.lateral_offset_m),
         )
