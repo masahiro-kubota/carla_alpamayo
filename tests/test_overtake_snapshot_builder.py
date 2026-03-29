@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from ad_stack.overtake.infrastructure.carla import build_overtake_scene_snapshot
+from ad_stack.overtake.infrastructure.carla import (
+    build_overtake_pass_snapshot,
+    build_overtake_scene_snapshot,
+)
 
 
 @dataclass
@@ -224,6 +227,46 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.active_target.primary_actor_id, 301)
         self.assertEqual(snapshot.decision_context.active_target.lane_id, "13:-1")
         self.assertEqual(snapshot.lead_distance_m, 24.0)
+
+    def test_build_overtake_pass_snapshot_prefers_route_relative_progress(self) -> None:
+        route_start_waypoint = _FakeWaypoint(
+            road_id=15,
+            lane_id=1,
+            s=0.0,
+            location=_FakeLocation(0.0, 0.0, 0.0),
+        )
+        route_mid_waypoint = _FakeWaypoint(
+            road_id=15,
+            lane_id=1,
+            s=10.0,
+            location=_FakeLocation(10.0, 0.0, 0.0),
+        )
+        tracked = (
+            _TrackedActor(
+                actor_id=401,
+                lane_id="15:1",
+                x_m=10.0,
+                y_m=0.0,
+                speed_mps=0.0,
+                relation="same_lane",
+                is_ahead=True,
+                longitudinal_distance_m=8.0,
+            ),
+        )
+
+        snapshot = build_overtake_pass_snapshot(
+            tracked_objects=tracked,
+            target_actor_id=401,
+            target_member_actor_ids=(401,),
+            route_index=0,
+            base_trace=[(route_start_waypoint, None), (route_mid_waypoint, None)],
+            route_point_to_trace_index=[0, 1],
+            route_point_progress_m=[0.0, 10.0],
+        )
+
+        self.assertTrue(snapshot.target_actor_visible)
+        self.assertEqual(snapshot.target_longitudinal_distance_m, 10.0)
+        self.assertEqual(snapshot.target_exit_longitudinal_distance_m, 10.0)
 
 
 if __name__ == "__main__":

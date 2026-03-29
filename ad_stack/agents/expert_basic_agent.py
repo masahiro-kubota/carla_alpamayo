@@ -16,6 +16,7 @@ from ad_stack.overtake import (
 )
 from ad_stack.overtake.infrastructure.carla import (
     adjacent_lane_waypoint,
+    build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
     build_route_aligned_lane_samples,
     build_overtake_planning_debug,
@@ -23,8 +24,6 @@ from ad_stack.overtake.infrastructure.carla import (
     lane_gaps_for_lane_id,
     materialize_lane_change_waypoints,
     route_aligned_waypoint,
-    route_relative_progress_to_actor,
-    visible_overtake_target_actors,
 )
 from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
 
@@ -371,24 +370,6 @@ class ExpertBasicAgent:
         self._lane_change_path_available = True
         self._lane_change_path_failure_reason = None
         return True
-
-    def _route_relative_progress_to_actor(
-        self,
-        *,
-        actor: DynamicVehicleStateView,
-        reference_route_index: int,
-        search_back_points: int = 24,
-        search_forward_points: int = 120,
-    ) -> tuple[float | None, float, str | None]:
-        return route_relative_progress_to_actor(
-            actor=actor,
-            reference_route_index=reference_route_index,
-            base_trace=self._base_trace,
-            route_point_to_trace_index=self._route_point_to_trace_index,
-            route_point_progress_m=self._route_point_progress_m,
-            search_back_points=search_back_points,
-            search_forward_points=search_forward_points,
-        )
 
     @staticmethod
     def _select_active_light(
@@ -854,57 +835,25 @@ class ExpertBasicAgent:
         target_actor = None
         target_actor_visible = False
         if self._overtake_target_actor_id is not None:
-            target_actor, visible_target_actors = visible_overtake_target_actors(
-                scene_state.tracked_objects,
+            pass_snapshot = build_overtake_pass_snapshot(
+                tracked_objects=scene_state.tracked_objects,
                 target_actor_id=self._overtake_target_actor_id,
                 target_member_actor_ids=self._overtake_target_member_actor_ids,
+                route_index=route_index,
+                base_trace=self._base_trace,
+                route_point_to_trace_index=self._route_point_to_trace_index,
+                route_point_progress_m=self._route_point_progress_m,
             )
-            target_actor_visible = bool(visible_target_actors)
-            target_longitudinal_distance_m = None
-            target_exit_longitudinal_distance_m = None
-            visible_route_relative_progress_m = []
-            if route_index is not None:
-                for visible_actor in visible_target_actors:
-                    route_relative_progress_m, _distance_to_centerline_m, _route_lane_id = (
-                        self._route_relative_progress_to_actor(
-                            actor=visible_actor,
-                            reference_route_index=route_index,
-                            search_back_points=48,
-                            search_forward_points=96,
-                        )
-                    )
-                    if route_relative_progress_m is not None:
-                        visible_route_relative_progress_m.append(route_relative_progress_m)
-                    if (
-                        target_actor is not None
-                        and visible_actor.actor_id == target_actor.actor_id
-                        and route_relative_progress_m is not None
-                    ):
-                        target_longitudinal_distance_m = route_relative_progress_m
-            if target_longitudinal_distance_m is None:
-                target_longitudinal_distance_m = (
-                    float(target_actor.longitudinal_distance_m)
-                    if target_actor is not None and target_actor.longitudinal_distance_m is not None
-                    else None
-                )
-            if visible_route_relative_progress_m:
-                target_exit_longitudinal_distance_m = max(visible_route_relative_progress_m)
-            else:
-                visible_longitudinal_distances = [
-                    float(actor.longitudinal_distance_m)
-                    for actor in visible_target_actors
-                    if actor.longitudinal_distance_m is not None
-                ]
-                if visible_longitudinal_distances:
-                    target_exit_longitudinal_distance_m = max(visible_longitudinal_distances)
+            target_actor = pass_snapshot.target_actor
+            target_actor_visible = pass_snapshot.target_actor_visible
             self._overtake_memory = evaluate_pass_progress(
                 self._overtake_memory,
                 timestamp_s=scene_state.timestamp_s,
                 target_actor_visible=target_actor_visible,
-                target_longitudinal_distance_m=target_longitudinal_distance_m,
+                target_longitudinal_distance_m=pass_snapshot.target_longitudinal_distance_m,
                 overtake_resume_front_gap_m=self.config.overtake_resume_front_gap_m,
                 target_kind=self._overtake_memory.target_kind,
-                target_exit_longitudinal_distance_m=target_exit_longitudinal_distance_m,
+                target_exit_longitudinal_distance_m=pass_snapshot.target_exit_longitudinal_distance_m,
             )
             if self._overtake_origin_lane_id is not None:
                 rejoin_front_gap_m, rejoin_rear_gap_m = lane_gaps_for_lane_id(
