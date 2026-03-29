@@ -2,6 +2,7 @@ from .models import (
     AdjacentLaneGapSnapshot,
     LaneChangePlanPoint,
     LaneChangePlanResult,
+    MotionProfile,
     OvertakeCoreTelemetry,
     OvertakeDecision,
     OvertakeContext,
@@ -16,12 +17,19 @@ from .models import (
     PreferredDirection,
     TargetKind,
 )
+from .telemetry_contract import (
+    OVERTAKE_PLANNING_DEBUG_CORE_FIELDS,
+    OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS,
+    build_planning_debug_message_schema,
+    project_telemetry_section,
+)
 from .selectors import lane_gap_for_lane_id
 
 __all__ = [
     "AdjacentLaneGapSnapshot",
     "LaneChangePlanPoint",
     "LaneChangePlanResult",
+    "MotionProfile",
     "OvertakeCoreTelemetry",
     "OvertakeDecision",
     "OvertakeContext",
@@ -32,8 +40,12 @@ __all__ = [
     "OvertakeTargetCandidates",
     "OvertakeTargetSnapshot",
     "OvertakeTargetTelemetry",
+    "OVERTAKE_PLANNING_DEBUG_CORE_FIELDS",
+    "OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS",
     "PlannerState",
     "PreferredDirection",
     "TargetKind",
+    "build_planning_debug_message_schema",
     "lane_gap_for_lane_id",
+    "project_telemetry_section",
 ]

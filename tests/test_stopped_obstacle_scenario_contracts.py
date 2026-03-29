@@ -64,7 +64,7 @@ def _context(
             distance_m=lead_distance_m,
             speed_mps=0.0,
             relative_speed_mps=2.0,
-            is_stopped=True,
+            motion_profile="stopped",
         ),
         left_lane=AdjacentLaneGapSnapshot(
             lane_id="15:1",

@@ -134,7 +134,7 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
 
         self.assertEqual(len(candidates.same_lane), 0)
         self.assertEqual(len(candidates.route_aligned), 1)
-        self.assertFalse(candidates.route_aligned[0].is_stopped)
+        self.assertEqual(candidates.route_aligned[0].motion_profile, "moving")
 
     def test_prefers_same_lane_stopped_target_and_builds_context(self) -> None:
         ego_waypoint = _FakeWaypoint(

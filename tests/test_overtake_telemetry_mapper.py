@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from ad_stack.overtake import build_planning_debug_message_schema
 from ad_stack.overtake.infrastructure.carla.telemetry_mapper import (
     RouteLoopTelemetryAccumulator,
     build_ego_state_sample,
@@ -27,7 +28,7 @@ def _planning_debug(**overrides):
         traffic_light_stop_buffer_m=3.0,
         traffic_light_stop_target_distance_m=None,
         target_speed_kmh=30.0,
-        follow_actor=None,
+        follow_lead=None,
         active_target=None,
         follow_distance_m=None,
         follow_speed_mps=None,
@@ -132,10 +133,12 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
         class _Lead:
             actor_id = 101
             lane_id = "15:-1"
+            motion_profile = "stopped"
 
         class _Target:
             primary_actor_id = 201
             lane_id = "15:1"
+            motion_profile = "stopped"
 
         payload = build_overtake_planning_debug(
             remaining_waypoints=12,
@@ -151,7 +154,7 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             traffic_light_stop_buffer_m=3.0,
             traffic_light_stop_target_distance_m=12.5,
             target_speed_kmh=24.0,
-            follow_actor=_Lead(),
+            follow_lead=_Lead(),
             active_target=_Target(),
             follow_distance_m=16.0,
             follow_speed_mps=0.0,
@@ -187,9 +190,11 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
         self.assertEqual(payload.core.traffic_light_actor_id, 31)
         self.assertTrue(payload.core.traffic_light_red_latched)
         self.assertEqual(payload.target.follow_target_id, 101)
+        self.assertEqual(payload.target.follow_target_motion_profile, "stopped")
         self.assertIsNone(payload.target.left_lane_front_gap_m)
         self.assertEqual(payload.target.right_lane_front_gap_m, 9.0)
         self.assertEqual(payload.target.overtake_target_actor_id, 201)
+        self.assertEqual(payload.target.overtake_target_motion_profile, "stopped")
         self.assertTrue(payload.core.event_flags.overtake_attempt)
         self.assertIsNone(payload.core.min_ttc)
 
@@ -207,6 +212,33 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
         self.assertNotIn("min_ttc", payload["core"])
         self.assertNotIn("overtake_state", payload["target"])
         self.assertNotIn("target_lane_id", payload["core"])
+
+    def test_planning_debug_schema_matches_mcap_payload_shape(self) -> None:
+        payload = build_planning_debug_mcap_payload(
+            _planning_debug(
+                overtake_state="pass_vehicle",
+                target_lane_id="15:1",
+                min_ttc=3.2,
+                target_passed=False,
+            )
+        )
+        schema = build_planning_debug_message_schema(
+            {
+                "type": "object",
+                "properties": {"sec": {"type": "integer"}, "nsec": {"type": "integer"}},
+                "required": ["sec", "nsec"],
+                "additionalProperties": False,
+            }
+        )
+
+        self.assertEqual(
+            set(payload["core"].keys()),
+            set(schema["properties"]["core"]["properties"].keys()),
+        )
+        self.assertEqual(
+            set(payload["target"].keys()),
+            set(schema["properties"]["target"]["properties"].keys()),
+        )
 
     def test_build_ego_state_sample_filters_planning_debug(self) -> None:
         ego_state = build_ego_state_sample(
@@ -226,7 +258,7 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             min_ttc=4.2,
             pose={"x": 1.0, "y": 2.0, "z": 0.0, "yaw_deg": 0.0, "pitch_deg": 0.0, "roll_deg": 0.0},
             control={"steer": 0.1, "throttle": 0.2, "brake": 0.0},
-            planning_debug=_planning_debug(follow_actor=None, active_target=None),
+            planning_debug=_planning_debug(follow_lead=None, active_target=None),
         )
 
         self.assertEqual(ego_state.planning_debug["target"]["follow_target_id"], None)
@@ -276,6 +308,8 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
         self.assertEqual(payload["overtake_target_actor_id"], 44)
         self.assertEqual(payload["overtake_target_kind"], "cluster")
         self.assertEqual(payload["overtake_target_member_actor_ids"], [44, 45])
+        self.assertEqual(payload["follow_target_motion_profile"], None)
+        self.assertEqual(payload["overtake_target_motion_profile"], None)
         self.assertEqual(payload["current_lane_id"], "15:1")
         self.assertEqual(payload["route_target_lane_id"], "15:-1")
         self.assertEqual(payload["target_lane_id"], "15:1")

@@ -17,7 +17,7 @@ class OvertakeRuntimeStateTests(unittest.TestCase):
             entry_distance_m=12.0,
             exit_distance_m=26.0,
             speed_mps=0.0,
-            is_stopped=True,
+            motion_profile="stopped",
         )
 
         runtime.begin_lane_change_out(

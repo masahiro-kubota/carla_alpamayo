@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any
 from mcap.writer import CompressionType, Writer
 from PIL import Image
 
+from ad_stack.overtake.domain import build_planning_debug_message_schema
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -177,53 +179,7 @@ _EGO_PLANNING_JSON_SCHEMA = {
     "additionalProperties": False,
 }
 
-_EGO_PLANNING_DEBUG_JSON_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "timestamp": _foxglove_time_schema(),
-        "episode_id": {"type": "string"},
-        "frame_id": {"type": "integer"},
-        "elapsed_seconds": {"type": "number"},
-        "current_lane_id": {"type": ["string", "null"]},
-        "route_target_lane_id": {"type": ["string", "null"]},
-        "left_lane_open": {"type": ["boolean", "null"]},
-        "right_lane_open": {"type": ["boolean", "null"]},
-        "target_speed_kmh": {"type": ["number", "null"]},
-        "follow_target_id": {"type": ["integer", "null"]},
-        "follow_target_distance_m": {"type": ["number", "null"]},
-        "follow_target_speed_mps": {"type": ["number", "null"]},
-        "follow_target_relative_speed_mps": {"type": ["number", "null"]},
-        "follow_target_lane_id": {"type": ["string", "null"]},
-        "traffic_light_actor_id": {"type": ["integer", "null"]},
-        "traffic_light_distance_m": {"type": ["number", "null"]},
-        "traffic_light_stop_line_distance_m": {"type": ["number", "null"]},
-        "traffic_light_stop_target_distance_m": {"type": ["number", "null"]},
-        "traffic_light_red_latched": {"type": ["boolean", "null"]},
-        "traffic_light_violation": {"type": ["boolean", "null"]},
-        "traffic_light_stop_buffer_m": {"type": ["number", "null"]},
-        "left_lane_front_gap_m": {"type": ["number", "null"]},
-        "left_lane_rear_gap_m": {"type": ["number", "null"]},
-        "right_lane_front_gap_m": {"type": ["number", "null"]},
-        "right_lane_rear_gap_m": {"type": ["number", "null"]},
-        "overtake_considered": {"type": ["boolean", "null"]},
-        "overtake_direction": {"type": ["string", "null"]},
-        "overtake_reject_reason": {"type": ["string", "null"]},
-        "overtake_target_lane_id": {"type": ["string", "null"]},
-        "emergency_stop": {"type": ["boolean", "null"]},
-        "event_traffic_light_stop": {"type": ["boolean", "null"]},
-        "event_traffic_light_resume": {"type": ["boolean", "null"]},
-        "event_car_follow_start": {"type": ["boolean", "null"]},
-        "event_overtake_attempt": {"type": ["boolean", "null"]},
-        "event_overtake_success": {"type": ["boolean", "null"]},
-        "event_overtake_abort": {"type": ["boolean", "null"]},
-        "event_unsafe_lane_change_reject": {"type": ["boolean", "null"]},
-        "route_progress_index": {"type": ["integer", "null"]},
-        "max_route_index": {"type": ["integer", "null"]},
-        "remaining_waypoints": {"type": ["integer", "null"]},
-    },
-    "required": ["timestamp", "episode_id", "frame_id", "elapsed_seconds"],
-    "additionalProperties": True,
-}
+_EGO_PLANNING_DEBUG_JSON_SCHEMA = build_planning_debug_message_schema(_foxglove_time_schema())
 
 _NPC_VEHICLE_STATES_JSON_SCHEMA = {
     "type": "object",

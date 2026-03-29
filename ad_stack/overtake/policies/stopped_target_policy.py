@@ -20,7 +20,7 @@ def build_stopped_obstacle_targets(
             lead.actor_id is not None
             and lead.lane_id is not None
             and lead.distance_m is not None
-            and lead.is_stopped
+            and lead.motion_profile == "stopped"
         )
     ]
     stopped_leads.sort(key=lambda lead: (lead.lane_id or "", float(lead.distance_m or 0.0)))
@@ -70,5 +70,5 @@ def _cluster_to_target(cluster: list[OvertakeLeadSnapshot]) -> OvertakeTargetSna
         entry_distance_m=float(first.distance_m),
         exit_distance_m=float(last.distance_m),
         speed_mps=max(lead.speed_mps for lead in cluster),
-        is_stopped=all(lead.is_stopped for lead in cluster),
+        motion_profile="stopped",
     )

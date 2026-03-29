@@ -4,6 +4,7 @@ from typing import Any, Protocol
 
 from ad_stack.overtake.domain import OvertakeTargetCandidates, OvertakeLeadSnapshot
 
+from .motion_profile import classify_motion_profile
 from .route_projection import build_route_aligned_target_candidates
 
 
@@ -50,7 +51,10 @@ def build_same_lane_target_candidates(
             distance_m=float(actor.longitudinal_distance_m),
             speed_mps=float(actor.speed_mps),
             relative_speed_mps=0.0,
-            is_stopped=float(actor.speed_mps) <= stopped_speed_threshold_mps,
+            motion_profile=classify_motion_profile(
+                speed_mps=float(actor.speed_mps),
+                stopped_speed_threshold_mps=stopped_speed_threshold_mps,
+            ),
         )
         for actor in tracked_objects
         if (

@@ -14,9 +14,9 @@ def accept_stopped_overtake_target(
         )
     if target_distance_m > request.overtake_trigger_distance_m:
         planner_state_on_reject = "car_follow"
-        if bool(request.active_target is not None and request.active_target.is_stopped):
+        if bool(request.active_target is not None and request.active_target.motion_profile == "stopped"):
             planner_state_on_reject = "nominal_cruise"
-        elif bool(request.lead is not None and request.lead.is_stopped):
+        elif bool(request.lead is not None and request.lead.motion_profile == "stopped"):
             planner_state_on_reject = "nominal_cruise"
         return TargetAcceptanceResult(
             accepted=False,
@@ -25,9 +25,9 @@ def accept_stopped_overtake_target(
         )
     target_speed_kmh = float(request.target_speed_mps or 0.0) * 3.6
     target_is_stopped = (
-        request.active_target.is_stopped
+        request.active_target.motion_profile == "stopped"
         if request.active_target is not None
-        else request.lead.is_stopped
+        else request.lead.motion_profile == "stopped"
         if request.lead is not None
         else False
     )

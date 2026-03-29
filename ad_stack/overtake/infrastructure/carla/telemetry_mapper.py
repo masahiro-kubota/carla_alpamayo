@@ -7,13 +7,14 @@ from typing import Any
 from ad_stack.overtake.domain import (
     OvertakeCoreTelemetry,
     OvertakeEventFlags,
+    OvertakeLeadSnapshot,
     OvertakePlanningDebug,
     OvertakeTargetTelemetry,
+    OVERTAKE_PLANNING_DEBUG_CORE_FIELDS,
+    OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS,
+    project_telemetry_section,
 )
 from libs.schemas import EgoStateSample, EpisodeRecord
-
-_PLANNING_DEBUG_CORE_MCAP_OMIT_KEYS = frozenset({"traffic_light_state", "target_lane_id", "min_ttc"})
-_PLANNING_DEBUG_TARGET_MCAP_OMIT_KEYS = frozenset({"overtake_state"})
 
 
 @dataclass(slots=True)
@@ -132,105 +133,16 @@ class RouteLoopFrameTelemetry:
     ego_state: EgoStateSample
     episode_record: EpisodeRecord
 
-
-_EPISODE_RECORD_OVERTAKE_EXTRACTORS: tuple[tuple[str, tuple[str, str]], ...] = (
-    ("traffic_light_state", ("core", "traffic_light_state")),
-    ("traffic_light_actor_id", ("core", "traffic_light_actor_id")),
-    ("traffic_light_distance_m", ("core", "traffic_light_distance_m")),
-    ("traffic_light_stop_line_distance_m", ("core", "traffic_light_stop_line_distance_m")),
-    ("follow_target_distance_m", ("target", "follow_target_distance_m")),
-    ("follow_target_id", ("target", "follow_target_id")),
-    ("follow_target_speed_mps", ("target", "follow_target_speed_mps")),
-    ("follow_target_relative_speed_mps", ("target", "follow_target_relative_speed_mps")),
-    ("follow_target_lane_id", ("target", "follow_target_lane_id")),
-    ("left_lane_front_gap_m", ("target", "left_lane_front_gap_m")),
-    ("left_lane_rear_gap_m", ("target", "left_lane_rear_gap_m")),
-    ("right_lane_front_gap_m", ("target", "right_lane_front_gap_m")),
-    ("right_lane_rear_gap_m", ("target", "right_lane_rear_gap_m")),
-    ("rejoin_front_gap_m", ("target", "rejoin_front_gap_m")),
-    ("rejoin_rear_gap_m", ("target", "rejoin_rear_gap_m")),
-    ("overtake_state", ("target", "overtake_state")),
-    ("overtake_considered", ("target", "overtake_considered")),
-    ("overtake_direction", ("target", "overtake_direction")),
-    ("overtake_reject_reason", ("target", "overtake_reject_reason")),
-    ("overtake_target_actor_id", ("target", "overtake_target_actor_id")),
-    ("overtake_target_kind", ("target", "overtake_target_kind")),
-    ("overtake_target_member_actor_ids", ("target", "overtake_target_member_actor_ids")),
-    ("overtake_target_lane_id", ("target", "overtake_target_lane_id")),
-    ("target_passed", ("target", "target_passed")),
-    ("distance_past_target_m", ("target", "distance_past_target_m")),
-    ("target_actor_visible", ("target", "target_actor_visible")),
-    ("target_actor_last_seen_s", ("target", "target_actor_last_seen_s")),
-    ("current_lane_id", ("core", "current_lane_id")),
-    ("route_target_lane_id", ("core", "route_target_lane_id")),
-    ("target_lane_id", ("core", "target_lane_id")),
-    ("target_speed_kmh", ("core", "target_speed_kmh")),
-    ("emergency_stop", ("core", "emergency_stop")),
-    ("min_ttc", ("core", "min_ttc")),
-)
-
-
 def planning_debug_core_to_dict(core: OvertakeCoreTelemetry) -> dict[str, Any]:
-    return {
-        "remaining_waypoints": core.remaining_waypoints,
-        "route_progress_index": core.route_progress_index,
-        "max_route_index": core.max_route_index,
-        "current_lane_id": core.current_lane_id,
-        "lane_center_offset_m": core.lane_center_offset_m,
-        "route_target_lane_id": core.route_target_lane_id,
-        "left_lane_open": core.left_lane_open,
-        "right_lane_open": core.right_lane_open,
-        "traffic_light_actor_id": core.traffic_light_actor_id,
-        "traffic_light_state": core.traffic_light_state,
-        "traffic_light_distance_m": core.traffic_light_distance_m,
-        "traffic_light_stop_line_distance_m": core.traffic_light_stop_line_distance_m,
-        "traffic_light_red_latched": core.traffic_light_red_latched,
-        "traffic_light_stop_buffer_m": core.traffic_light_stop_buffer_m,
-        "traffic_light_stop_target_distance_m": core.traffic_light_stop_target_distance_m,
-        "target_speed_kmh": core.target_speed_kmh,
-        "target_lane_id": core.target_lane_id,
-        "min_ttc": core.min_ttc,
-        "emergency_stop": core.emergency_stop,
-        "event_traffic_light_stop": core.event_flags.traffic_light_stop,
-        "event_traffic_light_resume": core.event_flags.traffic_light_resume,
-        "event_car_follow_start": core.event_flags.car_follow_start,
-        "event_overtake_attempt": core.event_flags.overtake_attempt,
-        "event_overtake_success": core.event_flags.overtake_success,
-        "event_overtake_abort": core.event_flags.overtake_abort,
-        "event_unsafe_lane_change_reject": core.event_flags.unsafe_lane_change_reject,
-        "traffic_light_violation": core.event_flags.traffic_light_violation,
-    }
+    return project_telemetry_section(core, OVERTAKE_PLANNING_DEBUG_CORE_FIELDS, include_for="all")
 
 
 def planning_debug_target_to_dict(target: OvertakeTargetTelemetry) -> dict[str, Any]:
-    return {
-        "follow_target_id": target.follow_target_id,
-        "follow_target_distance_m": target.follow_target_distance_m,
-        "follow_target_speed_mps": target.follow_target_speed_mps,
-        "follow_target_relative_speed_mps": target.follow_target_relative_speed_mps,
-        "follow_target_lane_id": target.follow_target_lane_id,
-        "left_lane_front_gap_m": target.left_lane_front_gap_m,
-        "left_lane_rear_gap_m": target.left_lane_rear_gap_m,
-        "right_lane_front_gap_m": target.right_lane_front_gap_m,
-        "right_lane_rear_gap_m": target.right_lane_rear_gap_m,
-        "rejoin_front_gap_m": target.rejoin_front_gap_m,
-        "rejoin_rear_gap_m": target.rejoin_rear_gap_m,
-        "overtake_considered": target.overtake_considered,
-        "overtake_reject_reason": target.overtake_reject_reason,
-        "overtake_state": target.overtake_state,
-        "overtake_direction": target.overtake_direction,
-        "overtake_origin_lane_id": target.overtake_origin_lane_id,
-        "overtake_target_actor_id": target.overtake_target_actor_id,
-        "overtake_target_kind": target.overtake_target_kind,
-        "overtake_target_member_actor_ids": list(target.overtake_target_member_actor_ids),
-        "overtake_target_lane_id": target.overtake_target_lane_id,
-        "target_passed": target.target_passed,
-        "distance_past_target_m": target.distance_past_target_m,
-        "target_actor_visible": target.target_actor_visible,
-        "target_actor_last_seen_s": target.target_actor_last_seen_s,
-        "lane_change_path_available": target.lane_change_path_available,
-        "lane_change_path_failed_reason": target.lane_change_path_failed_reason,
-    }
+    return project_telemetry_section(
+        target,
+        OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS,
+        include_for="all",
+    )
 
 
 def planning_debug_to_dict(planning_debug: OvertakePlanningDebug) -> dict[str, Any]:
@@ -243,30 +155,33 @@ def planning_debug_to_dict(planning_debug: OvertakePlanningDebug) -> dict[str, A
 def build_episode_record_extra_fields(
     planning_debug: OvertakePlanningDebug,
 ) -> dict[str, Any]:
-    projection = planning_debug_to_dict(planning_debug)
-    extra_fields: dict[str, Any] = {
-        "traffic_light_violation": planning_debug.core.event_flags.traffic_light_violation,
-    }
-    for field_name, path in _EPISODE_RECORD_OVERTAKE_EXTRACTORS:
-        value: Any = projection
-        for key in path:
-            value = value[key]
-        if field_name == "overtake_target_member_actor_ids":
-            value = list(value)
-        extra_fields[field_name] = value
+    extra_fields = project_telemetry_section(
+        planning_debug.core,
+        OVERTAKE_PLANNING_DEBUG_CORE_FIELDS,
+        include_for="manifest",
+    )
+    extra_fields.update(
+        project_telemetry_section(
+            planning_debug.target,
+            OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS,
+            include_for="manifest",
+        )
+    )
     return extra_fields
 
 
 def build_planning_debug_mcap_payload(planning_debug: OvertakePlanningDebug) -> dict[str, Any]:
-    core_payload = planning_debug_core_to_dict(planning_debug.core)
-    target_payload = planning_debug_target_to_dict(planning_debug.target)
-    for key in _PLANNING_DEBUG_CORE_MCAP_OMIT_KEYS:
-        core_payload.pop(key, None)
-    for key in _PLANNING_DEBUG_TARGET_MCAP_OMIT_KEYS:
-        target_payload.pop(key, None)
     return {
-        "core": core_payload,
-        "target": target_payload,
+        "core": project_telemetry_section(
+            planning_debug.core,
+            OVERTAKE_PLANNING_DEBUG_CORE_FIELDS,
+            include_for="mcap",
+        ),
+        "target": project_telemetry_section(
+            planning_debug.target,
+            OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS,
+            include_for="mcap",
+        ),
     }
 
 
@@ -285,7 +200,7 @@ def build_overtake_planning_debug(
     traffic_light_stop_buffer_m: float,
     traffic_light_stop_target_distance_m: float | None,
     target_speed_kmh: float,
-    follow_actor: Any | None,
+    follow_lead: OvertakeLeadSnapshot | None,
     active_target: Any | None,
     follow_distance_m: float | None,
     follow_speed_mps: float | None,
@@ -353,19 +268,26 @@ def build_overtake_planning_debug(
         ),
         target=OvertakeTargetTelemetry(
             follow_target_id=(
-                follow_actor.actor_id
-                if follow_actor is not None
+                follow_lead.actor_id
+                if follow_lead is not None
                 else active_target.primary_actor_id
                 if active_target is not None
                 else None
             ),
             follow_target_distance_m=follow_distance_m,
-            follow_target_speed_mps=follow_speed_mps if follow_actor is not None else None,
-            follow_target_relative_speed_mps=closing_speed_mps if follow_actor is not None else None,
+            follow_target_speed_mps=follow_speed_mps if follow_lead is not None else None,
+            follow_target_relative_speed_mps=closing_speed_mps if follow_lead is not None else None,
             follow_target_lane_id=(
-                follow_actor.lane_id
-                if follow_actor is not None
+                follow_lead.lane_id
+                if follow_lead is not None
                 else active_target.lane_id
+                if active_target is not None
+                else None
+            ),
+            follow_target_motion_profile=(
+                follow_lead.motion_profile
+                if follow_lead is not None
+                else active_target.motion_profile
                 if active_target is not None
                 else None
             ),
@@ -384,6 +306,9 @@ def build_overtake_planning_debug(
             overtake_target_kind=overtake_target_kind,
             overtake_target_member_actor_ids=overtake_target_member_actor_ids,
             overtake_target_lane_id=overtake_target_lane_id,
+            overtake_target_motion_profile=(
+                active_target.motion_profile if active_target is not None else None
+            ),
             target_passed=target_passed,
             distance_past_target_m=distance_past_target_m,
             target_actor_visible=target_actor_visible,

@@ -83,7 +83,7 @@ class OvertakeStepServiceTests(unittest.TestCase):
             entry_distance_m=12.0,
             exit_distance_m=12.0,
             speed_mps=0.0,
-            is_stopped=True,
+            motion_profile="stopped",
         )
         request = _request(
             decision_context=_context(active_target=active_target),
@@ -122,7 +122,7 @@ class OvertakeStepServiceTests(unittest.TestCase):
             entry_distance_m=8.0,
             exit_distance_m=8.0,
             speed_mps=0.0,
-            is_stopped=True,
+            motion_profile="stopped",
         )
         request = _request(
             decision_context=_context(

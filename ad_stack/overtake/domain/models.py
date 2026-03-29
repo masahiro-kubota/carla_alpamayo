@@ -13,6 +13,7 @@ PlannerState = Literal[
 ]
 PreferredDirection = Literal["left_first", "right_first"]
 TargetKind = Literal["single_actor", "cluster"]
+MotionProfile = Literal["stopped", "slow", "moving"]
 
 
 @dataclass(slots=True)
@@ -22,7 +23,7 @@ class OvertakeLeadSnapshot:
     distance_m: float | None
     speed_mps: float
     relative_speed_mps: float
-    is_stopped: bool
+    motion_profile: MotionProfile
 
 
 @dataclass(slots=True)
@@ -34,7 +35,7 @@ class OvertakeTargetSnapshot:
     entry_distance_m: float
     exit_distance_m: float
     speed_mps: float
-    is_stopped: bool
+    motion_profile: MotionProfile
     adjacent_lane_available: bool = True
 
 
@@ -141,6 +142,7 @@ class OvertakeTargetTelemetry:
     follow_target_speed_mps: float | None
     follow_target_relative_speed_mps: float | None
     follow_target_lane_id: str | None
+    follow_target_motion_profile: MotionProfile | None
     left_lane_front_gap_m: float | None
     left_lane_rear_gap_m: float | None
     right_lane_front_gap_m: float | None
@@ -156,6 +158,7 @@ class OvertakeTargetTelemetry:
     overtake_target_kind: str
     overtake_target_member_actor_ids: tuple[int, ...]
     overtake_target_lane_id: str | None
+    overtake_target_motion_profile: MotionProfile | None
     target_passed: bool
     distance_past_target_m: float | None
     target_actor_visible: bool

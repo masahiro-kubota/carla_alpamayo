@@ -28,7 +28,7 @@ def _context(
     *,
     lead_distance_m: float | None = 20.0,
     lead_speed_mps: float = 0.0,
-    lead_is_stopped: bool = True,
+    lead_motion_profile: str = "stopped",
     preferred_direction: str = "left_first",
     active_signal_state: str | None = None,
     signal_stop_distance_m: float | None = None,
@@ -53,7 +53,7 @@ def _context(
                 distance_m=lead_distance_m,
                 speed_mps=lead_speed_mps,
                 relative_speed_mps=2.0,
-                is_stopped=lead_is_stopped,
+                motion_profile=lead_motion_profile,  # type: ignore[arg-type]
             )
             if lead_distance_m is not None
             else None
@@ -157,7 +157,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                     entry_distance_m=24.0,
                     exit_distance_m=24.0,
                     speed_mps=0.0,
-                    is_stopped=True,
+                    motion_profile="stopped",
                 ),
             ),
             overtake_trigger_distance_m=40.0,
@@ -350,7 +350,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                     distance_m=18.0,
                     speed_mps=0.0,
                     relative_speed_mps=4.0,
-                    is_stopped=True,
+                    motion_profile="stopped",
                 ),
                 OvertakeLeadSnapshot(
                     actor_id=102,
@@ -358,7 +358,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                     distance_m=42.0,
                     speed_mps=0.0,
                     relative_speed_mps=4.0,
-                    is_stopped=True,
+                    motion_profile="stopped",
                 ),
             ],
             cluster_merge_gap_m=10.0,
@@ -383,7 +383,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                     distance_m=18.0,
                     speed_mps=0.0,
                     relative_speed_mps=4.0,
-                    is_stopped=True,
+                    motion_profile="stopped",
                 ),
                 OvertakeLeadSnapshot(
                     actor_id=102,
@@ -391,7 +391,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                     distance_m=24.0,
                     speed_mps=0.0,
                     relative_speed_mps=4.0,
-                    is_stopped=True,
+                    motion_profile="stopped",
                 ),
             ],
             cluster_merge_gap_m=10.0,
@@ -606,7 +606,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                     entry_distance_m=20.0,
                     exit_distance_m=28.0,
                     speed_mps=0.0,
-                    is_stopped=True,
+                    motion_profile="stopped",
                 ),
             ),
             overtake_trigger_distance_m=40.0,

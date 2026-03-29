@@ -227,6 +227,7 @@ class ExpertBasicAgent:
             route_point_progress_m=self._route_point_progress_m,
         )
         follow_actor = overtake_scene.follow_actor
+        follow_lead = overtake_scene.follow_lead
         active_overtake_target = overtake_scene.active_target
         follow_distance_m = overtake_scene.follow_distance_m
         follow_speed_mps = overtake_scene.follow_speed_mps
@@ -356,8 +357,8 @@ class ExpertBasicAgent:
                     direction=step_decision.request_overtake_direction,
                     origin_lane_id=current_lane_id,
                     active_target=active_overtake_target,
-                    lead_actor_id=follow_actor.actor_id if follow_actor is not None else None,
-                    lead_lane_id=follow_actor.lane_id if follow_actor is not None else None,
+                    lead_actor_id=follow_lead.actor_id if follow_lead is not None else None,
+                    lead_lane_id=follow_lead.lane_id if follow_lead is not None else None,
                     lead_distance_m=follow_distance_m,
                     target_lane_id=activation.target_lane_id,
                 )
@@ -543,7 +544,7 @@ class ExpertBasicAgent:
             traffic_light_stop_buffer_m=self.config.traffic_light_stop_buffer_m,
             traffic_light_stop_target_distance_m=stop_target_distance_m,
             target_speed_kmh=target_speed_kmh,
-            follow_actor=follow_actor,
+            follow_lead=follow_lead,
             active_target=active_overtake_target,
             follow_distance_m=follow_distance_m,
             follow_speed_mps=follow_speed_mps,

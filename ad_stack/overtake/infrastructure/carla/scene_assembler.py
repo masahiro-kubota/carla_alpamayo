@@ -13,6 +13,7 @@ from ad_stack.overtake.domain import (
 from ad_stack.overtake.policies import TargetPolicy
 
 from .candidate_extractor import TargetCandidateBuilder, nearest_lead
+from .motion_profile import classify_motion_profile
 from .route_alignment import lane_id
 from .route_projection import route_relative_progress_to_actor
 
@@ -20,6 +21,7 @@ from .route_projection import route_relative_progress_to_actor
 @dataclass(slots=True)
 class OvertakeSceneSnapshot:
     follow_actor: Any | None
+    follow_lead: OvertakeLeadSnapshot | None
     active_target: OvertakeTargetSnapshot | None
     decision_context: OvertakeContext
     follow_distance_m: float | None
@@ -138,7 +140,7 @@ def enrich_targets_with_adjacent_lane_availability(
                 entry_distance_m=target.entry_distance_m,
                 exit_distance_m=target.exit_distance_m,
                 speed_mps=target.speed_mps,
-                is_stopped=target.is_stopped,
+                motion_profile=target.motion_profile,
                 adjacent_lane_available=adjacent_lane_available,
             )
         )
@@ -259,13 +261,8 @@ def build_overtake_scene_snapshot(
         rear_gap_m=None if not math.isfinite(right_rear_gap_m) else float(right_rear_gap_m),
         lane_open=bool(adjacent_lanes_open.get("right", False)),
     )
-    decision_context = OvertakeContext(
-        timestamp_s=timestamp_s,
-        current_lane_id=current_lane_id,
-        origin_lane_id=current_lane_id,
-        route_target_lane_id=route_target_lane_id,
-        target_speed_kmh=target_speed_kmh,
-        lead=OvertakeLeadSnapshot(
+    follow_lead = (
+        OvertakeLeadSnapshot(
             actor_id=(
                 follow_actor.actor_id
                 if follow_actor is not None
@@ -283,8 +280,25 @@ def build_overtake_scene_snapshot(
             distance_m=follow_distance_m,
             speed_mps=follow_speed_mps,
             relative_speed_mps=closing_speed_mps,
-            is_stopped=follow_speed_mps <= stopped_speed_threshold_mps,
-        ),
+            motion_profile=(
+                classify_motion_profile(
+                    speed_mps=follow_speed_mps,
+                    stopped_speed_threshold_mps=stopped_speed_threshold_mps,
+                )
+                if active_target is None
+                else active_target.motion_profile
+            ),
+        )
+        if follow_actor is not None or active_target is not None
+        else None
+    )
+    decision_context = OvertakeContext(
+        timestamp_s=timestamp_s,
+        current_lane_id=current_lane_id,
+        origin_lane_id=current_lane_id,
+        route_target_lane_id=route_target_lane_id,
+        target_speed_kmh=target_speed_kmh,
+        lead=follow_lead,
         left_lane=left_lane_snapshot,
         right_lane=right_lane_snapshot,
         active_signal_state=active_signal_state,
@@ -295,6 +309,7 @@ def build_overtake_scene_snapshot(
     )
     return OvertakeSceneSnapshot(
         follow_actor=follow_actor,
+        follow_lead=follow_lead,
         active_target=active_target,
         decision_context=decision_context,
         follow_distance_m=follow_distance_m,
