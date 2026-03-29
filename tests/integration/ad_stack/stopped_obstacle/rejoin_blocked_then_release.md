@@ -4,11 +4,17 @@
 
 ## Status
 
-- implemented_not_verified
+- verified
 
-## Planned Run Config
+## Run Config
 
-- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json`
+- [town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json)
+
+## Verified Artifacts
+
+- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_164315_town01_northbound_overtake_long_expert_eval_69ede1ee9eca/summary.json)
+- [manifest.jsonl](/home/masa/carla_alpamayo/outputs/evaluate/20260329_164315_town01_northbound_overtake_long_expert_eval_69ede1ee9eca/manifest.jsonl)
+- [segment_0000.mcap](/home/masa/carla_alpamayo/outputs/evaluate/20260329_164315_town01_northbound_overtake_long_expert_eval_69ede1ee9eca/telemetry/segment_0000.mcap)
 
 ## Scenario Contract
 
@@ -40,7 +46,18 @@
 - `collision_count = 0`
 - `overtake_attempt_count >= 1`
 - `overtake_success_count >= 1`
-- `first_rejoin_started_s` が `first_target_passed_s` より十分後ろ
+- `first_target_passed_s` と `first_rejoin_started_s` が両方出る
+- `rejoin_wait_after_target_passed_s > 0`
+- `first_rejoin_rear_gap_m >= 15.0`
+
+## Verification Verdict
+
+- `PASS`
+- `first_target_passed_s = 23.65`
+- `first_rejoin_started_s = 24.25`
+- `rejoin_wait_after_target_passed_s = 0.6`
+- `first_rejoin_rear_gap_m = 15.244`
+- manifest 上でも `target_passed=true` 後に 6 frame `pass_vehicle` を維持し、その後 `lane_change_back` に入る
 
 ## Why This Matters
 

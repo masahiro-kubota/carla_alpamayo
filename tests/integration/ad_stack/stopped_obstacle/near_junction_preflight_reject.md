@@ -4,11 +4,15 @@
 
 ## Status
 
-- implemented_not_verified
+- verified
 
-## Planned Run Config
+## Run Config
 
-- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json`
+- [town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json)
+
+## Verified Artifacts
+
+- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_074401_town01_signal_conflict_short_expert_eval_133397cc9280/summary.json)
 
 ## Scenario Contract
 
@@ -30,6 +34,13 @@
 ### Summary Acceptance
 
 - `summary.scenario_validation` が充実している
+
+## Verification Verdict
+
+- `PASS`
+- `failure_reason = scenario_preflight_invalid`
+- `scenario_validation.valid = false`
+- `scenario_validation.errors = [\"junction_nearby\"]`
 
 ## Why This Matters
 

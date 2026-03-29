@@ -4,11 +4,15 @@
 
 ## Status
 
-- implemented_not_verified
+- verified
 
-## Planned Run Config
+## Run Config
 
-- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_signal_suppressed_long_expert.json`
+- [town01_stopped_obstacle_signal_suppressed_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_signal_suppressed_long_expert.json)
+
+## Verified Artifacts
+
+- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_074345_town01_signal_conflict_short_expert_eval_133397cc9280/summary.json)
 
 ## Scenario Contract
 
@@ -38,6 +42,14 @@
 - `collision_count = 0`
 - `overtake_attempt_count = 0`
 - `unsafe_lane_change_reject_count >= 1`
+
+## Verification Verdict
+
+- `PASS`
+- `scenario_validation.valid = true`
+- `failure_reason = stalled`
+- `overtake_attempt_count = 0`
+- `collision_count = 0`
 
 ## Why This Matters
 

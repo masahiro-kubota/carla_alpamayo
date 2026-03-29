@@ -4,17 +4,16 @@
 
 ## Status
 
-- implemented_not_verified
+- verified
 
-現状メモ:
+## Run Config
 
-- route は [town01_adjacent_lane_closed_corridor.json](/home/masa/carla_alpamayo/scenarios/routes/town01_adjacent_lane_closed_corridor.json)
-- run-config / environment の scaffold は追加済み
-- ただし停止障害物を置く exact transform と runtime expectation はまだ CARLA 未確認
+- [town01_stopped_obstacle_adjacent_lane_closed_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json)
 
-## Planned Run Config
+## Verified Artifacts
 
-- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json`
+- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_155831_town01_adjacent_lane_closed_corridor_expert_eval_fa9deeaa0a73/summary.json)
+- [manifest.jsonl](/home/masa/carla_alpamayo/outputs/evaluate/20260329_155831_town01_adjacent_lane_closed_corridor_expert_eval_fa9deeaa0a73/manifest.jsonl)
 
 ## Scenario Contract
 
@@ -43,6 +42,14 @@
 - `collision_count = 0`
 - `overtake_attempt_count = 0`
 - `unsafe_lane_change_reject_count >= 1`
+
+## Verification Verdict
+
+- `PASS`
+- `scenario_validation.valid = true`
+- `overtake_attempt_count = 0`
+- `unsafe_lane_change_reject_count = 417`
+- manifest 上でも `overtake_reject_reason = adjacent_lane_closed`
 
 ## Why This Matters
 

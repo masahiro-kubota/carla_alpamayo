@@ -10,6 +10,11 @@ RUN_CONFIGS=(
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_separated_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_clustered_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_signal_suppressed_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_curve_clear_long_expert.json"
+  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json"
 )
 
 SUMMARY_PATHS=()
@@ -37,8 +42,8 @@ import sys
 from pathlib import Path
 
 summary_paths = [Path(item) for item in sys.argv[1:]]
-if len(summary_paths) != 5:
-    raise SystemExit(f"expected 5 summary paths, got {len(summary_paths)}")
+if len(summary_paths) != 10:
+    raise SystemExit(f"expected 10 summary paths, got {len(summary_paths)}")
 
 (
     clear_summary,
@@ -46,6 +51,11 @@ if len(summary_paths) != 5:
     blocked_oncoming_summary,
     double_stopped_separated_summary,
     double_stopped_clustered_summary,
+    signal_suppressed_summary,
+    near_junction_summary,
+    adjacent_lane_closed_summary,
+    curve_clear_summary,
+    rejoin_blocked_then_release_summary,
 ) = [
     json.loads(path.read_text()) for path in summary_paths
 ]
@@ -132,6 +142,116 @@ require(
 require(
     any(len(row.get("overtake_target_member_actor_ids") or []) >= 2 for row in clustered_manifest),
     "double_stopped_clustered never kept multi-actor cluster members",
+)
+
+require(
+    not signal_suppressed_summary["success"],
+    "signal_suppressed unexpectedly succeeded",
+)
+require(
+    signal_suppressed_summary["failure_reason"] == "stalled",
+    f"signal_suppressed failure_reason unexpected: {signal_suppressed_summary['failure_reason']}",
+)
+require(
+    signal_suppressed_summary["collision_count"] == 0,
+    "signal_suppressed collided",
+)
+require(
+    signal_suppressed_summary["overtake_attempt_count"] == 0,
+    "signal_suppressed unexpectedly attempted overtake",
+)
+require(
+    signal_suppressed_summary["scenario_validation"]["valid"] is True,
+    "signal_suppressed scenario validation was not valid",
+)
+
+require(
+    not near_junction_summary["success"],
+    "near_junction_preflight_reject unexpectedly succeeded",
+)
+require(
+    near_junction_summary["failure_reason"] == "scenario_preflight_invalid",
+    f"near_junction_preflight_reject failure_reason unexpected: {near_junction_summary['failure_reason']}",
+)
+require(
+    near_junction_summary["scenario_validation"]["valid"] is False,
+    "near_junction_preflight_reject scenario validation unexpectedly valid",
+)
+require(
+    "junction_nearby" in near_junction_summary["scenario_validation"]["errors"],
+    "near_junction_preflight_reject did not report junction_nearby",
+)
+
+require(
+    not adjacent_lane_closed_summary["success"],
+    "adjacent_lane_closed unexpectedly succeeded",
+)
+require(
+    adjacent_lane_closed_summary["failure_reason"] == "stalled",
+    f"adjacent_lane_closed failure_reason unexpected: {adjacent_lane_closed_summary['failure_reason']}",
+)
+require(
+    adjacent_lane_closed_summary["collision_count"] == 0,
+    "adjacent_lane_closed collided",
+)
+require(
+    adjacent_lane_closed_summary["overtake_attempt_count"] == 0,
+    "adjacent_lane_closed unexpectedly attempted overtake",
+)
+require(
+    adjacent_lane_closed_summary["unsafe_lane_change_reject_count"] >= 1,
+    "adjacent_lane_closed never rejected an unsafe lane change",
+)
+adjacent_manifest = load_manifest(adjacent_lane_closed_summary)
+require(
+    any(row.get("overtake_reject_reason") == "adjacent_lane_closed" for row in adjacent_manifest),
+    "adjacent_lane_closed never reported adjacent_lane_closed reject reason",
+)
+
+require(bool(curve_clear_summary["success"]), "curve_clear did not succeed")
+require(curve_clear_summary["collision_count"] == 0, "curve_clear collided")
+require(
+    curve_clear_summary["overtake_attempt_count"] >= 1,
+    "curve_clear never attempted overtake",
+)
+require(
+    curve_clear_summary["overtake_success_count"] >= 1,
+    "curve_clear never completed overtake",
+)
+
+require(
+    bool(rejoin_blocked_then_release_summary["success"]),
+    "rejoin_blocked_then_release did not succeed",
+)
+require(
+    rejoin_blocked_then_release_summary["collision_count"] == 0,
+    "rejoin_blocked_then_release collided",
+)
+require(
+    rejoin_blocked_then_release_summary["overtake_attempt_count"] >= 1,
+    "rejoin_blocked_then_release never attempted overtake",
+)
+require(
+    rejoin_blocked_then_release_summary["overtake_success_count"] >= 1,
+    "rejoin_blocked_then_release never completed overtake",
+)
+require(
+    rejoin_blocked_then_release_summary["first_target_passed_s"] is not None,
+    "rejoin_blocked_then_release never reported target_passed",
+)
+require(
+    rejoin_blocked_then_release_summary["first_rejoin_started_s"] is not None,
+    "rejoin_blocked_then_release never reported rejoin start",
+)
+require(
+    rejoin_blocked_then_release_summary["rejoin_wait_after_target_passed_s"] is not None
+    and rejoin_blocked_then_release_summary["rejoin_wait_after_target_passed_s"] > 0.0,
+    "rejoin_blocked_then_release did not wait after target_passed",
+)
+require(
+    rejoin_blocked_then_release_summary["first_rejoin_rear_gap_m"] is not None
+    and rejoin_blocked_then_release_summary["first_rejoin_rear_gap_m"] >= 15.0,
+    "rejoin_blocked_then_release rejoined before rear gap opened",
 )
 
 print("stopped-obstacle regressions passed")

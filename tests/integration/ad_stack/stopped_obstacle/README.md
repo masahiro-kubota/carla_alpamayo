@@ -17,33 +17,26 @@
 - refactor plan:
   - [REFACTOR_PLAN.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/REFACTOR_PLAN.md)
 
-## Verified Baseline Scenarios
+## Verified Scenarios
 
 - [clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/clear.md)
 - [blocked_static.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/blocked_static.md)
 - [blocked_oncoming.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/blocked_oncoming.md)
 - [double_stopped_separated.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_separated.md)
 - [double_stopped_clustered.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_clustered.md)
-
-この 5 本が現在の executable baseline です。
-
-## Planned Integration Scenarios
-
 - [signal_suppressed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/signal_suppressed.md)
-- [rejoin_blocked_then_release.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/rejoin_blocked_then_release.md)
-- [adjacent_lane_closed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/adjacent_lane_closed.md)
-- [double_stopped_obstacle.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_obstacle.md)
-- [curve_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/curve_clear.md)
 - [near_junction_preflight_reject.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/near_junction_preflight_reject.md)
+- [adjacent_lane_closed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/adjacent_lane_closed.md)
+- [curve_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/curve_clear.md)
+- [rejoin_blocked_then_release.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/rejoin_blocked_then_release.md)
 
-このうち
+この 10 本が現在の verified integration set です。
 
-- `signal_suppressed`
-- `rejoin_blocked_then_release`
-- `double_stopped_obstacle`
-- `near_junction_preflight_reject`
+## Scenario Family / Legacy
 
-は JSON / config まで実装済みです。`double_stopped_obstacle` は legacy な混在 scenario で、`double_stopped_separated` と `double_stopped_clustered` に置き換え済みです。`curve_clear` は runtime 未成立、`adjacent_lane_closed` は scaffold 追加済みで runtime 未確認です。
+- [double_stopped_obstacle.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_obstacle.md)
+
+`double_stopped_obstacle` は legacy な混在 scenario で、`double_stopped_separated` と `double_stopped_clustered` に置き換え済みです。
 
 ## Deferred / Exploratory Scenarios
 
@@ -57,13 +50,18 @@
 - [STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md)
 - [STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md](/home/masa/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md)
 
-## Baseline Regression Set
+## Regression Set
 
 - [town01_stopped_obstacle_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json)
 - [town01_stopped_obstacle_blocked_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_long_expert.json)
 - [town01_stopped_obstacle_blocked_oncoming_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json)
 - [town01_stopped_obstacle_double_stopped_separated_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_separated_long_expert.json)
 - [town01_stopped_obstacle_double_stopped_clustered_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_clustered_long_expert.json)
+- [town01_stopped_obstacle_signal_suppressed_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_signal_suppressed_long_expert.json)
+- [town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json)
+- [town01_stopped_obstacle_adjacent_lane_closed_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json)
+- [town01_stopped_obstacle_curve_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_curve_clear_long_expert.json)
+- [town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json)
 
 ## Usage
 
