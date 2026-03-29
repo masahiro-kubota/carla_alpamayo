@@ -28,6 +28,7 @@ class ScenarioContractCase:
     scenario_kind: str
     expected_npc_count: int
     expected_blocker_present: bool
+    expected_blocker_target_speed_kmh: float | None
     expected_route_aligned_adjacent_lane_available: bool
     expected_nearest_signal_distance_m: float | None
     expected_nearest_junction_distance_m: float | None
@@ -90,6 +91,7 @@ _CASES: tuple[ScenarioContractCase, ...] = (
         scenario_kind="signal_suppressed",
         expected_npc_count=1,
         expected_blocker_present=False,
+        expected_blocker_target_speed_kmh=None,
         expected_route_aligned_adjacent_lane_available=True,
         expected_nearest_signal_distance_m=20.0,
         expected_nearest_junction_distance_m=None,
@@ -117,6 +119,7 @@ _CASES: tuple[ScenarioContractCase, ...] = (
         scenario_kind="near_junction_preflight_reject",
         expected_npc_count=1,
         expected_blocker_present=False,
+        expected_blocker_target_speed_kmh=None,
         expected_route_aligned_adjacent_lane_available=True,
         expected_nearest_signal_distance_m=None,
         expected_nearest_junction_distance_m=16.0,
@@ -144,6 +147,7 @@ _CASES: tuple[ScenarioContractCase, ...] = (
         scenario_kind="rejoin_blocked_then_release",
         expected_npc_count=2,
         expected_blocker_present=True,
+        expected_blocker_target_speed_kmh=40.0,
         expected_route_aligned_adjacent_lane_available=True,
         expected_nearest_signal_distance_m=None,
         expected_nearest_junction_distance_m=None,
@@ -172,6 +176,7 @@ _CASES: tuple[ScenarioContractCase, ...] = (
         scenario_kind="curve_clear",
         expected_npc_count=1,
         expected_blocker_present=False,
+        expected_blocker_target_speed_kmh=None,
         expected_route_aligned_adjacent_lane_available=True,
         expected_nearest_signal_distance_m=None,
         expected_nearest_junction_distance_m=999.0,
@@ -199,6 +204,7 @@ _CASES: tuple[ScenarioContractCase, ...] = (
         scenario_kind="adjacent_lane_closed",
         expected_npc_count=1,
         expected_blocker_present=False,
+        expected_blocker_target_speed_kmh=None,
         expected_route_aligned_adjacent_lane_available=False,
         expected_nearest_signal_distance_m=None,
         expected_nearest_junction_distance_m=None,
@@ -242,6 +248,14 @@ class StoppedObstacleScenarioContractTests(unittest.TestCase):
                 self.assertEqual(environment.stopped_obstacle_scenario.scenario_kind, case.scenario_kind)
                 blocker_present = environment.stopped_obstacle_scenario.blocker_npc_index is not None
                 self.assertEqual(blocker_present, case.expected_blocker_present)
+                blocker_speed = None
+                if blocker_present:
+                    assert environment.stopped_obstacle_scenario.blocker_npc_index is not None
+                    blocker_spec = environment.npc_vehicles[
+                        environment.stopped_obstacle_scenario.blocker_npc_index
+                    ]
+                    blocker_speed = blocker_spec.target_speed_kmh
+                self.assertEqual(blocker_speed, case.expected_blocker_target_speed_kmh)
                 self.assertEqual(
                     environment.stopped_obstacle_scenario.route_aligned_adjacent_lane_available,
                     case.expected_route_aligned_adjacent_lane_available,

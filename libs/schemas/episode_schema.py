@@ -49,6 +49,8 @@ class EpisodeRecord:
     left_lane_rear_gap_m: float | None = None
     right_lane_front_gap_m: float | None = None
     right_lane_rear_gap_m: float | None = None
+    rejoin_front_gap_m: float | None = None
+    rejoin_rear_gap_m: float | None = None
     overtake_state: str | None = None
     overtake_considered: bool | None = None
     overtake_direction: str | None = None

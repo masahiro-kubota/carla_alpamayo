@@ -903,6 +903,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     unsafe_lane_change_reject_count = 0
     min_ttc = float("inf")
     min_lead_distance_m = float("inf")
+    first_target_passed_s: float | None = None
+    first_rejoin_started_s: float | None = None
+    first_rejoin_front_gap_m: float | None = None
+    first_rejoin_rear_gap_m: float | None = None
     _traffic_light_violation_active = False
     npc_actors_summary: list[dict[str, Any]] = []
     npc_actor_refs: list[Any] = []
@@ -1202,6 +1206,15 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     min_lead_distance_m = min(
                         min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"])
                     )
+                if first_target_passed_s is None and planning_debug.get("target_passed") is True:
+                    first_target_passed_s = elapsed_seconds
+                if (
+                    first_rejoin_started_s is None
+                    and planning_debug.get("overtake_state") == "lane_change_back"
+                ):
+                    first_rejoin_started_s = elapsed_seconds
+                    first_rejoin_front_gap_m = planning_debug.get("rejoin_front_gap_m")
+                    first_rejoin_rear_gap_m = planning_debug.get("rejoin_rear_gap_m")
 
                 if should_record:
                     if current_rgb is None:
@@ -1326,6 +1339,8 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     left_lane_rear_gap_m=planning_debug.get("left_lane_rear_gap_m"),
                     right_lane_front_gap_m=planning_debug.get("right_lane_front_gap_m"),
                     right_lane_rear_gap_m=planning_debug.get("right_lane_rear_gap_m"),
+                    rejoin_front_gap_m=planning_debug.get("rejoin_front_gap_m"),
+                    rejoin_rear_gap_m=planning_debug.get("rejoin_rear_gap_m"),
                     overtake_state=planning_debug.get("overtake_state"),
                     overtake_considered=planning_debug.get("overtake_considered"),
                     overtake_direction=planning_debug.get("overtake_direction"),
@@ -1512,6 +1527,23 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "min_lead_distance_m": None
         if not min_lead_distance_m < float("inf")
         else round(min_lead_distance_m, 3),
+        "first_target_passed_s": (
+            None if first_target_passed_s is None else round(first_target_passed_s, 3)
+        ),
+        "first_rejoin_started_s": (
+            None if first_rejoin_started_s is None else round(first_rejoin_started_s, 3)
+        ),
+        "rejoin_wait_after_target_passed_s": (
+            None
+            if first_target_passed_s is None or first_rejoin_started_s is None
+            else round(first_rejoin_started_s - first_target_passed_s, 3)
+        ),
+        "first_rejoin_front_gap_m": (
+            None if first_rejoin_front_gap_m is None else round(first_rejoin_front_gap_m, 3)
+        ),
+        "first_rejoin_rear_gap_m": (
+            None if first_rejoin_rear_gap_m is None else round(first_rejoin_rear_gap_m, 3)
+        ),
         "allow_overtake": allow_overtake,
         "scenario_validation": scenario_validation,
         "max_stationary_seconds": round(max_stationary_seconds, 2),
