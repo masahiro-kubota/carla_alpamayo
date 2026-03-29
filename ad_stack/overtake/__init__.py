@@ -1,4 +1,5 @@
 from .application import (
+    OvertakeRuntimeState,
     OvertakeRuntimeTransition,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
@@ -49,6 +50,7 @@ __all__ = [
     "OvertakeLeadSnapshot",
     "OvertakeMemory",
     "OvertakeRuntimeTransition",
+    "OvertakeRuntimeState",
     "OvertakeTargetSnapshot",
     "PlannerState",
     "PreflightValidationInput",

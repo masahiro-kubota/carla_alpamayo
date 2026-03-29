@@ -488,6 +488,7 @@ moving vehicle 追い越しでは、停止障害物よりも
 - [expert_basic_agent.py](/home/masa/carla_alpamayo/ad_stack/agents/expert_basic_agent.py)
   - adapter / pure decision の混線はかなり減った
   - overtake execution orchestration も adapter 側へ寄った
+  - runtime state も application の state object に寄った
   - 残る責務は entrypoint と CARLA world 連携の薄い orchestration が中心
 - [route_alignment.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/route_alignment.py)
   - lane-change plan materialization は adapter に寄ったが、
@@ -526,6 +527,7 @@ moving vehicle 追い越しでは、停止障害物よりも
   - waypoint queue consumption / controller dispatch の adapter 化
   - overtake execution queue state の adapter 化
   - overtake execution orchestration の adapter 化
+  - overtake runtime state holder の application 化
 - 残り:
   - execution contract の更なる型化
   - planning debug / manifest / summary に流す共通 telemetry DTO への寄せ

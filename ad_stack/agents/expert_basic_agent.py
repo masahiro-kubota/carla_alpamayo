@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake import (
-    OvertakeMemory,
+    OvertakeRuntimeState,
     choose_overtake_action,
     evaluate_pass_progress,
     is_traffic_light_violation,
@@ -116,17 +116,11 @@ class ExpertBasicAgent:
         self._route_point_to_trace_index: list[int] = []
         self._route_point_progress_m: list[float] = []
         self._max_route_index: int = 0
-        self._overtake_state = "idle"
-        self._overtake_direction: Literal["left", "right"] | None = None
-        self._overtake_origin_lane_id: str | None = None
-        self._overtake_target_actor_id: int | None = None
-        self._overtake_target_member_actor_ids: tuple[int, ...] = ()
-        self._overtake_aborted = False
+        self._overtake = OvertakeRuntimeState()
         self._execution = OvertakeExecutionManager(
             local_agent=self._agent,
             sampling_resolution_m=self.config.sampling_resolution_m,
         )
-        self._overtake_memory = OvertakeMemory()
         self._car_follow_active = False
         self._waiting_on_light = False
         self._longitudinal_speed_error_kmh = 0.0
@@ -168,14 +162,8 @@ class ExpertBasicAgent:
 
     def reset(self) -> None:
         self._max_route_index = 0
-        self._overtake_state = "idle"
-        self._overtake_direction = None
-        self._overtake_origin_lane_id = None
-        self._overtake_target_actor_id = None
-        self._overtake_target_member_actor_ids = ()
-        self._overtake_aborted = False
+        self._overtake.reset()
         self._execution.reset()
-        self._overtake_memory = OvertakeMemory()
         self._car_follow_active = False
         self._waiting_on_light = False
         self._longitudinal_speed_error_kmh = 0.0
@@ -275,13 +263,13 @@ class ExpertBasicAgent:
             yellow_stop_margin_seconds=self.config.yellow_stop_margin_seconds,
         )
 
-        if self._overtake_state != "idle":
+        if self._overtake.state != "idle":
             transition = resolve_overtake_runtime_transition(
-                state=self._overtake_state,
-                aborted=self._overtake_aborted,
+                state=self._overtake.state,
+                aborted=self._overtake.aborted,
                 current_lane_id=current_lane_id,
                 target_lane_id=self._execution.target_lane_id,
-                origin_lane_id=self._overtake_origin_lane_id,
+                origin_lane_id=self._overtake.origin_lane_id,
                 route_target_lane_id=scene_state.route.target_lane_id,
                 lane_center_offset_m=lane_center_offset_m,
                 should_stop_for_light=stop_for_light,
@@ -290,19 +278,19 @@ class ExpertBasicAgent:
                 lead_speed_kmh=lead_speed_kmh,
                 overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
             )
-            self._overtake_state = transition.state
-            self._overtake_aborted = transition.aborted
+            self._overtake.state = transition.state
+            self._overtake.aborted = transition.aborted
             planner_state = transition.planner_state
             if transition.limited_target_speed_kmh is not None:
                 target_speed_kmh = min(target_speed_kmh, transition.limited_target_speed_kmh)
             if transition.should_prepare_abort_return:
                 self._execution.prepare_abort_return(
                     carla_module=self._carla,
-                    direction=self._overtake_direction,
+                    direction=self._overtake.direction,
                     route_index=route_index,
                     base_trace=self._base_trace,
                     route_point_to_trace_index=self._route_point_to_trace_index,
-                    origin_lane_id=self._overtake_origin_lane_id,
+                    origin_lane_id=self._overtake.origin_lane_id,
                     target_lane_id=self._execution.target_lane_id,
                     lane_change_distance_m=self.config.lane_change_distance_m,
                 )
@@ -311,14 +299,8 @@ class ExpertBasicAgent:
             if transition.completed:
                 if transition.event_overtake_success:
                     event_flags["event_overtake_success"] = True
-                self._overtake_state = "idle"
-                self._overtake_direction = None
-                self._overtake_origin_lane_id = None
+                self._overtake.reset()
                 self._execution.clear()
-                self._overtake_target_actor_id = None
-                self._overtake_target_member_actor_ids = ()
-                self._overtake_aborted = False
-                self._overtake_memory = OvertakeMemory()
                 self._execution.resume_base_route(
                     route_index=route_index,
                     base_trace=self._base_trace,
@@ -334,7 +316,7 @@ class ExpertBasicAgent:
             ),
             stop_buffer_m=self.config.traffic_light_stop_buffer_m,
         )
-        if stop_for_light and self._overtake_state == "idle":
+        if stop_for_light and self._overtake.state == "idle":
             planner_state = "traffic_light_stop"
             target_speed_kmh = traffic_light_stop_target_speed_kmh(
                 stop_target_distance_m=stop_target_distance_m,
@@ -366,7 +348,7 @@ class ExpertBasicAgent:
         elif (
             (lead_vehicle is not None or active_overtake_target is not None)
             and not self.config.ignore_vehicles
-            and self._overtake_state == "idle"
+            and self._overtake.state == "idle"
         ):
             overtake_considered = True
             overtake_decision = choose_overtake_action(
@@ -378,7 +360,6 @@ class ExpertBasicAgent:
                 signal_suppression_distance_m=self.config.overtake_signal_suppression_distance_m,
             )
             if overtake_decision.planner_state == "lane_change_out" and overtake_decision.direction is not None:
-                self._overtake_origin_lane_id = current_lane_id
                 if self._execution.activate_overtake_plan(
                     carla_module=self._carla,
                     direction=overtake_decision.direction,
@@ -389,41 +370,14 @@ class ExpertBasicAgent:
                     lane_change_distance_m=self.config.lane_change_distance_m,
                     overtake_hold_distance_m=self.config.overtake_hold_distance_m,
                 ):
-                    self._overtake_state = "lane_change_out"
-                    self._overtake_direction = overtake_decision.direction
-                    self._overtake_aborted = False
-                    self._overtake_target_actor_id = (
-                        active_overtake_target.primary_actor_id
-                        if active_overtake_target is not None
-                        else lead_vehicle.actor_id
-                    )
-                    self._overtake_target_member_actor_ids = (
-                        active_overtake_target.member_actor_ids
-                        if active_overtake_target is not None
-                        else (lead_vehicle.actor_id,)
-                    )
-                    self._overtake_memory = OvertakeMemory(
-                        state="lane_change_out",
+                    self._overtake.begin_lane_change_out(
                         direction=overtake_decision.direction,
                         origin_lane_id=current_lane_id,
+                        active_target=active_overtake_target,
+                        lead_actor_id=lead_vehicle.actor_id if lead_vehicle is not None else None,
+                        lead_lane_id=lead_vehicle.lane_id if lead_vehicle is not None else None,
+                        lead_distance_m=lead_distance_m,
                         target_lane_id=self._execution.target_lane_id,
-                        target_actor_id=self._overtake_target_actor_id,
-                        target_actor_lane_id=(
-                            active_overtake_target.lane_id
-                            if active_overtake_target is not None
-                            else lead_vehicle.lane_id
-                        ),
-                        target_kind=(
-                            active_overtake_target.kind
-                            if active_overtake_target is not None
-                            else "single_actor"
-                        ),
-                        target_member_actor_ids=self._overtake_target_member_actor_ids,
-                        target_exit_distance_m=(
-                            active_overtake_target.exit_distance_m
-                            if active_overtake_target is not None
-                            else lead_distance_m
-                        ),
                     )
                     planner_state = "lane_change_out"
                     event_flags["event_overtake_attempt"] = True
@@ -432,9 +386,7 @@ class ExpertBasicAgent:
                     event_flags["event_unsafe_lane_change_reject"] = True
                     planner_state = "car_follow"
                     target_speed_kmh = follow_target_speed_kmh
-                    self._overtake_target_actor_id = None
-                    self._overtake_target_member_actor_ids = ()
-                    self._overtake_memory = OvertakeMemory()
+                    self._overtake.reset()
                     overtake_reject_reason = (
                         self._execution.lane_change_path_failure_reason or "lane_change_path_failed"
                     )
@@ -462,11 +414,11 @@ class ExpertBasicAgent:
 
         target_actor = None
         target_actor_visible = False
-        if self._overtake_target_actor_id is not None:
+        if self._overtake.target_actor_id is not None:
             pass_snapshot = build_overtake_pass_snapshot(
                 tracked_objects=scene_state.tracked_objects,
-                target_actor_id=self._overtake_target_actor_id,
-                target_member_actor_ids=self._overtake_target_member_actor_ids,
+                target_actor_id=self._overtake.target_actor_id,
+                target_member_actor_ids=self._overtake.target_member_actor_ids,
                 route_index=route_index,
                 base_trace=self._base_trace,
                 route_point_to_trace_index=self._route_point_to_trace_index,
@@ -474,25 +426,25 @@ class ExpertBasicAgent:
             )
             target_actor = pass_snapshot.target_actor
             target_actor_visible = pass_snapshot.target_actor_visible
-            self._overtake_memory = evaluate_pass_progress(
-                self._overtake_memory,
+            self._overtake.memory = evaluate_pass_progress(
+                self._overtake.memory,
                 timestamp_s=scene_state.timestamp_s,
                 target_actor_visible=target_actor_visible,
                 target_longitudinal_distance_m=pass_snapshot.target_longitudinal_distance_m,
                 overtake_resume_front_gap_m=self.config.overtake_resume_front_gap_m,
-                target_kind=self._overtake_memory.target_kind,
+                target_kind=self._overtake.memory.target_kind,
                 target_exit_longitudinal_distance_m=pass_snapshot.target_exit_longitudinal_distance_m,
             )
-            if self._overtake_origin_lane_id is not None:
+            if self._overtake.origin_lane_id is not None:
                 rejoin_front_gap_m, rejoin_rear_gap_m = lane_gaps_for_lane_id(
                     scene_state.tracked_objects,
-                    self._overtake_origin_lane_id,
+                    self._overtake.origin_lane_id,
                 )
             if (
-                self._overtake_state == "pass_vehicle"
-                and not self._overtake_aborted
+                self._overtake.state == "pass_vehicle"
+                and not self._overtake.aborted
                 and should_begin_rejoin(
-                    self._overtake_memory,
+                    self._overtake.memory,
                     rejoin_front_gap_m=(
                         None if not math.isfinite(rejoin_front_gap_m) else rejoin_front_gap_m
                     ),
@@ -505,17 +457,17 @@ class ExpertBasicAgent:
             ):
                 if self._execution.try_activate_rejoin_plan(
                     carla_module=self._carla,
-                    direction=self._overtake_direction,
+                    direction=self._overtake.direction,
                     route_index=route_index,
                     base_trace=self._base_trace,
                     route_point_to_trace_index=self._route_point_to_trace_index,
-                    origin_lane_id=self._overtake_origin_lane_id,
+                    origin_lane_id=self._overtake.origin_lane_id,
                     target_lane_id=self._execution.target_lane_id,
                     lane_change_distance_m=self.config.lane_change_distance_m,
                 ):
-                    self._overtake_state = "lane_change_back"
+                    self._overtake.state = "lane_change_back"
                     planner_state = "lane_change_back"
-            self._overtake_memory.state = self._overtake_state
+            self._overtake.memory.state = self._overtake.state
 
         if planner_state == "car_follow" and not self._car_follow_active:
             event_flags["event_car_follow_start"] = True
@@ -533,7 +485,7 @@ class ExpertBasicAgent:
 
         target_waypoint = (
             self._execution.consume_next_waypoint(vehicle_location=self._vehicle.get_location())
-            if self._overtake_state != "idle"
+            if self._overtake.state != "idle"
             else None
         )
         control = run_tracking_control(
@@ -620,17 +572,17 @@ class ExpertBasicAgent:
             rejoin_rear_gap_m=rejoin_rear_gap_m,
             overtake_considered=overtake_considered,
             overtake_reject_reason=overtake_reject_reason,
-            overtake_state=self._overtake_state,
-            overtake_direction=self._overtake_direction,
-            overtake_origin_lane_id=self._overtake_origin_lane_id,
-            overtake_target_actor_id=self._overtake_target_actor_id,
-            overtake_target_kind=self._overtake_memory.target_kind,
-            overtake_target_member_actor_ids=self._overtake_target_member_actor_ids,
+            overtake_state=self._overtake.state,
+            overtake_direction=self._overtake.direction,
+            overtake_origin_lane_id=self._overtake.origin_lane_id,
+            overtake_target_actor_id=self._overtake.target_actor_id,
+            overtake_target_kind=self._overtake.memory.target_kind,
+            overtake_target_member_actor_ids=self._overtake.target_member_actor_ids,
             overtake_target_lane_id=self._execution.target_lane_id,
-            target_passed=self._overtake_memory.target_passed,
-            distance_past_target_m=self._overtake_memory.target_pass_distance_m,
+            target_passed=self._overtake.memory.target_passed,
+            distance_past_target_m=self._overtake.memory.target_pass_distance_m,
             target_actor_visible=target_actor_visible,
-            target_actor_last_seen_s=self._overtake_memory.target_actor_last_seen_s,
+            target_actor_last_seen_s=self._overtake.memory.target_actor_last_seen_s,
             lane_change_path_available=self._execution.lane_change_path_available,
             lane_change_path_failed_reason=self._execution.lane_change_path_failure_reason,
             target_lane_id=target_lane_id,
