@@ -40,12 +40,14 @@
 
 - `success = true`
 - `collision_count = 0`
+- `average_speed_kmh >= 18.0`
 - `overtake_attempt_count >= 1`
 - `overtake_success_count >= 1`
 
 ### Manifest Acceptance
 
 - no manifest row has `overtake_reject_reason = adjacent_front_gap_insufficient`
+- some manifest row with `overtake_state = lane_change_out` has `target_speed_kmh >= 15.0`
 
 ## Source Of Truth
 

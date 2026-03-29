@@ -13,6 +13,7 @@ class ScenarioSummaryExpectation:
     success: bool | None = None
     failure_reason: str | None = None
     collision_count: int | None = None
+    min_average_speed_kmh: float | None = None
     min_overtake_attempt_count: int | None = None
     exact_overtake_attempt_count: int | None = None
     min_overtake_success_count: int | None = None
@@ -57,6 +58,11 @@ def assert_summary_expectations(
             require(
                 summary["collision_count"] == expectation.collision_count,
                 f"{expectation.name} collision_count unexpected: {summary['collision_count']}",
+            )
+        if expectation.min_average_speed_kmh is not None:
+            require(
+                float(summary["average_speed_kmh"]) >= expectation.min_average_speed_kmh,
+                f"{expectation.name} average_speed_kmh too small: {summary['average_speed_kmh']}",
             )
         if expectation.min_overtake_attempt_count is not None:
             require(

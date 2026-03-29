@@ -687,6 +687,8 @@ def _render_summary_acceptance(expectation: ScenarioSummaryExpectation) -> list[
         lines.append(f"- `failure_reason = {expectation.failure_reason}`")
     if expectation.collision_count is not None:
         lines.append(f"- `collision_count = {expectation.collision_count}`")
+    if expectation.min_average_speed_kmh is not None:
+        lines.append(f"- `average_speed_kmh >= {expectation.min_average_speed_kmh}`")
     if expectation.min_overtake_attempt_count is not None:
         lines.append(f"- `overtake_attempt_count >= {expectation.min_overtake_attempt_count}`")
     if expectation.exact_overtake_attempt_count is not None:
@@ -718,6 +720,12 @@ def _render_manifest_acceptance(expectations: tuple[ManifestExpectation, ...]) -
         elif expectation.kind == "any_sequence_len_at_least":
             rendered.append(
                 f"- some manifest row has `{expectation.field}` length >= {expectation.min_len}"
+            )
+        elif expectation.kind == "min_numeric_where_equals":
+            rendered.append(
+                "- some manifest row with "
+                f"`{expectation.filter_field} = {expectation.filter_equals}` "
+                f"has `{expectation.field} >= {expectation.min_value}`"
             )
     return rendered
 

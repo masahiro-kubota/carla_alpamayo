@@ -7,6 +7,7 @@ from tests.integration.ad_stack._shared import (
     assert_any_field_equals,
     assert_manifest_expectations,
     assert_any_sequence_len_at_least,
+    assert_min_numeric_field_where_equals,
     assert_no_field_equals,
     assert_min_unique_non_null_values,
 )
@@ -66,6 +67,22 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
             message="unexpected front-gap reject",
         )
 
+    def test_assert_min_numeric_field_where_equals_accepts_threshold(self) -> None:
+        rows = [
+            {"overtake_state": "idle", "target_speed_kmh": 30.0},
+            {"overtake_state": "lane_change_out", "target_speed_kmh": 15.0},
+            {"overtake_state": "lane_change_out", "target_speed_kmh": 18.0},
+        ]
+
+        assert_min_numeric_field_where_equals(
+            rows,
+            field="target_speed_kmh",
+            filter_field="overtake_state",
+            filter_equals="lane_change_out",
+            min_value=15.0,
+            message="lane_change_out target speed collapsed below floor",
+        )
+
     def test_assert_manifest_expectations_accepts_mixed_contract(self) -> None:
         rows = [
             {
@@ -77,6 +94,10 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
                 "overtake_target_actor_id": 202,
                 "overtake_target_kind": "single_actor",
                 "overtake_target_member_actor_ids": [202],
+            },
+            {
+                "overtake_state": "lane_change_out",
+                "target_speed_kmh": 15.0,
             },
         ]
 
@@ -106,6 +127,14 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
                     kind="any_sequence_len_at_least",
                     min_len=2,
                     message="expected cluster members",
+                ),
+                ManifestExpectation(
+                    field="target_speed_kmh",
+                    kind="min_numeric_where_equals",
+                    filter_field="overtake_state",
+                    filter_equals="lane_change_out",
+                    min_value=15.0,
+                    message="expected lane_change_out target speed floor",
                 ),
             ),
         )

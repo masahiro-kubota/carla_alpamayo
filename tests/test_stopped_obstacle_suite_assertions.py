@@ -32,6 +32,11 @@ class StoppedObstacleSuiteAssertionsTest(unittest.TestCase):
                     "collision_count": (
                         expectation.collision_count if expectation.collision_count is not None else 0
                     ),
+                    "average_speed_kmh": (
+                        expectation.min_average_speed_kmh
+                        if expectation.min_average_speed_kmh is not None
+                        else 30.0
+                    ),
                     "overtake_attempt_count": (
                         expectation.exact_overtake_attempt_count
                         if expectation.exact_overtake_attempt_count is not None
@@ -86,6 +91,13 @@ class StoppedObstacleSuiteAssertionsTest(unittest.TestCase):
                         manifest_rows.append(
                             {
                                 manifest_expectation.field: None,
+                            }
+                        )
+                    elif manifest_expectation.kind == "min_numeric_where_equals":
+                        manifest_rows.append(
+                            {
+                                manifest_expectation.filter_field: manifest_expectation.filter_equals,
+                                manifest_expectation.field: manifest_expectation.min_value,
                             }
                         )
                 manifest_path = manifest_dir / f"{scenario_name}.jsonl"

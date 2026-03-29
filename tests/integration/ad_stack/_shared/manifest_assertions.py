@@ -12,6 +12,7 @@ ManifestExpectationKind = Literal[
     "any_equals",
     "none_equals",
     "any_sequence_len_at_least",
+    "min_numeric_where_equals",
 ]
 
 
@@ -23,6 +24,9 @@ class ManifestExpectation:
     expected: Any | None = None
     min_unique: int | None = None
     min_len: int | None = None
+    filter_field: str | None = None
+    filter_equals: Any | None = None
+    min_value: float | None = None
 
 
 def non_null_field_values(rows: Iterable[dict[str, Any]], *, field: str) -> list[Any]:
@@ -73,6 +77,24 @@ def assert_any_sequence_len_at_least(
     )
 
 
+def assert_min_numeric_field_where_equals(
+    rows: Iterable[dict[str, Any]],
+    *,
+    field: str,
+    filter_field: str,
+    filter_equals: Any,
+    min_value: float,
+    message: str,
+) -> None:
+    matching_values = [
+        float(row[field])
+        for row in rows
+        if row.get(filter_field) == filter_equals and row.get(field) is not None
+    ]
+    require(matching_values, f"{message} (no matching manifest rows)")
+    require(min(matching_values) >= min_value, message)
+
+
 def assert_manifest_expectations(
     rows: Iterable[dict[str, Any]],
     expectations: Iterable[ManifestExpectation],
@@ -116,6 +138,24 @@ def assert_manifest_expectations(
                 materialized_rows,
                 field=expectation.field,
                 min_len=expectation.min_len,
+                message=expectation.message,
+            )
+            continue
+        if expectation.kind == "min_numeric_where_equals":
+            require(
+                expectation.filter_field is not None,
+                f"manifest expectation for {expectation.field} is missing filter_field",
+            )
+            require(
+                expectation.min_value is not None,
+                f"manifest expectation for {expectation.field} is missing min_value",
+            )
+            assert_min_numeric_field_where_equals(
+                materialized_rows,
+                field=expectation.field,
+                filter_field=expectation.filter_field,
+                filter_equals=expectation.filter_equals,
+                min_value=expectation.min_value,
                 message=expectation.message,
             )
             continue
