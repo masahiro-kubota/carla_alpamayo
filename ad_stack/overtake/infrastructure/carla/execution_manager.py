@@ -30,14 +30,6 @@ class OvertakeExecutionManager:
     def lane_change_path(self) -> LaneChangePathStatus:
         return self._lane_change_path
 
-    @property
-    def lane_change_path_available(self) -> bool:
-        return self._lane_change_path.available
-
-    @property
-    def lane_change_path_failure_reason(self) -> str | None:
-        return self._lane_change_path.failure_reason
-
     def reset(self) -> None:
         self._queue.clear()
         self._lane_change_path = LaneChangePathStatus(available=False)
@@ -67,7 +59,7 @@ class OvertakeExecutionManager:
             lane_change_distance_m=lane_change_distance_m,
             overtake_hold_distance_m=overtake_hold_distance_m,
         )
-        if not plan.available:
+        if not plan.lane_change_path.available:
             self._set_lane_change_status(plan.lane_change_path)
             return ExecutionActivationResult(
                 outcome="unavailable",
@@ -103,7 +95,7 @@ class OvertakeExecutionManager:
             lane_change_distance_m=lane_change_distance_m,
             sampling_resolution_m=self.sampling_resolution_m,
         )
-        if not plan.available:
+        if not plan.lane_change_path.available:
             self._set_lane_change_status(plan.lane_change_path)
             return ExecutionActivationResult(
                 outcome="unavailable",

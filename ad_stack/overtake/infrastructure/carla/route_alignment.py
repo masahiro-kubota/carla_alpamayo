@@ -24,14 +24,6 @@ class WaypointExecutionPlan:
     waypoints: list[Any]
     target_lane_id: str | None = None
 
-    @property
-    def available(self) -> bool:
-        return self.lane_change_path.available
-
-    @property
-    def failure_reason(self) -> str | None:
-        return self.lane_change_path.failure_reason
-
 
 @dataclass(slots=True)
 class TraceExecutionPlan:

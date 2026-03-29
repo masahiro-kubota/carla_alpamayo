@@ -389,7 +389,7 @@ class ExpertBasicAgent:
                     target_speed_kmh = follow_target_speed_kmh
                     self._overtake.reset()
                     overtake_reject_reason = (
-                        self._execution.lane_change_path_failure_reason or "lane_change_path_failed"
+                        self._execution.lane_change_path.failure_reason or "lane_change_path_failed"
                     )
             else:
                 overtake_reject_reason = overtake_decision.reject_reason

@@ -533,6 +533,7 @@ moving vehicle 追い越しでは、停止障害物よりも
   - `summary` の suite assertion 共通化
   - `manifest` の field-level assertion helper 共通化
   - stopped-obstacle suite の manifest acceptance の declarative 化
+  - legacy な bool accessor を execution contract へ統一
 - 残り:
   - suite 固有の `manifest` acceptance をどこまで `_shared` の declarative contract に上げるかの見極めは大筋完了
   - moving suite 追加時に `_shared` で再利用できない条件が本当にあるかの確認

@@ -124,7 +124,7 @@ class OvertakeRouteAlignmentTests(unittest.TestCase):
             overtake_hold_distance_m=4.0,
         )
 
-        self.assertTrue(plan.available)
+        self.assertTrue(plan.lane_change_path.available)
         self.assertEqual(plan.target_lane_id, "15:1")
         self.assertGreater(len(plan.waypoints), 0)
         self.assertEqual(plan.waypoints[0].transform.location.y, 0.0)
@@ -145,8 +145,8 @@ class OvertakeRouteAlignmentTests(unittest.TestCase):
             sampling_resolution_m=2.0,
         )
 
-        self.assertFalse(plan.available)
-        self.assertEqual(plan.failure_reason, "missing_rejoin_context")
+        self.assertFalse(plan.lane_change_path.available)
+        self.assertEqual(plan.lane_change_path.failure_reason, "missing_rejoin_context")
 
     def test_build_base_trace_execution_plan_slices_from_route_index_and_offset(self) -> None:
         base_trace, route_point_to_trace_index = _build_trace()
