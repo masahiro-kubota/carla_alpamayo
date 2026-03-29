@@ -529,9 +529,13 @@ moving vehicle 追い越しでは、停止障害物よりも
   - overtake execution queue state の adapter 化
   - overtake execution orchestration の adapter 化
   - overtake runtime state holder の application 化
+  - execution activation contract の型化
+  - `summary` の suite assertion 共通化
+  - `manifest` の field-level assertion helper 共通化
+  - stopped-obstacle suite の manifest acceptance の declarative 化
 - 残り:
-  - execution contract の更なる型化
-  - `manifest` の scenario-specific acceptance をどこまで generic helper に上げるかの見極め
+  - suite 固有の `manifest` acceptance をどこまで `_shared` の declarative contract に上げるかの見極めは大筋完了
+  - moving suite 追加時に `_shared` で再利用できない条件が本当にあるかの確認
 
 ### Phase 4: moving vehicle overtake の pure design 追加
 
@@ -567,8 +571,8 @@ moving vehicle 追い越しでは、停止障害物よりも
 優先度順:
 
 1. `expert_basic_agent.py` の adapter / decision 分離
-2. overtake execution contract の共通化
-3. tests/integration の shared contract 強化
+2. tests/integration の shared contract 強化
+3. moving suite 追加時の shared contract 再点検
 4. overtake telemetry schema の共通化
 5. moving vehicle overtake の pure design 追加
 

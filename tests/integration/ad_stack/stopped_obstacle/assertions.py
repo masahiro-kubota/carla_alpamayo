@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Any
 
 from tests.integration.ad_stack._shared import (
+    ManifestExpectation,
     ScenarioSummaryExpectation,
+    assert_manifest_expectations,
     assert_summary_expectations,
     load_manifest,
     load_ordered_summaries,
-    require,
 )
 
 SCENARIO_ORDER = (
@@ -102,6 +103,31 @@ SUMMARY_EXPECTATIONS = (
     ),
 )
 
+MANIFEST_EXPECTATIONS: dict[str, tuple[ManifestExpectation, ...]] = {
+    "double_stopped_separated": (
+        ManifestExpectation(
+            field="overtake_target_actor_id",
+            kind="min_unique_non_null",
+            min_unique=2,
+            message="double_stopped_separated never switched target actor",
+        ),
+    ),
+    "double_stopped_clustered": (
+        ManifestExpectation(
+            field="overtake_target_kind",
+            kind="any_equals",
+            expected="cluster",
+            message="double_stopped_clustered never reported cluster target kind",
+        ),
+        ManifestExpectation(
+            field="overtake_target_member_actor_ids",
+            kind="any_sequence_len_at_least",
+            min_len=2,
+            message="double_stopped_clustered never kept multi-actor cluster members",
+        ),
+    ),
+}
+
 
 def load_stopped_obstacle_summaries(
     summary_paths: list[str] | tuple[str, ...] | list[Path] | tuple[Path, ...],
@@ -115,25 +141,8 @@ def load_stopped_obstacle_summaries(
 def assert_stopped_obstacle_suite(summaries: dict[str, dict[str, Any]]) -> None:
     assert_summary_expectations(summaries, SUMMARY_EXPECTATIONS)
 
-    double_stopped_separated_summary = summaries["double_stopped_separated"]
-    separated_manifest = load_manifest(double_stopped_separated_summary)
-    separated_targets = [
-        row["overtake_target_actor_id"]
-        for row in separated_manifest
-        if row.get("overtake_target_actor_id") is not None
-    ]
-    require(
-        len(set(separated_targets)) >= 2,
-        "double_stopped_separated never switched target actor",
-    )
-
-    double_stopped_clustered_summary = summaries["double_stopped_clustered"]
-    clustered_manifest = load_manifest(double_stopped_clustered_summary)
-    require(
-        any(row.get("overtake_target_kind") == "cluster" for row in clustered_manifest),
-        "double_stopped_clustered never reported cluster target kind",
-    )
-    require(
-        any(len(row.get("overtake_target_member_actor_ids") or []) >= 2 for row in clustered_manifest),
-        "double_stopped_clustered never kept multi-actor cluster members",
-    )
+    for scenario_name, expectations in MANIFEST_EXPECTATIONS.items():
+        assert_manifest_expectations(
+            load_manifest(summaries[scenario_name]),
+            expectations,
+        )

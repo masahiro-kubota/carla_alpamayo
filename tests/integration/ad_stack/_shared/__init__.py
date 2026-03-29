@@ -1,3 +1,11 @@
+from .manifest_assertions import (
+    ManifestExpectation,
+    assert_any_field_equals,
+    assert_manifest_expectations,
+    assert_any_sequence_len_at_least,
+    assert_min_unique_non_null_values,
+    non_null_field_values,
+)
 from .summary_tools import load_manifest, load_summary, require, summary_path_from_run_output
 from .suite_assertions import (
     ScenarioSummaryExpectation,
@@ -6,10 +14,16 @@ from .suite_assertions import (
 )
 
 __all__ = [
+    "assert_manifest_expectations",
+    "assert_any_field_equals",
+    "assert_any_sequence_len_at_least",
+    "assert_min_unique_non_null_values",
     "load_manifest",
     "load_ordered_summaries",
     "load_summary",
+    "non_null_field_values",
     "require",
+    "ManifestExpectation",
     "ScenarioSummaryExpectation",
     "assert_summary_expectations",
     "summary_path_from_run_output",
