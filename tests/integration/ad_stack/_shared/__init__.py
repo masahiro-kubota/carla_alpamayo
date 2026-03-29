@@ -4,6 +4,7 @@ from .manifest_assertions import (
     assert_any_field_equals,
     assert_manifest_expectations,
     assert_any_sequence_len_at_least,
+    assert_no_field_equals,
     assert_min_unique_non_null_values,
     non_null_field_values,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "assert_manifest_expectations",
     "assert_any_field_equals",
     "assert_any_sequence_len_at_least",
+    "assert_no_field_equals",
     "assert_min_unique_non_null_values",
     "load_manifest",
     "load_ordered_summaries",

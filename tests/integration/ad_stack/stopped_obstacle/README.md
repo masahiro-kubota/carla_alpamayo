@@ -18,16 +18,20 @@
 ## Verified Scenarios
 
 - [clear.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/clear.md)
+- [clear_with_far_opposite_static.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/clear_with_far_opposite_static.md)
 - [blocked_static.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/blocked_static.md)
 - [blocked_oncoming.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/blocked_oncoming.md)
 - [double_stopped_separated.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/double_stopped_separated.md)
 - [double_stopped_clustered.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/double_stopped_clustered.md)
+- [double_stopped_clustered_with_oncoming_block.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/double_stopped_clustered_with_oncoming_block.md)
+- [double_stopped_separated_with_far_opposite_static.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/double_stopped_separated_with_far_opposite_static.md)
 - [signal_suppressed.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/signal_suppressed.md)
 - [adjacent_lane_closed.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/adjacent_lane_closed.md)
 - [curve_clear.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/curve_clear.md)
+- [curve_clear_with_opposite_static_blocked.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/curve_clear_with_opposite_static_blocked.md)
 - [rejoin_blocked_then_release.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/rejoin_blocked_then_release.md)
 
-この 9 本が現在の verified route-loop integration set です。
+この 13 本が現在の verified route-loop integration set です。
 
 ## Inspect-Only Scenarios
 
@@ -44,6 +48,7 @@
 
 - [STOPPED_OBSTACLE_LOGIC_DESIGN.md](/media/masa/ssd_data/carla_alpamayo/docs/STOPPED_OBSTACLE_LOGIC_DESIGN.md)
 - [STOPPED_OBSTACLE_TEST_DESIGN.md](/media/masa/ssd_data/carla_alpamayo/docs/STOPPED_OBSTACLE_TEST_DESIGN.md)
+- [STOPPED_OBSTACLE_OPPOSITE_LANE_OCCUPANCY_TEST_DESIGN.md](/media/masa/ssd_data/carla_alpamayo/docs/STOPPED_OBSTACLE_OPPOSITE_LANE_OCCUPANCY_TEST_DESIGN.md)
 - [STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md](/media/masa/ssd_data/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md)
 - [STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md](/media/masa/ssd_data/carla_alpamayo/docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md)
 - [NEXT_STEPS.md](/media/masa/ssd_data/carla_alpamayo/docs/stopped_obstacle/NEXT_STEPS.md)

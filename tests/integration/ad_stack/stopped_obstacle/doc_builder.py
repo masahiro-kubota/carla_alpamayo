@@ -63,6 +63,31 @@ _ROUTE_LOOP_DOCS: tuple[ScenarioDocSeed, ...] = (
         ),
     ),
     ScenarioDocSeed(
+        name="clear_with_far_opposite_static",
+        title="Clear With Far Opposite Static Scenario",
+        group="verified",
+        summary="反対車線に静止車両はいるが、pass corridor の required clear distance 外なので通常どおり追い越してよい scenario です。",
+        contract=(
+            "same-lane に停止障害物が 1 台",
+            "反対車線に static actor が 1 台いる",
+            "その actor は pass corridor の required clear distance 外にある",
+        ),
+        target_actor=(
+            "`follow_target_id` は same-lane の停止障害物 actor に収束する",
+            "far opposite static actor を blocker target と取り違えない",
+        ),
+        reject_wait=(
+            "`adjacent_front_gap_insufficient` を誤検出しない",
+            "opposite static actor がいても `lane_change_out` を抑制しない",
+        ),
+        pass_rejoin=(
+            "`lane_change_out -> pass_vehicle -> lane_change_back` が通常どおり成立する",
+        ),
+        why_matters=(
+            "Town01 の片側1車線で false positive reject を抑える代表ケースです。",
+        ),
+    ),
+    ScenarioDocSeed(
         name="blocked_static",
         title="Blocked Static Scenario",
         group="verified",
@@ -159,6 +184,55 @@ _ROUTE_LOOP_DOCS: tuple[ScenarioDocSeed, ...] = (
         ),
     ),
     ScenarioDocSeed(
+        name="double_stopped_clustered_with_oncoming_block",
+        title="Double Stopped Clustered With Oncoming Block Scenario",
+        group="verified",
+        summary="近接した停止障害物 cluster があり、対向車がいる間は出ず、corridor 解放後に cluster として 1 回で抜く scenario です。",
+        contract=(
+            "same-lane に cluster として扱う停止障害物が 2 台以上ある",
+            "反対車線に oncoming actor が一時的に存在する",
+            "corridor 解放後は cluster pass が可能になる",
+        ),
+        target_actor=(
+            "`overtake_target_kind = cluster` を維持する",
+            "`overtake_target_member_actor_ids` は複数 actor を保持する",
+        ),
+        reject_wait=(
+            "oncoming actor が近い間は `lane_change_out` に入らない",
+            "corridor 解放後に初めて overtake を開始する",
+        ),
+        pass_rejoin=(
+            "cluster に対して 1 回の `lane_change_out -> pass_vehicle -> lane_change_back` を行う",
+        ),
+        why_matters=(
+            "multi-target と opposite-lane occupancy の組み合わせで state machine が崩れないことを確認するためです。",
+        ),
+    ),
+    ScenarioDocSeed(
+        name="double_stopped_separated_with_far_opposite_static",
+        title="Double Stopped Separated With Far Opposite Static Scenario",
+        group="verified",
+        summary="離れた 2 台の停止障害物を順番に抜くが、反対車線の遠方 static actor は blocker と誤判定しない scenario です。",
+        contract=(
+            "same-lane に separated 停止障害物が 2 台ある",
+            "反対車線に far static actor が 1 台いる",
+            "far static actor は required clear distance 外にある",
+        ),
+        target_actor=(
+            "1 台目を抜いたあと 2 台目へ `follow_target_id` が切り替わる",
+            "far opposite static actor を active target / blocker と取り違えない",
+        ),
+        reject_wait=(
+            "false positive reject なしで 2 回の overtake flow に入る",
+        ),
+        pass_rejoin=(
+            "1 台目で rejoin し、その後 2 台目に対して再度 `lane_change_out -> pass_vehicle -> lane_change_back` を行う",
+        ),
+        why_matters=(
+            "separated multi-target でも irrelevant actor による誤抑制がないことを確認するためです。",
+        ),
+    ),
+    ScenarioDocSeed(
         name="signal_suppressed",
         title="Signal Suppressed Scenario",
         group="verified",
@@ -224,6 +298,31 @@ _ROUTE_LOOP_DOCS: tuple[ScenarioDocSeed, ...] = (
         ),
         why_matters=(
             "直線 corridor だけに過学習していないことを確認します。",
+        ),
+    ),
+    ScenarioDocSeed(
+        name="curve_clear_with_opposite_static_blocked",
+        title="Curve Clear With Opposite Static Blocked Scenario",
+        group="verified",
+        summary="カーブ区間で、route-aligned opposite lane 上の static blocker が pass corridor を塞いでいるため出ない scenario です。",
+        contract=(
+            "curve route 上に same-lane 停止障害物が 1 台ある",
+            "route-aligned opposite lane 上に static blocker が 1 台ある",
+            "blocker は required clear distance 内にある",
+        ),
+        target_actor=(
+            "same-lane 停止障害物を follow target として維持する",
+            "curve geometry でも opposite static actor を blocker として観測する",
+        ),
+        reject_wait=(
+            "`adjacent_front_gap_insufficient` か等価な corridor reject で抑制される",
+            "`lane_change_out` に入らない",
+        ),
+        pass_rejoin=(
+            "collision せず stall で終わる",
+        ),
+        why_matters=(
+            "直線ではなく curve でも pass corridor blocker 判定が効くことを確認するためです。",
         ),
     ),
     ScenarioDocSeed(
@@ -405,6 +504,7 @@ def render_suite_index() -> str:
             "",
             f"- [STOPPED_OBSTACLE_LOGIC_DESIGN.md]({_link_path(Path('docs/STOPPED_OBSTACLE_LOGIC_DESIGN.md').resolve())})",
             f"- [STOPPED_OBSTACLE_TEST_DESIGN.md]({_link_path(Path('docs/STOPPED_OBSTACLE_TEST_DESIGN.md').resolve())})",
+            f"- [STOPPED_OBSTACLE_OPPOSITE_LANE_OCCUPANCY_TEST_DESIGN.md]({_link_path(Path('docs/STOPPED_OBSTACLE_OPPOSITE_LANE_OCCUPANCY_TEST_DESIGN.md').resolve())})",
             f"- [STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md]({_link_path(Path('docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_DESIGN.md').resolve())})",
             f"- [STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md]({_link_path(Path('docs/STOPPED_OBSTACLE_SCENARIO_CONTRACT_TEST_DESIGN.md').resolve())})",
             f"- [NEXT_STEPS.md]({_link_path(Path('docs/stopped_obstacle/NEXT_STEPS.md').resolve())})",
@@ -613,6 +713,8 @@ def _render_manifest_acceptance(expectations: tuple[ManifestExpectation, ...]) -
             )
         elif expectation.kind == "any_equals":
             rendered.append(f"- some manifest row has `{expectation.field} = {expectation.expected}`")
+        elif expectation.kind == "none_equals":
+            rendered.append(f"- no manifest row has `{expectation.field} = {expectation.expected}`")
         elif expectation.kind == "any_sequence_len_at_least":
             rendered.append(
                 f"- some manifest row has `{expectation.field}` length >= {expectation.min_len}"

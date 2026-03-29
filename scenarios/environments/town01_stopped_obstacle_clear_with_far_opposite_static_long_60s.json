@@ -1,0 +1,35 @@
+{
+  "name": "town01_stopped_obstacle_clear_with_far_opposite_static_long_60s",
+  "town": "Town01",
+  "max_seconds": 60.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_transform": {
+        "x": -2.42,
+        "y": 149.83,
+        "z": 0.3,
+        "yaw_deg": 90.0
+      },
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_transform": {
+        "x": 1.56,
+        "y": 201.97,
+        "z": 0.3,
+        "yaw_deg": -90.0
+      },
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "overtake_scenario": {
+    "scenario_kind": "clear",
+    "obstacle_npc_index": 0,
+    "blocker_npc_index": 1,
+    "route_aligned_adjacent_lane_available": true
+  },
+  "traffic_light_overrides": [],
+  "description": "Town01 northbound stopped-obstacle clear scenario with an additional static actor parked far ahead in the opposite lane. The opposite-lane actor should be tracked eventually but stay outside the required clear distance so it must not suppress the overtake."
+}

@@ -41,6 +41,29 @@ ROUTE_LOOP_SCENARIOS: tuple[StoppedObstacleRouteLoopScenario, ...] = (
     ),
     StoppedObstacleRouteLoopScenario(
         case=RouteLoopSuiteCase(
+            name="clear_with_far_opposite_static",
+            run_config_path=_run_config(
+                "town01_stopped_obstacle_clear_with_far_opposite_static_long_expert.json"
+            ),
+        ),
+        summary_expectation=ScenarioSummaryExpectation(
+            name="clear_with_far_opposite_static",
+            success=True,
+            collision_count=0,
+            min_overtake_attempt_count=1,
+            min_overtake_success_count=1,
+        ),
+        manifest_expectations=(
+            ManifestExpectation(
+                field="overtake_reject_reason",
+                kind="none_equals",
+                expected="adjacent_front_gap_insufficient",
+                message="clear_with_far_opposite_static incorrectly rejected due to far opposite static",
+            ),
+        ),
+    ),
+    StoppedObstacleRouteLoopScenario(
+        case=RouteLoopSuiteCase(
             name="blocked_static",
             run_config_path=_run_config("town01_stopped_obstacle_blocked_long_expert.json"),
         ),
@@ -121,6 +144,65 @@ ROUTE_LOOP_SCENARIOS: tuple[StoppedObstacleRouteLoopScenario, ...] = (
     ),
     StoppedObstacleRouteLoopScenario(
         case=RouteLoopSuiteCase(
+            name="double_stopped_clustered_with_oncoming_block",
+            run_config_path=_run_config(
+                "town01_stopped_obstacle_double_stopped_clustered_with_oncoming_block_long_expert.json"
+            ),
+        ),
+        summary_expectation=ScenarioSummaryExpectation(
+            name="double_stopped_clustered_with_oncoming_block",
+            success=True,
+            collision_count=0,
+            min_overtake_attempt_count=1,
+            min_overtake_success_count=1,
+            min_unsafe_lane_change_reject_count=1,
+        ),
+        manifest_expectations=(
+            ManifestExpectation(
+                field="overtake_target_kind",
+                kind="any_equals",
+                expected="cluster",
+                message="double_stopped_clustered_with_oncoming_block never reported cluster target kind",
+            ),
+            ManifestExpectation(
+                field="overtake_target_member_actor_ids",
+                kind="any_sequence_len_at_least",
+                min_len=2,
+                message="double_stopped_clustered_with_oncoming_block never kept multi-actor cluster members",
+            ),
+        ),
+    ),
+    StoppedObstacleRouteLoopScenario(
+        case=RouteLoopSuiteCase(
+            name="double_stopped_separated_with_far_opposite_static",
+            run_config_path=_run_config(
+                "town01_stopped_obstacle_double_stopped_separated_with_far_opposite_static_long_expert.json"
+            ),
+        ),
+        summary_expectation=ScenarioSummaryExpectation(
+            name="double_stopped_separated_with_far_opposite_static",
+            success=True,
+            collision_count=0,
+            min_overtake_attempt_count=2,
+            min_overtake_success_count=2,
+        ),
+        manifest_expectations=(
+            ManifestExpectation(
+                field="overtake_target_actor_id",
+                kind="min_unique_non_null",
+                min_unique=2,
+                message="double_stopped_separated_with_far_opposite_static never switched target actor",
+            ),
+            ManifestExpectation(
+                field="overtake_reject_reason",
+                kind="none_equals",
+                expected="adjacent_front_gap_insufficient",
+                message="double_stopped_separated_with_far_opposite_static incorrectly rejected due to far opposite static",
+            ),
+        ),
+    ),
+    StoppedObstacleRouteLoopScenario(
+        case=RouteLoopSuiteCase(
             name="signal_suppressed",
             run_config_path=_run_config("town01_stopped_obstacle_signal_suppressed_long_expert.json"),
         ),
@@ -159,6 +241,30 @@ ROUTE_LOOP_SCENARIOS: tuple[StoppedObstacleRouteLoopScenario, ...] = (
             collision_count=0,
             min_overtake_attempt_count=1,
             min_overtake_success_count=1,
+        ),
+    ),
+    StoppedObstacleRouteLoopScenario(
+        case=RouteLoopSuiteCase(
+            name="curve_clear_with_opposite_static_blocked",
+            run_config_path=_run_config(
+                "town01_stopped_obstacle_curve_clear_with_opposite_static_blocked_long_expert.json"
+            ),
+        ),
+        summary_expectation=ScenarioSummaryExpectation(
+            name="curve_clear_with_opposite_static_blocked",
+            success=False,
+            failure_reason="stalled",
+            collision_count=0,
+            exact_overtake_attempt_count=0,
+            min_unsafe_lane_change_reject_count=1,
+        ),
+        manifest_expectations=(
+            ManifestExpectation(
+                field="overtake_reject_reason",
+                kind="any_equals",
+                expected="adjacent_front_gap_insufficient",
+                message="curve_clear_with_opposite_static_blocked never reported front-gap rejection",
+            ),
         ),
     ),
     StoppedObstacleRouteLoopScenario(

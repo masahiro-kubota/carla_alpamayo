@@ -7,6 +7,7 @@ from tests.integration.ad_stack._shared import (
     assert_any_field_equals,
     assert_manifest_expectations,
     assert_any_sequence_len_at_least,
+    assert_no_field_equals,
     assert_min_unique_non_null_values,
 )
 
@@ -52,6 +53,19 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
             message="expected cluster members",
         )
 
+    def test_assert_no_field_equals_accepts_when_value_is_absent(self) -> None:
+        rows = [
+            {"overtake_reject_reason": None},
+            {"overtake_reject_reason": "target_out_of_range"},
+        ]
+
+        assert_no_field_equals(
+            rows,
+            field="overtake_reject_reason",
+            expected="adjacent_front_gap_insufficient",
+            message="unexpected front-gap reject",
+        )
+
     def test_assert_manifest_expectations_accepts_mixed_contract(self) -> None:
         rows = [
             {
@@ -80,6 +94,12 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
                     kind="any_equals",
                     expected="cluster",
                     message="expected cluster row",
+                ),
+                ManifestExpectation(
+                    field="overtake_target_kind",
+                    kind="none_equals",
+                    expected="failed",
+                    message="unexpected failed row",
                 ),
                 ManifestExpectation(
                     field="overtake_target_member_actor_ids",

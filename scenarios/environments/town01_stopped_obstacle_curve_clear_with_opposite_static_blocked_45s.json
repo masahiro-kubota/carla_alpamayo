@@ -1,0 +1,36 @@
+{
+  "name": "town01_stopped_obstacle_curve_clear_with_opposite_static_blocked_45s",
+  "town": "Town01",
+  "max_seconds": 45.0,
+  "npc_vehicles": [
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_transform": {
+        "x": 3.884,
+        "y": 4.101,
+        "z": 0.3,
+        "yaw_deg": -43.738
+      },
+      "lane_behavior": "keep_lane"
+    },
+    {
+      "npc_profile_id": "stopped_obstacle_profile_v1",
+      "spawn_transform": {
+        "x": 6.644,
+        "y": 6.991,
+        "z": 0.3,
+        "yaw_deg": 136.262
+      },
+      "lane_behavior": "keep_lane"
+    }
+  ],
+  "traffic_light_overrides": [],
+  "overtake_scenario": {
+    "scenario_kind": "blocked_static",
+    "obstacle_npc_index": 0,
+    "blocker_npc_index": 1,
+    "route_aligned_adjacent_lane_available": true,
+    "nearest_junction_distance_m": 999.0
+  },
+  "description": "Town01 gentle-curve stopped-obstacle scenario with an additional static blocker on the route-aligned opposite lane. The blocker should make the curve corridor unavailable for a safe bypass."
+}

@@ -1,0 +1,51 @@
+{
+  "name": "town01_stopped_obstacle_double_stopped_separated_with_far_opposite_static_long_expert",
+  "description": "Expert integration scenario for sequentially overtaking two separated stopped obstacles while ignoring a far static actor in the opposite lane on Town01.",
+  "mode": "evaluate",
+  "scenario": {
+    "route_config_path": "scenarios/routes/town01_northbound_overtake_long.json",
+    "weather": "ClearNoon",
+    "goal_tolerance_m": 10.0,
+    "max_stop_seconds": 20.0,
+    "stationary_speed_threshold_mps": 0.5,
+    "max_seconds": 60.0,
+    "environment_config_path": "scenarios/environments/town01_stopped_obstacle_double_stopped_separated_with_far_opposite_static_long_60s.json"
+  },
+  "runtime": {
+    "host": "127.0.0.1",
+    "port": 2000,
+    "vehicle_filter": "vehicle.tesla.model3",
+    "fixed_delta_seconds": 0.05,
+    "sensor_timeout": 2.0,
+    "camera_width": 1280,
+    "camera_height": 720,
+    "camera_fov": 90,
+    "target_speed_kmh": null,
+    "seed": 7
+  },
+  "policy": {
+    "kind": "expert",
+    "checkpoint_path": null,
+    "expert_config_path": "ad_stack/configs/expert/stopped_obstacle_dev.json",
+    "device": null,
+    "steer_smoothing": 1.0,
+    "max_steer_delta": null,
+    "ignore_traffic_lights": false,
+    "ignore_stop_signs": true,
+    "ignore_vehicles": false
+  },
+  "artifacts": {
+    "record_video": false,
+    "video_crf": 23,
+    "video_fps": null,
+    "record_mcap": true,
+    "mcap_jpeg_quality": 85,
+    "mcap_segment_seconds": 600.0,
+    "record_hz": 10.0,
+    "mcap_map_scope": "full"
+  },
+  "preview": {
+    "show_front_camera": false,
+    "preview_scale": 1.0
+  }
+}

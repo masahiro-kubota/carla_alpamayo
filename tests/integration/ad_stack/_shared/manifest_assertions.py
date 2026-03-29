@@ -10,6 +10,7 @@ from .summary_tools import require
 ManifestExpectationKind = Literal[
     "min_unique_non_null",
     "any_equals",
+    "none_equals",
     "any_sequence_len_at_least",
 ]
 
@@ -49,6 +50,16 @@ def assert_any_field_equals(
     require(any(row.get(field) == expected for row in rows), message)
 
 
+def assert_no_field_equals(
+    rows: Iterable[dict[str, Any]],
+    *,
+    field: str,
+    expected: Any,
+    message: str,
+) -> None:
+    require(not any(row.get(field) == expected for row in rows), message)
+
+
 def assert_any_sequence_len_at_least(
     rows: Iterable[dict[str, Any]],
     *,
@@ -82,6 +93,14 @@ def assert_manifest_expectations(
             continue
         if expectation.kind == "any_equals":
             assert_any_field_equals(
+                materialized_rows,
+                field=expectation.field,
+                expected=expectation.expected,
+                message=expectation.message,
+            )
+            continue
+        if expectation.kind == "none_equals":
+            assert_no_field_equals(
                 materialized_rows,
                 field=expectation.field,
                 expected=expectation.expected,
