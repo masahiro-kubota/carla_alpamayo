@@ -8,5 +8,3 @@
   - [\_shared](/home/masa/carla_alpamayo/tests/integration/ad_stack/_shared)
 - stopped obstacle:
   - [README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/README.md)
-- moving vehicle:
-  - [README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/moving_vehicle/README.md)
