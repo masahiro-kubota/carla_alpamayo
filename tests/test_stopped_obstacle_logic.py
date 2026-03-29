@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import unittest
 
-from ad_stack.overtake import (
+from ad_stack.overtake.application.decision_service import (
+    choose_overtake_action,
+    evaluate_pass_progress,
+    should_begin_rejoin,
+)
+from ad_stack.overtake.application.lane_change_planner import build_route_aligned_lane_change_plan
+from ad_stack.overtake.domain import (
     AdjacentLaneGapSnapshot,
     LaneChangePlanPoint,
     OvertakeLeadSnapshot,
     OvertakeContext,
     OvertakeMemory,
     OvertakeTargetSnapshot,
-    build_stopped_obstacle_targets,
-    build_route_aligned_lane_change_plan,
-    choose_overtake_action,
-    evaluate_pass_progress,
     lane_gap_for_lane_id,
-    next_stopped_obstacle_target,
-    should_begin_rejoin,
 )
 from ad_stack.overtake.policies import accept_stopped_overtake_target
+from ad_stack.overtake.policies.stopped_target_policy import (
+    build_stopped_obstacle_targets,
+    next_stopped_obstacle_target,
+)
 from tests.integration.ad_stack._shared.overtake_scenario_contract import (
     PreflightValidationInput,
     validate_preflight,

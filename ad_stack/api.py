@@ -11,8 +11,8 @@ from ad_stack.agents import (
     LearnedLateralAgent,
     PilotNetScenePolicy,
 )
-from ad_stack.overtake import build_stopped_obstacle_targets
 from ad_stack.overtake.policies import accept_stopped_overtake_target
+from ad_stack.overtake.policies.stopped_target_policy import build_stopped_obstacle_targets
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.runtime import ObservationBuilder

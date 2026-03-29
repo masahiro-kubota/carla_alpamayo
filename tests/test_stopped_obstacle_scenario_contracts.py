@@ -4,13 +4,15 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from ad_stack.overtake import (
+from ad_stack.overtake.application.decision_service import (
+    choose_overtake_action,
+    should_begin_rejoin,
+)
+from ad_stack.overtake.domain import (
     AdjacentLaneGapSnapshot,
     OvertakeLeadSnapshot,
     OvertakeContext,
     OvertakeMemory,
-    choose_overtake_action,
-    should_begin_rejoin,
 )
 from ad_stack.overtake.policies import accept_stopped_overtake_target
 from libs.project import PROJECT_ROOT

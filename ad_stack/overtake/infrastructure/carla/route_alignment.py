@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ad_stack.overtake.application import LaneChangePathStatus, build_route_aligned_lane_change_plan
+from ad_stack.overtake.application.execution_contract import LaneChangePathStatus
+from ad_stack.overtake.application.lane_change_planner import (
+    build_route_aligned_lane_change_plan,
+)
 from ad_stack.overtake.domain import LaneChangePlanPoint
 
 

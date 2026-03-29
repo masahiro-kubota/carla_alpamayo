@@ -5,29 +5,34 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
-from ad_stack.overtake.application import BehaviorPathPlanner, BehaviorPathPlannerConfig
-from ad_stack.overtake.application.runtime_state import OvertakeRuntimeState
-from ad_stack.overtake.application.step_service import OvertakeStepRequest, resolve_overtake_step
-from ad_stack.overtake.application.pure_pursuit_controller import PurePursuitController
-from ad_stack.overtake import (
-    evaluate_pass_progress,
+from ad_stack.overtake.application.behavior_path_planner import (
+    BehaviorPathPlanner,
+    BehaviorPathPlannerConfig,
+)
+from ad_stack.overtake.application.control_profile import (
     is_traffic_light_violation,
-    resolve_active_light,
     should_stop_for_light,
     speed_control,
     traffic_light_stop_control,
     traffic_light_stop_target_distance_m,
 )
+from ad_stack.overtake.application.decision_service import evaluate_pass_progress
+from ad_stack.overtake.application.runtime_state import OvertakeRuntimeState
+from ad_stack.overtake.application.step_service import OvertakeStepRequest, resolve_overtake_step
+from ad_stack.overtake.application.pure_pursuit_controller import PurePursuitController
+from ad_stack.overtake.application.traffic_light_service import resolve_active_light
 from ad_stack.overtake.policies import TargetAcceptancePolicy, TargetPolicy
-from ad_stack.overtake.infrastructure.carla import (
-    OvertakeExecutionManager,
-    build_route_backbone,
-    build_target_candidates,
+from ad_stack.overtake.infrastructure.carla.execution_manager import OvertakeExecutionManager
+from ad_stack.overtake.infrastructure.carla.route_backbone_builder import build_route_backbone
+from ad_stack.overtake.infrastructure.carla.candidate_extractor import build_target_candidates
+from ad_stack.overtake.infrastructure.carla.scene_assembler import (
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
-    build_overtake_planning_debug,
     lane_gaps_for_lane_id,
-    run_tracking_control,
+)
+from ad_stack.overtake.infrastructure.carla.telemetry_mapper import build_overtake_planning_debug
+from ad_stack.overtake.infrastructure.carla.controller_adapter import run_tracking_control
+from ad_stack.overtake.infrastructure.carla.trajectory_materializer import (
     waypoints_to_pose_samples,
 )
 from ad_stack.overtake.domain.planning_models import RouteBackbone

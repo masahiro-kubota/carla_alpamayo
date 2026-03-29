@@ -45,7 +45,7 @@ from libs.schemas import (
     TrafficLightObservationSample,
     append_jsonl,
 )
-from ad_stack.overtake.infrastructure.carla import (
+from ad_stack.overtake.infrastructure.carla.telemetry_mapper import (
     RouteLoopTelemetryAccumulator,
     RouteLoopFrameTelemetryRequest,
     build_frame_telemetry,

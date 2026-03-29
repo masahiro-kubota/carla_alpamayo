@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from ad_stack.overtake.application import ExecutionActivationResult, LaneChangePathStatus
+from ad_stack.overtake.application.execution_contract import (
+    ExecutionActivationResult,
+    LaneChangePathStatus,
+)
 
 from .controller_executor import OvertakeExecutionQueue
 from .route_alignment import (
