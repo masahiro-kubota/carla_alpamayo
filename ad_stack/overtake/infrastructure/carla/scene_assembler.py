@@ -10,19 +10,22 @@ from ad_stack.overtake.domain import (
     OvertakeLeadSnapshot,
     OvertakeTargetSnapshot,
 )
-from ad_stack.overtake.infrastructure.carla.route_alignment import lane_id
 from ad_stack.overtake.policies import TargetPolicy
+
+from .candidate_extractor import TargetCandidateBuilder, nearest_lead
+from .route_alignment import lane_id
+from .route_projection import route_relative_progress_to_actor
 
 
 @dataclass(slots=True)
 class OvertakeSceneSnapshot:
-    lead_vehicle: Any | None
+    follow_actor: Any | None
     active_target: OvertakeTargetSnapshot | None
     decision_context: OvertakeContext
-    lead_distance_m: float | None
-    lead_speed_mps: float
-    same_lane_lead_distance_m: float | None
-    same_lane_lead_speed_mps: float
+    follow_distance_m: float | None
+    follow_speed_mps: float
+    same_lane_follow_distance_m: float | None
+    same_lane_follow_speed_mps: float
     closing_speed_mps: float
     min_ttc: float
     same_lane_min_ttc: float
@@ -40,24 +43,6 @@ class OvertakePassSnapshot:
     target_actor_visible: bool
     target_longitudinal_distance_m: float | None
     target_exit_longitudinal_distance_m: float | None
-
-
-def nearest_lead(
-    tracked_objects: tuple[Any, ...],
-    *,
-    relation: str = "same_lane",
-) -> Any | None:
-    candidates = [
-        actor
-        for actor in tracked_objects
-        if actor.relation == relation
-        and actor.is_ahead
-        and actor.longitudinal_distance_m is not None
-        and actor.longitudinal_distance_m > 0.0
-    ]
-    if not candidates:
-        return None
-    return min(candidates, key=lambda actor: float(actor.longitudinal_distance_m))
 
 
 def lane_gaps(
@@ -111,125 +96,6 @@ def visible_overtake_target_actors(
         None,
     )
     return primary_actor, visible_members
-
-
-def route_relative_progress_to_actor(
-    *,
-    actor: Any,
-    reference_route_index: int,
-    base_trace: list[tuple[Any, Any]],
-    route_point_to_trace_index: list[int],
-    route_point_progress_m: list[float],
-    search_back_points: int = 24,
-    search_forward_points: int = 120,
-) -> tuple[float | None, float, str | None]:
-    if not route_point_to_trace_index:
-        return None, float("inf"), None
-    bounded_reference_index = max(0, min(reference_route_index, len(route_point_to_trace_index) - 1))
-    start_index = max(0, bounded_reference_index - search_back_points)
-    end_index = min(len(route_point_to_trace_index), bounded_reference_index + search_forward_points + 1)
-    best_route_index: int | None = None
-    best_distance_m = float("inf")
-    for route_point_index in range(start_index, end_index):
-        trace_index = route_point_to_trace_index[route_point_index]
-        route_location = base_trace[trace_index][0].transform.location
-        distance_m = math.hypot(route_location.x - actor.x_m, route_location.y - actor.y_m)
-        if distance_m < best_distance_m:
-            best_distance_m = distance_m
-            best_route_index = route_point_index
-    if best_route_index is None:
-        return None, best_distance_m, None
-    trace_index = route_point_to_trace_index[best_route_index]
-    route_lane_id = lane_id(base_trace[trace_index][0])
-    relative_progress_m = (
-        route_point_progress_m[best_route_index] - route_point_progress_m[bounded_reference_index]
-    )
-    return float(relative_progress_m), best_distance_m, route_lane_id
-
-
-def build_same_lane_stopped_targets(
-    tracked_objects: tuple[Any, ...],
-    *,
-    target_policy: TargetPolicy,
-    stopped_speed_threshold_mps: float,
-    cluster_merge_gap_m: float,
-    cluster_max_member_speed_mps: float,
-) -> list[OvertakeTargetSnapshot]:
-    leads = [
-        OvertakeLeadSnapshot(
-            actor_id=actor.actor_id,
-            lane_id=actor.lane_id,
-            distance_m=float(actor.longitudinal_distance_m),
-            speed_mps=float(actor.speed_mps),
-            relative_speed_mps=0.0,
-            is_stopped=float(actor.speed_mps) <= stopped_speed_threshold_mps,
-        )
-        for actor in tracked_objects
-        if (
-            actor.relation == "same_lane"
-            and actor.is_ahead
-            and actor.longitudinal_distance_m is not None
-            and float(actor.longitudinal_distance_m) > 0.0
-        )
-    ]
-    return target_policy(
-        leads,
-        cluster_merge_gap_m=cluster_merge_gap_m,
-        cluster_max_member_speed_mps=cluster_max_member_speed_mps,
-    )
-
-
-def build_route_aligned_stopped_targets(
-    tracked_objects: tuple[Any, ...],
-    *,
-    target_policy: TargetPolicy,
-    route_index: int | None,
-    base_trace: list[tuple[Any, Any]],
-    route_point_to_trace_index: list[int],
-    route_point_progress_m: list[float],
-    stopped_speed_threshold_mps: float,
-    cluster_merge_gap_m: float,
-    cluster_max_member_speed_mps: float,
-) -> list[OvertakeTargetSnapshot]:
-    if route_index is None or not base_trace or not route_point_to_trace_index or not route_point_progress_m:
-        return []
-
-    bounded_route_index = max(0, min(route_index, len(route_point_to_trace_index) - 1))
-    leads: list[OvertakeLeadSnapshot] = []
-    for actor in tracked_objects:
-        if actor.actor_id is None or actor.lane_id is None:
-            continue
-        if float(actor.speed_mps) > stopped_speed_threshold_mps:
-            continue
-        route_distance_m, route_distance_to_centerline_m, route_lane_id = route_relative_progress_to_actor(
-            actor=actor,
-            reference_route_index=bounded_route_index,
-            base_trace=base_trace,
-            route_point_to_trace_index=route_point_to_trace_index,
-            route_point_progress_m=route_point_progress_m,
-            search_back_points=0,
-        )
-        if route_distance_m is None or route_distance_to_centerline_m > 4.0:
-            continue
-        if route_lane_id != actor.lane_id:
-            continue
-        if route_distance_m <= 0.0:
-            continue
-        leads.append(
-            OvertakeLeadSnapshot(
-                actor_id=actor.actor_id,
-                lane_id=actor.lane_id,
-                distance_m=float(route_distance_m),
-                speed_mps=float(actor.speed_mps),
-                relative_speed_mps=0.0,
-                is_stopped=True,
-            )
-        )
-    return target_policy(
-        leads,
-        cluster_merge_gap_m=cluster_merge_gap_m,
-        cluster_max_member_speed_mps=cluster_max_member_speed_mps,
-    )
 
 
 def enrich_targets_with_adjacent_lane_availability(
@@ -294,6 +160,7 @@ def build_overtake_scene_snapshot(
     stopped_speed_threshold_mps: float,
     cluster_merge_gap_m: float,
     cluster_max_member_speed_mps: float,
+    candidate_builder: TargetCandidateBuilder,
     target_policy: TargetPolicy,
     active_signal_state: str | None,
     signal_stop_distance_m: float | None,
@@ -303,78 +170,76 @@ def build_overtake_scene_snapshot(
     carla_module: Any,
     base_trace: list[tuple[Any, Any]],
     route_point_to_trace_index: list[int],
-    route_point_progress_m: list[float],
+    route_point_progress_m: list[int] | list[float],
 ) -> OvertakeSceneSnapshot:
-    lead_vehicle = nearest_lead(tracked_objects, relation="same_lane")
-    same_lane_stopped_targets = build_same_lane_stopped_targets(
-        tracked_objects,
-        target_policy=target_policy,
-        stopped_speed_threshold_mps=stopped_speed_threshold_mps,
-        cluster_merge_gap_m=cluster_merge_gap_m,
-        cluster_max_member_speed_mps=cluster_max_member_speed_mps,
-    )
-    route_aligned_stopped_targets = build_route_aligned_stopped_targets(
-        tracked_objects,
-        target_policy=target_policy,
+    follow_actor = nearest_lead(tracked_objects, relation="same_lane")
+    target_candidates = candidate_builder(
+        tracked_objects=tracked_objects,
         route_index=route_index,
         base_trace=base_trace,
         route_point_to_trace_index=route_point_to_trace_index,
         route_point_progress_m=route_point_progress_m,
         stopped_speed_threshold_mps=stopped_speed_threshold_mps,
+    )
+    same_lane_targets = target_policy(
+        target_candidates.same_lane,
         cluster_merge_gap_m=cluster_merge_gap_m,
         cluster_max_member_speed_mps=cluster_max_member_speed_mps,
     )
-    route_aligned_stopped_targets = enrich_targets_with_adjacent_lane_availability(
-        route_aligned_stopped_targets,
+    route_aligned_targets = target_policy(
+        target_candidates.route_aligned,
+        cluster_merge_gap_m=cluster_merge_gap_m,
+        cluster_max_member_speed_mps=cluster_max_member_speed_mps,
+    )
+    route_aligned_targets = enrich_targets_with_adjacent_lane_availability(
+        route_aligned_targets,
         tracked_objects=tracked_objects,
         world_map=world_map,
         carla_module=carla_module,
     )
-    stopped_targets = (
-        same_lane_stopped_targets if same_lane_stopped_targets else route_aligned_stopped_targets
-    )
-    active_target = stopped_targets[0] if stopped_targets else None
+    resolved_targets = same_lane_targets if same_lane_targets else route_aligned_targets
+    active_target = resolved_targets[0] if resolved_targets else None
 
-    same_lane_lead_distance_m = (
-        float(lead_vehicle.longitudinal_distance_m)
-        if lead_vehicle is not None and lead_vehicle.longitudinal_distance_m is not None
+    same_lane_follow_distance_m = (
+        float(follow_actor.longitudinal_distance_m)
+        if follow_actor is not None and follow_actor.longitudinal_distance_m is not None
         else None
     )
-    same_lane_lead_speed_mps = float(lead_vehicle.speed_mps) if lead_vehicle is not None else 0.0
-    lead_distance_m = (
-        same_lane_lead_distance_m
-        if same_lane_lead_distance_m is not None
+    same_lane_follow_speed_mps = float(follow_actor.speed_mps) if follow_actor is not None else 0.0
+    follow_distance_m = (
+        same_lane_follow_distance_m
+        if same_lane_follow_distance_m is not None
         else (float(active_target.entry_distance_m) if active_target is not None else None)
     )
-    lead_speed_mps = (
-        same_lane_lead_speed_mps
-        if same_lane_lead_distance_m is not None
+    follow_speed_mps = (
+        same_lane_follow_speed_mps
+        if same_lane_follow_distance_m is not None
         else (float(active_target.speed_mps) if active_target is not None else 0.0)
     )
-    closing_speed_mps = current_speed_mps - lead_speed_mps if lead_distance_m is not None else 0.0
+    closing_speed_mps = current_speed_mps - follow_speed_mps if follow_distance_m is not None else 0.0
 
     min_ttc = float("inf")
-    if lead_distance_m is not None and closing_speed_mps > 1e-3:
-        min_ttc = lead_distance_m / closing_speed_mps
+    if follow_distance_m is not None and closing_speed_mps > 1e-3:
+        min_ttc = follow_distance_m / closing_speed_mps
 
     same_lane_min_ttc = float("inf")
     same_lane_closing_speed_mps = (
-        current_speed_mps - same_lane_lead_speed_mps
-        if same_lane_lead_distance_m is not None
+        current_speed_mps - same_lane_follow_speed_mps
+        if same_lane_follow_distance_m is not None
         else 0.0
     )
-    if same_lane_lead_distance_m is not None and same_lane_closing_speed_mps > 1e-3:
-        same_lane_min_ttc = same_lane_lead_distance_m / same_lane_closing_speed_mps
+    if same_lane_follow_distance_m is not None and same_lane_closing_speed_mps > 1e-3:
+        same_lane_min_ttc = same_lane_follow_distance_m / same_lane_closing_speed_mps
 
     follow_target_speed_kmh = target_speed_kmh
-    if lead_distance_m is not None:
+    if follow_distance_m is not None:
         distance_limited_speed_kmh = max(
             0.0,
-            (lead_distance_m / max(follow_headway_seconds, 0.25)) * 3.6,
+            (follow_distance_m / max(follow_headway_seconds, 0.25)) * 3.6,
         )
         follow_target_speed_kmh = min(
             target_speed_kmh,
-            (lead_speed_mps * 3.6) + 2.0,
+            (follow_speed_mps * 3.6) + 2.0,
             distance_limited_speed_kmh,
         )
 
@@ -403,23 +268,23 @@ def build_overtake_scene_snapshot(
         stopped_speed_threshold_mps=stopped_speed_threshold_mps,
         lead=OvertakeLeadSnapshot(
             actor_id=(
-                lead_vehicle.actor_id
-                if lead_vehicle is not None
+                follow_actor.actor_id
+                if follow_actor is not None
                 else active_target.primary_actor_id
                 if active_target is not None
                 else None
             ),
             lane_id=(
-                lead_vehicle.lane_id
-                if lead_vehicle is not None
+                follow_actor.lane_id
+                if follow_actor is not None
                 else active_target.lane_id
                 if active_target is not None
                 else None
             ),
-            distance_m=lead_distance_m,
-            speed_mps=lead_speed_mps,
+            distance_m=follow_distance_m,
+            speed_mps=follow_speed_mps,
             relative_speed_mps=closing_speed_mps,
-            is_stopped=lead_speed_mps <= stopped_speed_threshold_mps,
+            is_stopped=follow_speed_mps <= stopped_speed_threshold_mps,
         ),
         left_lane=left_lane_snapshot,
         right_lane=right_lane_snapshot,
@@ -430,13 +295,13 @@ def build_overtake_scene_snapshot(
         active_target=active_target,
     )
     return OvertakeSceneSnapshot(
-        lead_vehicle=lead_vehicle,
+        follow_actor=follow_actor,
         active_target=active_target,
         decision_context=decision_context,
-        lead_distance_m=lead_distance_m,
-        lead_speed_mps=lead_speed_mps,
-        same_lane_lead_distance_m=same_lane_lead_distance_m,
-        same_lane_lead_speed_mps=same_lane_lead_speed_mps,
+        follow_distance_m=follow_distance_m,
+        follow_speed_mps=follow_speed_mps,
+        same_lane_follow_distance_m=same_lane_follow_distance_m,
+        same_lane_follow_speed_mps=same_lane_follow_speed_mps,
         closing_speed_mps=closing_speed_mps,
         min_ttc=min_ttc,
         same_lane_min_ttc=same_lane_min_ttc,
@@ -497,22 +362,8 @@ def build_overtake_pass_snapshot(
                 and route_relative_progress_m is not None
             ):
                 target_longitudinal_distance_m = route_relative_progress_m
-    if target_longitudinal_distance_m is None:
-        target_longitudinal_distance_m = (
-            float(target_actor.longitudinal_distance_m)
-            if target_actor is not None and target_actor.longitudinal_distance_m is not None
-            else None
-        )
     if visible_route_relative_progress_m:
         target_exit_longitudinal_distance_m = max(visible_route_relative_progress_m)
-    else:
-        visible_longitudinal_distances = [
-            float(actor.longitudinal_distance_m)
-            for actor in visible_target_actors
-            if actor.longitudinal_distance_m is not None
-        ]
-        if visible_longitudinal_distances:
-            target_exit_longitudinal_distance_m = max(visible_longitudinal_distances)
     return OvertakePassSnapshot(
         target_actor=target_actor,
         visible_target_actors=visible_target_actors,

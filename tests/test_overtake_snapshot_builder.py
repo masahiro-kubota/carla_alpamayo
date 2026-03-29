@@ -7,6 +7,7 @@ from ad_stack.overtake import build_stopped_obstacle_targets
 from ad_stack.overtake.infrastructure.carla import (
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
+    build_target_candidates,
 )
 
 
@@ -97,6 +98,44 @@ class _TrackedActor:
 
 
 class OvertakeSceneSnapshotTests(unittest.TestCase):
+    def test_build_target_candidates_keeps_route_aligned_non_stopped_actor(self) -> None:
+        route_start_waypoint = _FakeWaypoint(
+            road_id=15,
+            lane_id=1,
+            s=0.0,
+            location=_FakeLocation(0.0, -2.0, 0.0),
+        )
+        route_waypoint = _FakeWaypoint(
+            road_id=13,
+            lane_id=-1,
+            s=24.0,
+            location=_FakeLocation(24.0, 0.0, 0.0),
+        )
+
+        candidates = build_target_candidates(
+            tracked_objects=(
+                _TrackedActor(
+                    actor_id=302,
+                    lane_id="13:-1",
+                    x_m=24.0,
+                    y_m=0.0,
+                    speed_mps=3.0,
+                    relation="left_lane",
+                    is_ahead=True,
+                    longitudinal_distance_m=24.0,
+                ),
+            ),
+            route_index=0,
+            base_trace=[(route_start_waypoint, None), (route_waypoint, None)],
+            route_point_to_trace_index=[0, 1],
+            route_point_progress_m=[0.0, 24.0],
+            stopped_speed_threshold_mps=0.3,
+        )
+
+        self.assertEqual(len(candidates.same_lane), 0)
+        self.assertEqual(len(candidates.route_aligned), 1)
+        self.assertFalse(candidates.route_aligned[0].is_stopped)
+
     def test_prefers_same_lane_stopped_target_and_builds_context(self) -> None:
         ego_waypoint = _FakeWaypoint(
             road_id=15,
@@ -138,6 +177,7 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
             stopped_speed_threshold_mps=0.3,
             cluster_merge_gap_m=10.0,
             cluster_max_member_speed_mps=0.5,
+            candidate_builder=build_target_candidates,
             target_policy=build_stopped_obstacle_targets,
             active_signal_state=None,
             signal_stop_distance_m=None,
@@ -151,7 +191,7 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
         )
 
         self.assertEqual(snapshot.active_target.primary_actor_id, 101)
-        self.assertEqual(snapshot.lead_distance_m, 18.0)
+        self.assertEqual(snapshot.follow_distance_m, 18.0)
         self.assertTrue(snapshot.decision_context.left_lane.lane_open)
         self.assertEqual(snapshot.decision_context.active_target.primary_actor_id, 101)
         self.assertLess(snapshot.follow_target_speed_kmh, 30.0)
@@ -214,6 +254,7 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
             stopped_speed_threshold_mps=0.3,
             cluster_merge_gap_m=10.0,
             cluster_max_member_speed_mps=0.5,
+            candidate_builder=build_target_candidates,
             target_policy=build_stopped_obstacle_targets,
             active_signal_state=None,
             signal_stop_distance_m=None,
@@ -226,10 +267,10 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
             route_point_progress_m=[0.0, 24.0],
         )
 
-        self.assertIsNone(snapshot.lead_vehicle)
+        self.assertIsNone(snapshot.follow_actor)
         self.assertEqual(snapshot.active_target.primary_actor_id, 301)
         self.assertEqual(snapshot.decision_context.active_target.lane_id, "13:-1")
-        self.assertEqual(snapshot.lead_distance_m, 24.0)
+        self.assertEqual(snapshot.follow_distance_m, 24.0)
 
     def test_build_overtake_pass_snapshot_prefers_route_relative_progress(self) -> None:
         route_start_waypoint = _FakeWaypoint(

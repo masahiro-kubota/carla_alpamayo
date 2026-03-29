@@ -7,21 +7,20 @@ from typing import TYPE_CHECKING, Any, Literal
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake import (
     OvertakeRuntimeState,
-    build_stopped_obstacle_targets,
-    choose_overtake_action,
     evaluate_pass_progress,
     is_traffic_light_violation,
+    OvertakeStepRequest,
     resolve_active_light,
-    resolve_overtake_runtime_transition,
+    resolve_overtake_step,
     should_stop_for_light,
-    should_begin_rejoin,
     speed_control,
     traffic_light_stop_control,
     traffic_light_stop_target_distance_m,
-    traffic_light_stop_target_speed_kmh,
 )
+from ad_stack.overtake.policies import TargetPolicy
 from ad_stack.overtake.infrastructure.carla import (
     OvertakeExecutionManager,
+    build_target_candidates,
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
     build_overtake_planning_debug,
@@ -80,6 +79,7 @@ class ExpertBasicAgent:
         world_map: Any,
         *,
         config: ExpertBasicAgentConfig | None = None,
+        target_policy: TargetPolicy,
     ) -> None:
         import carla
 
@@ -118,6 +118,7 @@ class ExpertBasicAgent:
         self._route_point_progress_m: list[float] = []
         self._max_route_index: int = 0
         self._overtake = OvertakeRuntimeState()
+        self._target_policy = target_policy
         self._execution = OvertakeExecutionManager(
             local_agent=self._agent,
             sampling_resolution_m=self.config.sampling_resolution_m,
@@ -209,7 +210,8 @@ class ExpertBasicAgent:
             stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
             cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
-            target_policy=build_stopped_obstacle_targets,
+            candidate_builder=build_target_candidates,
+            target_policy=self._target_policy,
             active_signal_state=active_light.state if active_light is not None else None,
             signal_stop_distance_m=(
                 active_light.stop_line_distance_m if active_light is not None else None
@@ -222,17 +224,16 @@ class ExpertBasicAgent:
             route_point_to_trace_index=self._route_point_to_trace_index,
             route_point_progress_m=self._route_point_progress_m,
         )
-        lead_vehicle = overtake_scene.lead_vehicle
+        follow_actor = overtake_scene.follow_actor
         active_overtake_target = overtake_scene.active_target
-        lead_distance_m = overtake_scene.lead_distance_m
-        lead_speed_mps = overtake_scene.lead_speed_mps
-        same_lane_lead_distance_m = overtake_scene.same_lane_lead_distance_m
-        same_lane_lead_speed_mps = overtake_scene.same_lane_lead_speed_mps
+        follow_distance_m = overtake_scene.follow_distance_m
+        follow_speed_mps = overtake_scene.follow_speed_mps
+        same_lane_follow_distance_m = overtake_scene.same_lane_follow_distance_m
+        same_lane_follow_speed_mps = overtake_scene.same_lane_follow_speed_mps
         closing_speed_mps = overtake_scene.closing_speed_mps
         min_ttc = overtake_scene.min_ttc
         same_lane_min_ttc = overtake_scene.same_lane_min_ttc
         follow_target_speed_kmh = overtake_scene.follow_target_speed_kmh
-        lead_speed_kmh = lead_speed_mps * 3.6
         left_front_gap_m = overtake_scene.left_front_gap_m
         left_rear_gap_m = overtake_scene.left_rear_gap_m
         right_front_gap_m = overtake_scene.right_front_gap_m
@@ -265,51 +266,6 @@ class ExpertBasicAgent:
             yellow_stop_margin_seconds=self.config.yellow_stop_margin_seconds,
         )
 
-        if self._overtake.state != "idle":
-            transition = resolve_overtake_runtime_transition(
-                state=self._overtake.state,
-                aborted=self._overtake.aborted,
-                current_lane_id=current_lane_id,
-                target_lane_id=self._execution.target_lane_id,
-                origin_lane_id=self._overtake.origin_lane_id,
-                route_target_lane_id=scene_state.route.target_lane_id,
-                lane_center_offset_m=lane_center_offset_m,
-                should_stop_for_light=stop_for_light,
-                target_speed_kmh=self.config.target_speed_kmh,
-                follow_target_speed_kmh=follow_target_speed_kmh,
-                lead_speed_kmh=lead_speed_kmh,
-                overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
-            )
-            self._overtake.state = transition.state
-            self._overtake.aborted = transition.aborted
-            planner_state = transition.planner_state
-            if transition.limited_target_speed_kmh is not None:
-                target_speed_kmh = min(target_speed_kmh, transition.limited_target_speed_kmh)
-            if transition.should_prepare_abort_return:
-                self._execution.prepare_abort_return(
-                    carla_module=self._carla,
-                    direction=self._overtake.direction,
-                    route_index=route_index,
-                    base_trace=self._base_trace,
-                    route_point_to_trace_index=self._route_point_to_trace_index,
-                    origin_lane_id=self._overtake.origin_lane_id,
-                    target_lane_id=self._execution.target_lane_id,
-                    lane_change_distance_m=self.config.lane_change_distance_m,
-                )
-            if transition.event_overtake_abort:
-                event_flags["event_overtake_abort"] = True
-            if transition.completed:
-                if transition.event_overtake_success:
-                    event_flags["event_overtake_success"] = True
-                self._overtake.reset()
-                self._execution.clear()
-                self._execution.resume_base_route(
-                    route_index=route_index,
-                    base_trace=self._base_trace,
-                    route_point_to_trace_index=self._route_point_to_trace_index,
-                )
-                planner_state = "nominal_cruise"
-
         stop_target_distance_m = traffic_light_stop_target_distance_m(
             distance_m=(
                 active_light.stop_line_distance_m
@@ -318,102 +274,101 @@ class ExpertBasicAgent:
             ),
             stop_buffer_m=self.config.traffic_light_stop_buffer_m,
         )
-        if stop_for_light and self._overtake.state == "idle":
-            planner_state = "traffic_light_stop"
-            target_speed_kmh = traffic_light_stop_target_speed_kmh(
-                stop_target_distance_m=stop_target_distance_m,
+        step_decision = resolve_overtake_step(
+            OvertakeStepRequest(
+                runtime_state=self._overtake,
+                decision_context=overtake_scene.decision_context,
+                stop_for_light=stop_for_light,
+                ignore_traffic_lights=self.config.ignore_traffic_lights,
+                ignore_vehicles=self.config.ignore_vehicles,
+                lead_vehicle_present=follow_actor is not None,
+                active_target_present=active_overtake_target is not None,
+                lead_distance_m=follow_distance_m,
+                lead_speed_mps=follow_speed_mps,
+                follow_target_speed_kmh=follow_target_speed_kmh,
                 current_speed_mps=current_speed_mps,
+                current_lane_id=current_lane_id,
+                route_target_lane_id=scene_state.route.target_lane_id,
+                lane_center_offset_m=lane_center_offset_m,
                 target_speed_kmh=self.config.target_speed_kmh,
-                brake_start_distance_m=self.config.traffic_light_brake_start_distance_m,
-                creep_resume_distance_m=self.config.traffic_light_creep_resume_distance_m,
-                creep_speed_kmh=self.config.traffic_light_creep_speed_kmh,
-            )
-            if lead_vehicle is not None and not self.config.ignore_vehicles:
-                # Red-light stopping still needs to respect a stopped or slow lead in the same lane.
-                # Without this cap, the light-stop profile can keep throttle applied until the ego
-                # reaches the stop line even when a stationary obstacle is sitting well before it.
-                target_speed_kmh = min(target_speed_kmh, follow_target_speed_kmh)
-                if (
-                    self.config.allow_overtake
-                    and active_light is not None
-                    and active_light.state in {"red", "yellow"}
-                ):
-                    stop_distance = (
-                        active_light.stop_line_distance_m
-                        if active_light.stop_line_distance_m is not None
-                        else active_light.distance_m
-                    )
-                    if stop_distance <= self.config.overtake_signal_suppression_distance_m:
-                        overtake_considered = True
-                        overtake_reject_reason = "signal_suppressed"
-                        event_flags["event_unsafe_lane_change_reject"] = True
-        elif (
-            (lead_vehicle is not None or active_overtake_target is not None)
-            and not self.config.ignore_vehicles
-            and self._overtake.state == "idle"
-        ):
-            overtake_considered = True
-            overtake_decision = choose_overtake_action(
-                overtake_scene.decision_context,
-                overtake_trigger_distance_m=self.config.overtake_trigger_distance_m,
+                active_light_state=active_light.state if active_light is not None else None,
+                signal_stop_distance_m=stop_target_distance_m,
+                traffic_light_brake_start_distance_m=self.config.traffic_light_brake_start_distance_m,
+                traffic_light_creep_resume_distance_m=self.config.traffic_light_creep_resume_distance_m,
+                traffic_light_creep_speed_kmh=self.config.traffic_light_creep_speed_kmh,
                 overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
+                overtake_trigger_distance_m=self.config.overtake_trigger_distance_m,
                 overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
                 overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
-                signal_suppression_distance_m=self.config.overtake_signal_suppression_distance_m,
+                overtake_signal_suppression_distance_m=self.config.overtake_signal_suppression_distance_m,
             )
-            if overtake_decision.planner_state == "lane_change_out" and overtake_decision.direction is not None:
-                activation = self._execution.activate_overtake_plan(
-                    carla_module=self._carla,
-                    direction=overtake_decision.direction,
-                    route_index=route_index,
-                    base_trace=self._base_trace,
-                    route_point_to_trace_index=self._route_point_to_trace_index,
-                    distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
-                    lane_change_distance_m=self.config.lane_change_distance_m,
-                    overtake_hold_distance_m=self.config.overtake_hold_distance_m,
+        )
+        planner_state = step_decision.planner_state
+        target_speed_kmh = step_decision.target_speed_kmh
+        overtake_considered = step_decision.overtake_considered
+        overtake_reject_reason = step_decision.overtake_reject_reason
+        event_flags["event_traffic_light_stop"] = step_decision.event_flags.traffic_light_stop
+        event_flags["event_overtake_abort"] = step_decision.event_flags.overtake_abort
+        event_flags["event_overtake_success"] = step_decision.event_flags.overtake_success
+        event_flags["event_unsafe_lane_change_reject"] = (
+            step_decision.event_flags.unsafe_lane_change_reject
+        )
+        if step_decision.next_runtime_state is not None:
+            self._overtake.state = step_decision.next_runtime_state
+        if step_decision.next_aborted is not None:
+            self._overtake.aborted = step_decision.next_aborted
+        if step_decision.request_prepare_abort_return:
+            self._execution.prepare_abort_return(
+                carla_module=self._carla,
+                direction=self._overtake.direction,
+                route_index=route_index,
+                base_trace=self._base_trace,
+                route_point_to_trace_index=self._route_point_to_trace_index,
+                origin_lane_id=self._overtake.origin_lane_id,
+                target_lane_id=self._execution.target_lane_id,
+                lane_change_distance_m=self.config.lane_change_distance_m,
+            )
+        if step_decision.completed:
+            self._overtake.reset()
+            self._execution.clear()
+            self._execution.resume_base_route(
+                route_index=route_index,
+                base_trace=self._base_trace,
+                route_point_to_trace_index=self._route_point_to_trace_index,
+            )
+            planner_state = "nominal_cruise"
+        elif step_decision.request_overtake_direction is not None:
+            activation = self._execution.activate_overtake_plan(
+                carla_module=self._carla,
+                direction=step_decision.request_overtake_direction,
+                route_index=route_index,
+                base_trace=self._base_trace,
+                route_point_to_trace_index=self._route_point_to_trace_index,
+                distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
+                lane_change_distance_m=self.config.lane_change_distance_m,
+                overtake_hold_distance_m=self.config.overtake_hold_distance_m,
+            )
+            if activation.activated:
+                self._overtake.begin_lane_change_out(
+                    direction=step_decision.request_overtake_direction,
+                    origin_lane_id=current_lane_id,
+                    active_target=active_overtake_target,
+                    lead_actor_id=follow_actor.actor_id if follow_actor is not None else None,
+                    lead_lane_id=follow_actor.lane_id if follow_actor is not None else None,
+                    lead_distance_m=follow_distance_m,
+                    target_lane_id=activation.target_lane_id,
                 )
-                if activation.activated:
-                    self._overtake.begin_lane_change_out(
-                        direction=overtake_decision.direction,
-                        origin_lane_id=current_lane_id,
-                        active_target=active_overtake_target,
-                        lead_actor_id=lead_vehicle.actor_id if lead_vehicle is not None else None,
-                        lead_lane_id=lead_vehicle.lane_id if lead_vehicle is not None else None,
-                        lead_distance_m=lead_distance_m,
-                        target_lane_id=activation.target_lane_id,
-                    )
-                    planner_state = "lane_change_out"
-                    event_flags["event_overtake_attempt"] = True
-                    overtake_reject_reason = None
-                else:
-                    event_flags["event_unsafe_lane_change_reject"] = True
-                    planner_state = "car_follow"
-                    target_speed_kmh = follow_target_speed_kmh
-                    self._overtake.reset()
-                    overtake_reject_reason = (
-                        self._execution.lane_change_path.failure_reason or "lane_change_path_failed"
-                    )
+                planner_state = "lane_change_out"
+                event_flags["event_overtake_attempt"] = True
+                overtake_reject_reason = None
             else:
-                overtake_reject_reason = overtake_decision.reject_reason
-                if (
-                    overtake_reject_reason == "lead_out_of_range"
-                    and self.config.allow_overtake
-                    and lead_distance_m is not None
-                    and lead_distance_m > self.config.overtake_trigger_distance_m
-                    and lead_speed_mps <= 0.3
-                ):
-                    planner_state = "nominal_cruise"
-                    target_speed_kmh = self.config.target_speed_kmh
-                else:
-                    planner_state = "car_follow"
-                    target_speed_kmh = follow_target_speed_kmh
-                    if overtake_reject_reason in {
-                        "adjacent_front_gap_insufficient",
-                        "adjacent_rear_gap_insufficient",
-                        "adjacent_lane_closed",
-                        "signal_suppressed",
-                    }:
-                        event_flags["event_unsafe_lane_change_reject"] = True
+                self._overtake.reset()
+                planner_state = "car_follow"
+                target_speed_kmh = follow_target_speed_kmh
+                overtake_reject_reason = (
+                    self._execution.lane_change_path.failure_reason or "lane_change_path_failed"
+                )
+                event_flags["event_unsafe_lane_change_reject"] = True
 
         target_actor = None
         target_actor_visible = False
@@ -443,21 +398,42 @@ class ExpertBasicAgent:
                     scene_state.tracked_objects,
                     self._overtake.origin_lane_id,
                 )
-            if (
-                self._overtake.state == "pass_vehicle"
-                and not self._overtake.aborted
-                and should_begin_rejoin(
-                    self._overtake.memory,
+            rejoin_decision = resolve_overtake_step(
+                OvertakeStepRequest(
+                    runtime_state=self._overtake,
+                    decision_context=overtake_scene.decision_context,
+                    stop_for_light=stop_for_light,
+                    ignore_traffic_lights=self.config.ignore_traffic_lights,
+                    ignore_vehicles=self.config.ignore_vehicles,
+                    lead_vehicle_present=follow_actor is not None,
+                    active_target_present=active_overtake_target is not None,
+                    lead_distance_m=follow_distance_m,
+                    lead_speed_mps=follow_speed_mps,
+                    follow_target_speed_kmh=follow_target_speed_kmh,
+                    current_speed_mps=current_speed_mps,
+                    current_lane_id=current_lane_id,
+                    route_target_lane_id=scene_state.route.target_lane_id,
+                    lane_center_offset_m=lane_center_offset_m,
+                    target_speed_kmh=self.config.target_speed_kmh,
+                    active_light_state=active_light.state if active_light is not None else None,
+                    signal_stop_distance_m=stop_target_distance_m,
+                    traffic_light_brake_start_distance_m=self.config.traffic_light_brake_start_distance_m,
+                    traffic_light_creep_resume_distance_m=self.config.traffic_light_creep_resume_distance_m,
+                    traffic_light_creep_speed_kmh=self.config.traffic_light_creep_speed_kmh,
+                    overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
+                    overtake_trigger_distance_m=self.config.overtake_trigger_distance_m,
+                    overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
+                    overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
+                    overtake_signal_suppression_distance_m=self.config.overtake_signal_suppression_distance_m,
                     rejoin_front_gap_m=(
                         None if not math.isfinite(rejoin_front_gap_m) else rejoin_front_gap_m
                     ),
                     rejoin_rear_gap_m=(
                         None if not math.isfinite(rejoin_rear_gap_m) else rejoin_rear_gap_m
                     ),
-                    overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
-                    overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
                 )
-            ):
+            )
+            if rejoin_decision.request_rejoin:
                 rejoin_activation = self._execution.try_activate_rejoin_plan(
                     carla_module=self._carla,
                     direction=self._overtake.direction,
@@ -501,9 +477,9 @@ class ExpertBasicAgent:
 
         emergency_stop = (
             not self.config.ignore_vehicles
-            and same_lane_lead_distance_m is not None
+            and same_lane_follow_distance_m is not None
             and (
-                same_lane_lead_distance_m <= self.config.lead_brake_distance_m
+                same_lane_follow_distance_m <= self.config.lead_brake_distance_m
                 or (
                     math.isfinite(same_lane_min_ttc)
                     and same_lane_min_ttc <= self.config.ttc_emergency_threshold_s
@@ -563,10 +539,10 @@ class ExpertBasicAgent:
             traffic_light_stop_buffer_m=self.config.traffic_light_stop_buffer_m,
             traffic_light_stop_target_distance_m=stop_target_distance_m,
             target_speed_kmh=target_speed_kmh,
-            lead_vehicle=lead_vehicle,
+            follow_actor=follow_actor,
             active_target=active_overtake_target,
-            lead_distance_m=lead_distance_m,
-            lead_speed_mps=lead_speed_mps,
+            follow_distance_m=follow_distance_m,
+            follow_speed_mps=follow_speed_mps,
             closing_speed_mps=closing_speed_mps,
             left_lane_front_gap_m=left_front_gap_m,
             left_lane_rear_gap_m=left_rear_gap_m,

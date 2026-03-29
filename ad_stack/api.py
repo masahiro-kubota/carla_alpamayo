@@ -11,6 +11,7 @@ from ad_stack.agents import (
     LearnedLateralAgent,
     PilotNetScenePolicy,
 )
+from ad_stack.overtake import build_stopped_obstacle_targets
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.runtime import ObservationBuilder
@@ -446,6 +447,7 @@ class ExpertCollectorStack(_RouteSceneMixin):
                 ignore_vehicles=ignore_vehicles,
                 sampling_resolution_m=sampling_resolution_m,
             ),
+            target_policy=build_stopped_obstacle_targets,
         )
         self._agent.set_global_plan(planned_trace)
 
@@ -530,6 +532,7 @@ class PilotNetEvalStack(_RouteSceneMixin):
                 ignore_vehicles=ignore_vehicles,
                 sampling_resolution_m=sampling_resolution_m,
             ),
+            target_policy=build_stopped_obstacle_targets,
         )
         self._expert_agent.set_global_plan(planned_trace)
         self._latest_expert_decision: ControlDecision | None = None
