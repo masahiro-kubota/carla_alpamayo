@@ -1,18 +1,16 @@
 # Near Junction Preflight Reject Scenario
 
-停止障害物はあるが junction / signal が近すぎるため、scenario validation の時点で baseline 対象外にする scenario です。
+停止障害物はあるが junction / signal が近すぎるため、preflight で invalid にする scenario です。
 
 ## Status
 
 - verified
 
-## Run Config
+## Inspection Command
 
-- [town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json)
-
-## Verified Artifacts
-
-- [inspection.json](/home/masa/carla_alpamayo/outputs/inspect/stopped_obstacle/20260329_063304_town01_stopped_obstacle_near_junction_preflight_reject_long_expert_inspect_1ef07664deb9.json)
+```bash
+uv run python /media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py --allow-invalid /media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json
+```
 
 ## Scenario Contract
 
@@ -24,19 +22,9 @@
 ### Preflight
 
 - `scenario_validation.valid = false`
-- reason に `junction_nearby` または `signal_nearby`
+- `junction_nearby` または `signal_nearby` を含む
 
-### Runtime
+## Source Of Truth
 
-- baseline regression runner には含めない
-- route-loop 実行前に inspector contract で invalid と分かる
-
-## Verification Verdict
-
-- `PASS`
-- `scenario_validation.valid = false`
-- `scenario_validation.errors = [\"junction_nearby\"]`
-
-## Why This Matters
-
-- 「走らせない」ことも integration suite の契約に入れる
+- scenario matrix: [scenario_matrix.py](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/scenario_matrix.py)
+- inspector contract: [overtake_scenario_contract.py](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/_shared/overtake_scenario_contract.py)

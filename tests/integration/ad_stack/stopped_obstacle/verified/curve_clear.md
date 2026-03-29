@@ -8,49 +8,39 @@
 
 ## Run Config
 
-- [town01_stopped_obstacle_curve_clear_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_curve_clear_long_expert.json)
-
-## Verified Artifacts
-
-- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_160234_town01_curve_overtake_clear_expert_eval_b924c52bb855/summary.json)
-- [manifest.jsonl](/home/masa/carla_alpamayo/outputs/evaluate/20260329_160234_town01_curve_overtake_clear_expert_eval_b924c52bb855/manifest.jsonl)
+- [town01_stopped_obstacle_curve_clear_long_expert.json](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_curve_clear_long_expert.json)
 
 ## Scenario Contract
 
-- カーブ区間上に same-lane 停止障害物が 1 台
+- route 進行先の curve 上に停止障害物がある
 - adjacent lane は clear
-- junction / signal は十分遠い
 
 ## Expectations
 
 ### Target Actor
 
-- `follow_target_id` は停止障害物 actor に収束する
+- same-lane でまだ見えていなくても route-aligned target として観測できる
 
 ### Reject / Wait
 
-- trigger 条件を満たしたら `lane_change_out`
+- curve 進入前後で target acquisition が崩れない
 
 ### Pass / Rejoin
 
-- `lane_change_out -> pass_vehicle -> lane_change_back`
-- route progress は単調増加
-- opposite lane native direction に引っ張られない
+- カーブでも `lane_change_out -> pass_vehicle -> lane_change_back` が成立する
+
+## Why This Matters
+
+- 直線 corridor だけに過学習していないことを確認します。
 
 ### Summary Acceptance
 
 - `success = true`
 - `collision_count = 0`
+- `overtake_attempt_count >= 1`
 - `overtake_success_count >= 1`
 
-## Verification Verdict
+## Source Of Truth
 
-- `PASS`
-- `success = true`
-- `collision_count = 0`
-- `overtake_attempt_count = 1`
-- `overtake_success_count = 1`
-
-## Why This Matters
-
-- route-aligned lane-change plan の単調性を実 world で確認する
+- scenario matrix: [scenario_matrix.py](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/scenario_matrix.py)
+- summary / manifest assertions: [assertions.py](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/assertions.py)

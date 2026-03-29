@@ -1,6 +1,6 @@
 # Temporary Target Occlusion Scenario
 
-追い越し対象 actor が一時的に tracking から消えても、即 `passed` 扱いしないことを runtime で確認する scenario です。
+追い越し対象 actor が一時的に tracking から消えても、即 `passed` 扱いしないことを確認する scenario です。
 
 ## Status
 
@@ -8,7 +8,7 @@
 
 ## Planned Run Config
 
-- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_temporary_target_occlusion_long_expert.json`
+- `/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_temporary_target_occlusion_long_expert.json`
 
 ## Scenario Contract
 
@@ -29,7 +29,11 @@
 ### Pass / Rejoin
 
 - visibility timeout 前は `target_passed = false`
-- reacquisition か、actor が本当に後方へ回った時点でのみ pass 完了
+- reacquisition か actor が本当に後方へ回った時点でのみ pass 完了する
+
+## Why This Matters
+
+- runtime より unit test 主戦場ですが、将来 deterministic に作れたら integration でも押さえたい edge case です。
 
 ### Summary Acceptance
 
@@ -38,5 +42,4 @@
 
 ## Why Deferred
 
-- deterministic に欠落条件を作るのが難しい
-- unit test のほうが先に主戦場になる
+- runtime より unit test 主戦場ですが、将来 deterministic に作れたら integration でも押さえたい edge case です。

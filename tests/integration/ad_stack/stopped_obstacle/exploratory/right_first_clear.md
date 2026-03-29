@@ -8,7 +8,7 @@
 
 ## Planned Run Config
 
-- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_right_first_clear_long_expert.json`
+- `/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_right_first_clear_long_expert.json`
 
 ## Scenario Contract
 
@@ -32,6 +32,10 @@
 - 右側へ `lane_change_out`
 - `pass_vehicle -> lane_change_back`
 
+## Why This Matters
+
+- Town01 で自然な両側成立 corridor が見つかったら昇格する候補です。
+
 ### Summary Acceptance
 
 - `collision_count = 0`
@@ -39,5 +43,4 @@
 
 ## Why Deferred
 
-- Town01 で自然に両側成立する直線区間を用意する難度が高い
-- pure logic の単体テスト価値のほうが先に大きい
+- Town01 で自然な両側成立 corridor が見つかったら昇格する候補です。

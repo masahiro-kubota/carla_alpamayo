@@ -1,6 +1,6 @@
 # Adjacent Lane Closed Scenario
 
-停止障害物は前方にあるが、隣接 lane 自体が使えないため追い越しを開始しない scenario です。
+停止障害物はあるが、隣接 lane 自体が利用不可で出られない scenario です。
 
 ## Status
 
@@ -8,18 +8,12 @@
 
 ## Run Config
 
-- [town01_stopped_obstacle_adjacent_lane_closed_long_expert.json](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json)
-
-## Verified Artifacts
-
-- [summary.json](/home/masa/carla_alpamayo/outputs/evaluate/20260329_155831_town01_adjacent_lane_closed_corridor_expert_eval_fa9deeaa0a73/summary.json)
-- [manifest.jsonl](/home/masa/carla_alpamayo/outputs/evaluate/20260329_155831_town01_adjacent_lane_closed_corridor_expert_eval_fa9deeaa0a73/manifest.jsonl)
+- [town01_stopped_obstacle_adjacent_lane_closed_long_expert.json](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json)
 
 ## Scenario Contract
 
 - same-lane に停止障害物が 1 台
-- adjacent lane が `Driving` でない、または route 上で継続利用できない
-- gap が空いていても lane 自体は closed
+- route-aligned adjacent lane が `Driving` でないか corridor として利用不可
 
 ## Expectations
 
@@ -29,28 +23,26 @@
 
 ### Reject / Wait
 
-- `overtake_reject_reason = adjacent_lane_closed`
-- `lane_change_out` に入らない
+- `adjacent_lane_closed` で抑制される
+- gap の大小ではなく lane availability で reject される
 
 ### Pass / Rejoin
 
-- `pass_vehicle` に入らない
-- `lane_change_back` に入らない
+- route-loop は stall で終わる
+
+## Why This Matters
+
+- gap 不足と lane unavailable を分けて扱えているかを見る scenario です。
 
 ### Summary Acceptance
 
+- `success = false`
+- `failure_reason = stalled`
 - `collision_count = 0`
 - `overtake_attempt_count = 0`
 - `unsafe_lane_change_reject_count >= 1`
 
-## Verification Verdict
+## Source Of Truth
 
-- `PASS`
-- `overtake_attempt_count = 0`
-- `unsafe_lane_change_reject_count = 417`
-- manifest 上でも `overtake_reject_reason = adjacent_lane_closed`
-
-## Why This Matters
-
-- gap 不足と lane invalid を分離して扱えているかを見る
-- preflight validation と runtime reject の整合を確認する
+- scenario matrix: [scenario_matrix.py](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/scenario_matrix.py)
+- summary / manifest assertions: [assertions.py](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/assertions.py)
