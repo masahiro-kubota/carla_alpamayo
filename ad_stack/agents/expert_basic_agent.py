@@ -1099,9 +1099,17 @@ class ExpertBasicAgent:
 
             if (
                 current_lane_id is not None
-                and self._overtake_origin_lane_id is not None
-                and current_lane_id == self._overtake_origin_lane_id
                 and self._overtake_state in {"lane_change_back", "abort_return"}
+                and (
+                    (
+                        self._overtake_origin_lane_id is not None
+                        and current_lane_id == self._overtake_origin_lane_id
+                    )
+                    or (
+                        scene_state.route.target_lane_id is not None
+                        and current_lane_id == scene_state.route.target_lane_id
+                    )
+                )
                 and (lane_center_offset_m is None or lane_center_offset_m <= 0.75)
             ):
                 if not self._overtake_aborted:
