@@ -131,7 +131,6 @@ class OvertakeCoreTelemetry:
     target_speed_kmh: float
     target_lane_id: str | None
     min_ttc: float | None
-    emergency_stop: bool
     event_flags: OvertakeEventFlags
 
 

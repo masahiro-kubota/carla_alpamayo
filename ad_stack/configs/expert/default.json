@@ -14,8 +14,6 @@
   "overtake_resume_front_gap_m": 12.0,
   "preferred_deceleration_mps2": 4.0,
   "reaction_margin_m": 2.0,
-  "ttc_emergency_threshold_s": 0.75,
-  "lead_brake_distance_m": 4.5,
   "allow_overtake": true,
   "preferred_overtake_direction": "left_first",
   "lane_change_same_lane_distance_m": 6.0,

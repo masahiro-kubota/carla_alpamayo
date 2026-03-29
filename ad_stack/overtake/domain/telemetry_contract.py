@@ -57,7 +57,6 @@ OVERTAKE_PLANNING_DEBUG_CORE_FIELDS: tuple[TelemetryFieldSpec, ...] = (
         include_in_mcap=False,
     ),
     TelemetryFieldSpec("min_ttc", ("min_ttc",), ("number", "null"), include_in_mcap=False),
-    TelemetryFieldSpec("emergency_stop", ("emergency_stop",), ("boolean",)),
     TelemetryFieldSpec("event_traffic_light_stop", ("event_flags", "traffic_light_stop"), ("boolean",)),
     TelemetryFieldSpec(
         "event_traffic_light_resume",

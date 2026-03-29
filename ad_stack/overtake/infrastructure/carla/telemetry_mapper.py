@@ -228,7 +228,6 @@ def build_overtake_planning_debug(
     lane_change_path_failed_reason: str | None,
     target_lane_id: str | None,
     min_ttc: float,
-    emergency_stop: bool,
     event_flags: dict[str, Any],
 ) -> OvertakePlanningDebug:
     core_event_flags = OvertakeEventFlags(
@@ -263,7 +262,6 @@ def build_overtake_planning_debug(
             target_speed_kmh=target_speed_kmh,
             target_lane_id=target_lane_id,
             min_ttc=_finite_or_none(min_ttc),
-            emergency_stop=emergency_stop,
             event_flags=core_event_flags,
         ),
         target=OvertakeTargetTelemetry(
