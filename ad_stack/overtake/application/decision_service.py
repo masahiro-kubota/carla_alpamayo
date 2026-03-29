@@ -8,6 +8,7 @@ from ad_stack.overtake.domain import (
     OvertakeMemory,
     TargetKind,
 )
+from ad_stack.overtake.policies import TargetAcceptancePolicy, TargetAcceptanceRequest
 
 
 def _lane_gap_value(gap_m: float | None) -> float:
@@ -22,25 +23,32 @@ def choose_overtake_action(
     overtake_min_front_gap_m: float,
     overtake_min_rear_gap_m: float,
     signal_suppression_distance_m: float,
+    target_acceptance_policy: TargetAcceptancePolicy,
 ) -> OvertakeDecision:
     active_target = context.active_target
     target_distance_m = active_target.entry_distance_m if active_target is not None else None
     target_speed_mps = active_target.speed_mps if active_target is not None else None
-    target_is_stopped = active_target.is_stopped if active_target is not None else None
     if not context.allow_overtake:
         return OvertakeDecision("car_follow", reject_reason="overtake_disabled")
     if target_distance_m is None and context.lead is not None:
         target_distance_m = context.lead.distance_m
         target_speed_mps = context.lead.speed_mps
-        target_is_stopped = context.lead.is_stopped
-    if target_distance_m is None:
-        return OvertakeDecision("car_follow", reject_reason="lead_distance_unavailable")
-    if target_distance_m > overtake_trigger_distance_m:
-        return OvertakeDecision("car_follow", reject_reason="lead_out_of_range")
-    if not bool(target_is_stopped) and (float(target_speed_mps or 0.0) * 3.6) > (
-        context.target_speed_kmh - overtake_speed_delta_kmh
-    ):
-        return OvertakeDecision("car_follow", reject_reason="lead_not_slow_enough")
+    target_acceptance = target_acceptance_policy(
+        TargetAcceptanceRequest(
+            context=context,
+            lead=context.lead,
+            active_target=active_target,
+            target_distance_m=target_distance_m,
+            target_speed_mps=target_speed_mps,
+            overtake_trigger_distance_m=overtake_trigger_distance_m,
+            overtake_speed_delta_kmh=overtake_speed_delta_kmh,
+        )
+    )
+    if not target_acceptance.accepted:
+        return OvertakeDecision(
+            target_acceptance.planner_state_on_reject,
+            reject_reason=target_acceptance.reject_reason,
+        )
     if (
         context.active_signal_state in {"red", "yellow"}
         and context.signal_stop_distance_m is not None

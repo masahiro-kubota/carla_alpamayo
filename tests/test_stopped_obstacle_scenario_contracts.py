@@ -12,6 +12,7 @@ from ad_stack.overtake import (
     choose_overtake_action,
     should_begin_rejoin,
 )
+from ad_stack.overtake.policies import accept_stopped_overtake_target
 from libs.project import PROJECT_ROOT
 from simulation.environment_config import load_environment_config
 from simulation.pipelines.route_loop_run_config import load_route_loop_run_config, resolve_user_path
@@ -57,7 +58,6 @@ def _context(
         origin_lane_id="15:-1",
         route_target_lane_id="15:-1",
         target_speed_kmh=30.0,
-        stopped_speed_threshold_mps=0.3,
         lead=OvertakeLeadSnapshot(
             actor_id=101,
             lane_id="15:-1",
@@ -290,6 +290,7 @@ class StoppedObstacleScenarioContractTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "car_follow")
         self.assertEqual(decision.reject_reason, "signal_suppressed")
@@ -322,6 +323,7 @@ class StoppedObstacleScenarioContractTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "car_follow")
         self.assertEqual(decision.reject_reason, "adjacent_lane_closed")

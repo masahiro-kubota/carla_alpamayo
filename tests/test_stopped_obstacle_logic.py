@@ -17,6 +17,7 @@ from ad_stack.overtake import (
     next_stopped_obstacle_target,
     should_begin_rejoin,
 )
+from ad_stack.overtake.policies import accept_stopped_overtake_target
 from tests.integration.ad_stack._shared.overtake_scenario_contract import (
     PreflightValidationInput,
     validate_preflight,
@@ -45,7 +46,6 @@ def _context(
         origin_lane_id="15:-1",
         route_target_lane_id="15:-1",
         target_speed_kmh=30.0,
-        stopped_speed_threshold_mps=0.3,
         lead=(
             OvertakeLeadSnapshot(
                 actor_id=101,
@@ -79,7 +79,7 @@ def _context(
 
 
 class StoppedObstacleLogicTests(unittest.TestCase):
-    def test_overtake_rejects_when_lead_out_of_range(self) -> None:
+    def test_overtake_rejects_to_nominal_cruise_when_stopped_target_is_out_of_range(self) -> None:
         decision = choose_overtake_action(
             _context(lead_distance_m=50.0),
             overtake_trigger_distance_m=40.0,
@@ -87,9 +87,10 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
-        self.assertEqual(decision.planner_state, "car_follow")
-        self.assertEqual(decision.reject_reason, "lead_out_of_range")
+        self.assertEqual(decision.planner_state, "nominal_cruise")
+        self.assertEqual(decision.reject_reason, "target_out_of_range")
 
     def test_overtake_rejects_when_adjacent_front_gap_insufficient(self) -> None:
         decision = choose_overtake_action(
@@ -99,6 +100,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "car_follow")
         self.assertEqual(decision.reject_reason, "adjacent_front_gap_insufficient")
@@ -111,6 +113,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "car_follow")
         self.assertEqual(decision.reject_reason, "adjacent_rear_gap_insufficient")
@@ -123,6 +126,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "car_follow")
         self.assertEqual(decision.reject_reason, "signal_suppressed")
@@ -135,6 +139,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "lane_change_out")
         self.assertEqual(decision.direction, "left")
@@ -160,6 +165,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "lane_change_out")
         self.assertEqual(decision.direction, "left")
@@ -172,6 +178,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "lane_change_out")
         self.assertEqual(decision.direction, "left")
@@ -185,6 +192,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "lane_change_out")
         self.assertEqual(decision.direction, "right")
@@ -606,6 +614,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
         )
         self.assertEqual(decision.planner_state, "lane_change_out")
 

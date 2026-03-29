@@ -10,6 +10,7 @@ from ad_stack.overtake import (
     OvertakeTargetSnapshot,
     resolve_overtake_step,
 )
+from ad_stack.overtake.policies import accept_stopped_overtake_target
 
 
 def _context(**overrides) -> OvertakeContext:
@@ -19,7 +20,6 @@ def _context(**overrides) -> OvertakeContext:
         origin_lane_id=None,
         route_target_lane_id="15:-1",
         target_speed_kmh=30.0,
-        stopped_speed_threshold_mps=0.3,
         lead=None,
         left_lane=AdjacentLaneGapSnapshot(
             lane_id="15:1",
@@ -42,6 +42,7 @@ def _request(**overrides) -> OvertakeStepRequest:
     base = dict(
         runtime_state=OvertakeRuntimeState(),
         decision_context=_context(),
+        target_acceptance_policy=accept_stopped_overtake_target,
         stop_for_light=False,
         ignore_traffic_lights=False,
         ignore_vehicles=False,

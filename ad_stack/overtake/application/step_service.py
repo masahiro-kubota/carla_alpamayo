@@ -11,12 +11,14 @@ from ad_stack.overtake.application.decision_service import (
 from ad_stack.overtake.application.runtime_state import OvertakeRuntimeState
 from ad_stack.overtake.application.runtime_transition import resolve_overtake_runtime_transition
 from ad_stack.overtake.domain import OvertakeContext, OvertakeEventFlags
+from ad_stack.overtake.policies import TargetAcceptancePolicy
 
 
 @dataclass(frozen=True, slots=True)
 class OvertakeStepRequest:
     runtime_state: OvertakeRuntimeState
     decision_context: OvertakeContext
+    target_acceptance_policy: TargetAcceptancePolicy
     stop_for_light: bool
     ignore_traffic_lights: bool
     ignore_vehicles: bool
@@ -150,6 +152,7 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
             overtake_min_front_gap_m=request.overtake_min_front_gap_m,
             overtake_min_rear_gap_m=request.overtake_min_rear_gap_m,
             signal_suppression_distance_m=request.overtake_signal_suppression_distance_m,
+            target_acceptance_policy=request.target_acceptance_policy,
         )
         if (
             overtake_decision.planner_state == "lane_change_out"
@@ -163,13 +166,7 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
             )
 
         reject_reason = overtake_decision.reject_reason
-        if (
-            reject_reason == "lead_out_of_range"
-            and request.decision_context.allow_overtake
-            and request.lead_distance_m is not None
-            and request.lead_distance_m > request.overtake_trigger_distance_m
-            and request.lead_speed_mps <= 0.3
-        ):
+        if overtake_decision.planner_state == "nominal_cruise":
             return OvertakeStepDecision(
                 planner_state="nominal_cruise",
                 target_speed_kmh=request.target_speed_kmh,

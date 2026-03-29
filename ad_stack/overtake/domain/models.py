@@ -59,7 +59,6 @@ class OvertakeContext:
     origin_lane_id: str | None
     route_target_lane_id: str | None
     target_speed_kmh: float
-    stopped_speed_threshold_mps: float
     lead: OvertakeLeadSnapshot | None
     left_lane: AdjacentLaneGapSnapshot | None
     right_lane: AdjacentLaneGapSnapshot | None

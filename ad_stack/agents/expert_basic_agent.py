@@ -17,7 +17,7 @@ from ad_stack.overtake import (
     traffic_light_stop_control,
     traffic_light_stop_target_distance_m,
 )
-from ad_stack.overtake.policies import TargetPolicy
+from ad_stack.overtake.policies import TargetAcceptancePolicy, TargetPolicy
 from ad_stack.overtake.infrastructure.carla import (
     OvertakeExecutionManager,
     build_target_candidates,
@@ -80,6 +80,7 @@ class ExpertBasicAgent:
         *,
         config: ExpertBasicAgentConfig | None = None,
         target_policy: TargetPolicy,
+        target_acceptance_policy: TargetAcceptancePolicy,
     ) -> None:
         import carla
 
@@ -119,6 +120,7 @@ class ExpertBasicAgent:
         self._max_route_index: int = 0
         self._overtake = OvertakeRuntimeState()
         self._target_policy = target_policy
+        self._target_acceptance_policy = target_acceptance_policy
         self._execution = OvertakeExecutionManager(
             local_agent=self._agent,
             sampling_resolution_m=self.config.sampling_resolution_m,
@@ -278,6 +280,7 @@ class ExpertBasicAgent:
             OvertakeStepRequest(
                 runtime_state=self._overtake,
                 decision_context=overtake_scene.decision_context,
+                target_acceptance_policy=self._target_acceptance_policy,
                 stop_for_light=stop_for_light,
                 ignore_traffic_lights=self.config.ignore_traffic_lights,
                 ignore_vehicles=self.config.ignore_vehicles,
@@ -402,6 +405,7 @@ class ExpertBasicAgent:
                 OvertakeStepRequest(
                     runtime_state=self._overtake,
                     decision_context=overtake_scene.decision_context,
+                    target_acceptance_policy=self._target_acceptance_policy,
                     stop_for_light=stop_for_light,
                     ignore_traffic_lights=self.config.ignore_traffic_lights,
                     ignore_vehicles=self.config.ignore_vehicles,

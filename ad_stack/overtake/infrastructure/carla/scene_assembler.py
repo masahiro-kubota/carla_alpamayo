@@ -265,7 +265,6 @@ def build_overtake_scene_snapshot(
         origin_lane_id=current_lane_id,
         route_target_lane_id=route_target_lane_id,
         target_speed_kmh=target_speed_kmh,
-        stopped_speed_threshold_mps=stopped_speed_threshold_mps,
         lead=OvertakeLeadSnapshot(
             actor_id=(
                 follow_actor.actor_id
