@@ -13,31 +13,33 @@ from ad_stack.overtake import (
     OvertakeMemory,
     StoppedObstacleTargetSnapshot,
     StoppedObstacleContext,
-    build_stopped_obstacle_targets,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
     should_begin_rejoin,
+)
+from ad_stack.overtake.infrastructure.carla import (
+    adjacent_lane_waypoint,
+    build_route_aligned_lane_samples,
+    build_route_aligned_stopped_targets,
+    build_same_lane_stopped_targets,
+    enrich_targets_with_adjacent_lane_availability,
+    interpolate_waypoint,
+    lane_gaps,
+    lane_gaps_for_lane_id,
+    lane_id as route_lane_id,
+    materialize_lane_change_waypoints,
+    route_aligned_waypoint,
+    route_relative_progress_to_actor,
+    visible_overtake_target_actors,
 )
 from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
 
 if TYPE_CHECKING:
     from ad_stack.world_model import DynamicVehicleStateView, SceneState, TrafficLightStateView
 
-
-def _lane_id(waypoint: Any | None) -> str | None:
-    if waypoint is None:
-        return None
-    return f"{waypoint.road_id}:{waypoint.lane_id}"
-
-
 def _speed_kmh(speed_mps: float) -> float:
     return speed_mps * 3.6
-
-
-@dataclass(slots=True)
-class _RouteAlignedWaypoint:
-    transform: Any
 
 
 @dataclass(slots=True)
@@ -258,47 +260,13 @@ class ExpertBasicAgent:
     def _adjacent_lane_waypoint(
         self, origin_waypoint: Any, direction: Literal["left", "right"]
     ) -> Any | None:
-        adjacent_waypoint = (
-            origin_waypoint.get_left_lane()
-            if direction == "left"
-            else origin_waypoint.get_right_lane()
-        )
-        if adjacent_waypoint is None:
-            return None
-        if adjacent_waypoint.lane_type != self._carla.LaneType.Driving:
-            return None
-        return adjacent_waypoint
+        return adjacent_lane_waypoint(self._carla, origin_waypoint, direction)
 
     def _route_aligned_waypoint(self, waypoint: Any, heading_source_waypoint: Any) -> Any:
-        location = waypoint.transform.location
-        rotation = heading_source_waypoint.transform.rotation
-        transform = self._carla.Transform(
-            self._carla.Location(x=location.x, y=location.y, z=location.z),
-            self._carla.Rotation(
-                pitch=rotation.pitch,
-                yaw=rotation.yaw,
-                roll=rotation.roll,
-            ),
-        )
-        return _RouteAlignedWaypoint(transform=transform)
+        return route_aligned_waypoint(self._carla, waypoint, heading_source_waypoint)
 
     def _interpolate_waypoint(self, start_waypoint: Any, end_waypoint: Any, alpha: float) -> Any:
-        start_location = start_waypoint.transform.location
-        end_location = end_waypoint.transform.location
-        rotation = start_waypoint.transform.rotation
-        transform = self._carla.Transform(
-            self._carla.Location(
-                x=(start_location.x * (1.0 - alpha)) + (end_location.x * alpha),
-                y=(start_location.y * (1.0 - alpha)) + (end_location.y * alpha),
-                z=(start_location.z * (1.0 - alpha)) + (end_location.z * alpha),
-            ),
-            self._carla.Rotation(
-                pitch=rotation.pitch,
-                yaw=rotation.yaw,
-                roll=rotation.roll,
-            ),
-        )
-        return _RouteAlignedWaypoint(transform=transform)
+        return interpolate_waypoint(self._carla, start_waypoint, end_waypoint, alpha)
 
     def _build_route_aligned_lane_samples(
         self,
@@ -311,57 +279,13 @@ class ExpertBasicAgent:
         dict[tuple[int, str], Any],
         str | None,
     ]:
-        origin_samples: list[LaneChangePlanPoint] = []
-        target_samples: list[LaneChangePlanPoint] = []
-        waypoint_lookup: dict[tuple[int, str], Any] = {}
-        target_lane_id: str | None = None
-
-        start_point_index = max(0, route_index or 0)
-        if start_point_index >= len(self._route_point_to_trace_index):
-            return origin_samples, target_samples, waypoint_lookup, target_lane_id
-
-        previous_location: Any | None = None
-        progress_m = 0.0
-        for point_index in range(start_point_index, len(self._route_point_to_trace_index)):
-            trace_index = self._route_point_to_trace_index[point_index]
-            origin_waypoint = self._base_trace[trace_index][0]
-            origin_location = origin_waypoint.transform.location
-            if previous_location is not None:
-                progress_m += origin_location.distance(previous_location)
-            previous_location = origin_location
-
-            origin_lane_id = _lane_id(origin_waypoint)
-            if origin_lane_id is None:
-                continue
-            origin_samples.append(
-                LaneChangePlanPoint(
-                    route_index=point_index,
-                    lane_id=origin_lane_id,
-                    progress_m=progress_m,
-                )
-            )
-            waypoint_lookup[(point_index, origin_lane_id)] = self._route_aligned_waypoint(
-                origin_waypoint, origin_waypoint
-            )
-
-            adjacent_waypoint = self._adjacent_lane_waypoint(origin_waypoint, direction)
-            adjacent_lane_id = _lane_id(adjacent_waypoint)
-            if adjacent_waypoint is None or adjacent_lane_id is None:
-                continue
-            if target_lane_id is None:
-                target_lane_id = adjacent_lane_id
-            target_samples.append(
-                LaneChangePlanPoint(
-                    route_index=point_index,
-                    lane_id=adjacent_lane_id,
-                    progress_m=progress_m,
-                )
-            )
-            waypoint_lookup[(point_index, adjacent_lane_id)] = self._route_aligned_waypoint(
-                adjacent_waypoint, origin_waypoint
-            )
-
-        return origin_samples, target_samples, waypoint_lookup, target_lane_id
+        return build_route_aligned_lane_samples(
+            carla_module=self._carla,
+            direction=direction,
+            route_index=route_index,
+            base_trace=self._base_trace,
+            route_point_to_trace_index=self._route_point_to_trace_index,
+        )
 
     def _materialize_lane_change_waypoints(
         self,
@@ -373,46 +297,15 @@ class ExpertBasicAgent:
         lane_change_distance_m: float,
         distance_other_lane_m: float,
     ) -> list[Any]:
-        if not start_samples or not destination_samples:
-            return []
-
-        start_progress_m = start_samples[0].progress_m
-        same_lane_end_m = start_progress_m + distance_same_lane_m
-        lane_change_end_m = same_lane_end_m + lane_change_distance_m
-        destination_lane_end_m = lane_change_end_m + distance_other_lane_m
-        destination_by_route_index = {sample.route_index: sample for sample in destination_samples}
-        materialized: list[Any] = []
-        for point in start_samples:
-            if point.progress_m > destination_lane_end_m + 1e-6:
-                break
-            start_waypoint = waypoint_lookup.get((point.route_index, point.lane_id))
-            if start_waypoint is None:
-                continue
-
-            destination_point = destination_by_route_index.get(point.route_index)
-            destination_waypoint = (
-                waypoint_lookup.get((destination_point.route_index, destination_point.lane_id))
-                if destination_point is not None
-                else None
-            )
-            if point.progress_m <= same_lane_end_m + 1e-6 or destination_waypoint is None:
-                waypoint = start_waypoint
-            elif point.progress_m < lane_change_end_m - 1e-6:
-                alpha = (point.progress_m - same_lane_end_m) / max(lane_change_distance_m, 1e-6)
-                waypoint = self._interpolate_waypoint(
-                    start_waypoint,
-                    destination_waypoint,
-                    max(0.0, min(1.0, alpha)),
-                )
-            else:
-                waypoint = destination_waypoint
-
-            if materialized:
-                tail_location = materialized[-1].transform.location
-                if tail_location.distance(waypoint.transform.location) <= 0.05:
-                    continue
-            materialized.append(waypoint)
-        return materialized
+        return materialize_lane_change_waypoints(
+            carla_module=self._carla,
+            start_samples=start_samples,
+            destination_samples=destination_samples,
+            waypoint_lookup=waypoint_lookup,
+            distance_same_lane_m=distance_same_lane_m,
+            lane_change_distance_m=lane_change_distance_m,
+            distance_other_lane_m=distance_other_lane_m,
+        )
 
     def _consume_overtake_waypoint(self) -> Any | None:
         if not self._overtake_waypoints:
@@ -508,25 +401,9 @@ class ExpertBasicAgent:
         self,
         tracked_objects: tuple[DynamicVehicleStateView, ...],
     ) -> list[StoppedObstacleTargetSnapshot]:
-        leads = [
-            OvertakeLeadSnapshot(
-                actor_id=actor.actor_id,
-                lane_id=actor.lane_id,
-                distance_m=float(actor.longitudinal_distance_m),
-                speed_mps=float(actor.speed_mps),
-                relative_speed_mps=0.0,
-                is_stopped=float(actor.speed_mps) <= self.config.stopped_speed_threshold_mps,
-            )
-            for actor in tracked_objects
-            if (
-                actor.relation == "same_lane"
-                and actor.is_ahead
-                and actor.longitudinal_distance_m is not None
-                and float(actor.longitudinal_distance_m) > 0.0
-            )
-        ]
-        return build_stopped_obstacle_targets(
-            leads,
+        return build_same_lane_stopped_targets(
+            tracked_objects,
+            stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
             cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
         )
@@ -539,34 +416,15 @@ class ExpertBasicAgent:
         search_back_points: int = 24,
         search_forward_points: int = 120,
     ) -> tuple[float | None, float, str | None]:
-        if not self._route_point_to_trace_index:
-            return None, float("inf"), None
-        bounded_reference_index = max(
-            0, min(reference_route_index, len(self._route_point_to_trace_index) - 1)
+        return route_relative_progress_to_actor(
+            actor=actor,
+            reference_route_index=reference_route_index,
+            base_trace=self._base_trace,
+            route_point_to_trace_index=self._route_point_to_trace_index,
+            route_point_progress_m=self._route_point_progress_m,
+            search_back_points=search_back_points,
+            search_forward_points=search_forward_points,
         )
-        start_index = max(0, bounded_reference_index - search_back_points)
-        end_index = min(
-            len(self._route_point_to_trace_index),
-            bounded_reference_index + search_forward_points + 1,
-        )
-        best_route_index: int | None = None
-        best_distance_m = float("inf")
-        for route_point_index in range(start_index, end_index):
-            trace_index = self._route_point_to_trace_index[route_point_index]
-            route_location = self._base_trace[trace_index][0].transform.location
-            distance_m = math.hypot(route_location.x - actor.x_m, route_location.y - actor.y_m)
-            if distance_m < best_distance_m:
-                best_distance_m = distance_m
-                best_route_index = route_point_index
-        if best_route_index is None:
-            return None, best_distance_m, None
-        trace_index = self._route_point_to_trace_index[best_route_index]
-        route_lane_id = _lane_id(self._base_trace[trace_index][0])
-        relative_progress_m = (
-            self._route_point_progress_m[best_route_index]
-            - self._route_point_progress_m[bounded_reference_index]
-        )
-        return float(relative_progress_m), best_distance_m, route_lane_id
 
     def _route_aligned_stopped_targets(
         self,
@@ -574,109 +432,32 @@ class ExpertBasicAgent:
         *,
         route_index: int | None,
     ) -> list[StoppedObstacleTargetSnapshot]:
-        if (
-            route_index is None
-            or not self._base_trace
-            or not self._route_point_to_trace_index
-            or not self._route_point_progress_m
-        ):
-            return []
-
-        bounded_route_index = max(0, min(route_index, len(self._route_point_to_trace_index) - 1))
-        leads: list[OvertakeLeadSnapshot] = []
-        for actor in tracked_objects:
-            if actor.actor_id is None or actor.lane_id is None:
-                continue
-            if float(actor.speed_mps) > self.config.stopped_speed_threshold_mps:
-                continue
-            (
-                route_distance_m,
-                route_distance_to_centerline_m,
-                route_lane_id,
-            ) = self._route_relative_progress_to_actor(
-                actor=actor,
-                reference_route_index=bounded_route_index,
-                search_back_points=0,
-            )
-            if route_distance_m is None or route_distance_to_centerline_m > 4.0:
-                continue
-            if route_lane_id != actor.lane_id:
-                continue
-            if route_distance_m <= 0.0:
-                continue
-            leads.append(
-                OvertakeLeadSnapshot(
-                    actor_id=actor.actor_id,
-                    lane_id=actor.lane_id,
-                    distance_m=float(route_distance_m),
-                    speed_mps=float(actor.speed_mps),
-                    relative_speed_mps=0.0,
-                    is_stopped=True,
-                )
-            )
-        targets = build_stopped_obstacle_targets(
-            leads,
+        targets = build_route_aligned_stopped_targets(
+            tracked_objects,
+            route_index=route_index,
+            base_trace=self._base_trace,
+            route_point_to_trace_index=self._route_point_to_trace_index,
+            route_point_progress_m=self._route_point_progress_m,
+            stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
             cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
         )
-        enriched_targets: list[StoppedObstacleTargetSnapshot] = []
-        for target in targets:
-            matching_actor = next(
-                (actor for actor in tracked_objects if actor.actor_id == target.primary_actor_id),
-                None,
-            )
-            adjacent_lane_available = True
-            if matching_actor is not None:
-                target_waypoint = self._map.get_waypoint(
-                    self._carla.Location(x=matching_actor.x_m, y=matching_actor.y_m, z=0.0),
-                    lane_type=self._carla.LaneType.Driving,
-                )
-                target_left_waypoint = (
-                    target_waypoint.get_left_lane() if target_waypoint is not None else None
-                )
-                target_right_waypoint = (
-                    target_waypoint.get_right_lane() if target_waypoint is not None else None
-                )
-                adjacent_lane_available = bool(
-                    (
-                        target_left_waypoint is not None
-                        and target_left_waypoint.lane_type == self._carla.LaneType.Driving
-                    )
-                    or (
-                        target_right_waypoint is not None
-                        and target_right_waypoint.lane_type == self._carla.LaneType.Driving
-                    )
-                )
-            enriched_targets.append(
-                StoppedObstacleTargetSnapshot(
-                    kind=target.kind,
-                    primary_actor_id=target.primary_actor_id,
-                    member_actor_ids=target.member_actor_ids,
-                    lane_id=target.lane_id,
-                    entry_distance_m=target.entry_distance_m,
-                    exit_distance_m=target.exit_distance_m,
-                    speed_mps=target.speed_mps,
-                    is_stopped=target.is_stopped,
-                    adjacent_lane_available=adjacent_lane_available,
-                )
-            )
-        return enriched_targets
+        return enrich_targets_with_adjacent_lane_availability(
+            targets,
+            tracked_objects=tracked_objects,
+            world_map=self._map,
+            carla_module=self._carla,
+        )
 
     def _visible_overtake_target_actors(
         self,
         tracked_objects: tuple[DynamicVehicleStateView, ...],
     ) -> tuple[DynamicVehicleStateView | None, tuple[DynamicVehicleStateView, ...]]:
-        if self._overtake_target_actor_id is None:
-            return None, ()
-        member_ids = set(self._overtake_target_member_actor_ids) or {self._overtake_target_actor_id}
-        visible_members = tuple(
-            actor for actor in tracked_objects if actor.actor_id in member_ids
+        return visible_overtake_target_actors(
+            tracked_objects,
+            target_actor_id=self._overtake_target_actor_id,
+            target_member_actor_ids=self._overtake_target_member_actor_ids,
         )
-        primary_actor = next(
-            (actor for actor in visible_members if actor.actor_id == self._overtake_target_actor_id),
-            None,
-        )
-        return primary_actor, visible_members
 
     @staticmethod
     def _select_active_light(
@@ -724,36 +505,14 @@ class ExpertBasicAgent:
         tracked_objects: tuple[DynamicVehicleStateView, ...],
         relation: str,
     ) -> tuple[float, float]:
-        front_gap_m = float("inf")
-        rear_gap_m = float("inf")
-        for actor in tracked_objects:
-            if actor.relation != relation or actor.longitudinal_distance_m is None:
-                continue
-            longitudinal_distance = float(actor.longitudinal_distance_m)
-            if actor.is_ahead and longitudinal_distance >= 0.0:
-                front_gap_m = min(front_gap_m, longitudinal_distance)
-            elif longitudinal_distance < 0.0:
-                rear_gap_m = min(rear_gap_m, abs(longitudinal_distance))
-        return front_gap_m, rear_gap_m
+        return lane_gaps(tracked_objects, relation)
 
     @staticmethod
     def _lane_gaps_for_lane_id(
         tracked_objects: tuple[DynamicVehicleStateView, ...],
         lane_id: str | None,
     ) -> tuple[float, float]:
-        if lane_id is None:
-            return float("inf"), float("inf")
-        front_gap_m = float("inf")
-        rear_gap_m = float("inf")
-        for actor in tracked_objects:
-            if actor.lane_id != lane_id or actor.longitudinal_distance_m is None:
-                continue
-            longitudinal_distance = float(actor.longitudinal_distance_m)
-            if longitudinal_distance >= 0.0:
-                front_gap_m = min(front_gap_m, longitudinal_distance)
-            else:
-                rear_gap_m = min(rear_gap_m, abs(longitudinal_distance))
-        return front_gap_m, rear_gap_m
+        return lane_gaps_for_lane_id(tracked_objects, lane_id)
 
     def _start_rejoin(self, route_index: int | None) -> bool:
         if (
@@ -1161,13 +920,13 @@ class ExpertBasicAgent:
             left_lane_waypoint = ego_waypoint.get_left_lane() if ego_waypoint is not None else None
             right_lane_waypoint = ego_waypoint.get_right_lane() if ego_waypoint is not None else None
             left_lane_snapshot = AdjacentLaneGapSnapshot(
-                lane_id=_lane_id(left_lane_waypoint),
+                lane_id=route_lane_id(left_lane_waypoint),
                 front_gap_m=None if not math.isfinite(left_front_gap_m) else float(left_front_gap_m),
                 rear_gap_m=None if not math.isfinite(left_rear_gap_m) else float(left_rear_gap_m),
                 lane_open=bool(scene_state.ego.adjacent_lanes_open.get("left", False)),
             )
             right_lane_snapshot = AdjacentLaneGapSnapshot(
-                lane_id=_lane_id(right_lane_waypoint),
+                lane_id=route_lane_id(right_lane_waypoint),
                 front_gap_m=None
                 if not math.isfinite(right_front_gap_m)
                 else float(right_front_gap_m),

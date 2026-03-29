@@ -3,10 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any, Sequence
 
-from ad_stack.overtake.stopped_obstacle_logic import (
-    PreflightValidationInput,
-    validate_preflight,
-)
+from ad_stack.overtake.validation import PreflightValidationInput, validate_preflight
 from simulation.environment_config import EnvironmentConfigSpec
 
 

@@ -72,8 +72,10 @@
 
 ここに置くもの:
 
-- `stopped_obstacle_logic.py`
-- 必要なら `stopped_obstacle_contracts.py`
+- `domain/`
+- `application/`
+- `policies/`
+- 必要なら pure contract module
 
 ここに置かないもの:
 
