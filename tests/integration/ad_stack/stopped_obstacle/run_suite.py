@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[4]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from tests.integration.ad_stack._shared import (
     CarlaHarness,
@@ -16,8 +21,6 @@ from tests.integration.ad_stack.stopped_obstacle.assertions import (
     assert_stopped_obstacle_suite,
     load_stopped_obstacle_summaries,
 )
-
-ROOT_DIR = Path(__file__).resolve().parents[4]
 SUITE_DIR = Path(__file__).resolve().parent
 SUITE_SPEC = CarlaIntegrationSuiteSpec(
     name="stopped_obstacle",
