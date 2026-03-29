@@ -350,8 +350,6 @@ class ExpertBasicAgent:
                 continue
             if target_lane_id is None:
                 target_lane_id = adjacent_lane_id
-            if adjacent_lane_id != target_lane_id:
-                continue
             target_samples.append(
                 LaneChangePlanPoint(
                     route_index=point_index,
@@ -533,17 +531,24 @@ class ExpertBasicAgent:
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
         )
 
-    def _nearest_route_point_index_for_actor(
+    def _route_relative_progress_to_actor(
         self,
         *,
         actor: DynamicVehicleStateView,
-        start_route_index: int,
-        max_search_points: int = 120,
-    ) -> tuple[int | None, float]:
+        reference_route_index: int,
+        search_back_points: int = 24,
+        search_forward_points: int = 120,
+    ) -> tuple[float | None, float, str | None]:
         if not self._route_point_to_trace_index:
-            return None, float("inf")
-        start_index = max(0, min(start_route_index, len(self._route_point_to_trace_index) - 1))
-        end_index = min(len(self._route_point_to_trace_index), start_index + max_search_points)
+            return None, float("inf"), None
+        bounded_reference_index = max(
+            0, min(reference_route_index, len(self._route_point_to_trace_index) - 1)
+        )
+        start_index = max(0, bounded_reference_index - search_back_points)
+        end_index = min(
+            len(self._route_point_to_trace_index),
+            bounded_reference_index + search_forward_points + 1,
+        )
         best_route_index: int | None = None
         best_distance_m = float("inf")
         for route_point_index in range(start_index, end_index):
@@ -553,7 +558,15 @@ class ExpertBasicAgent:
             if distance_m < best_distance_m:
                 best_distance_m = distance_m
                 best_route_index = route_point_index
-        return best_route_index, best_distance_m
+        if best_route_index is None:
+            return None, best_distance_m, None
+        trace_index = self._route_point_to_trace_index[best_route_index]
+        route_lane_id = _lane_id(self._base_trace[trace_index][0])
+        relative_progress_m = (
+            self._route_point_progress_m[best_route_index]
+            - self._route_point_progress_m[bounded_reference_index]
+        )
+        return float(relative_progress_m), best_distance_m, route_lane_id
 
     def _route_aligned_stopped_targets(
         self,
@@ -570,24 +583,25 @@ class ExpertBasicAgent:
             return []
 
         bounded_route_index = max(0, min(route_index, len(self._route_point_to_trace_index) - 1))
-        ego_route_progress_m = self._route_point_progress_m[bounded_route_index]
         leads: list[OvertakeLeadSnapshot] = []
         for actor in tracked_objects:
             if actor.actor_id is None or actor.lane_id is None:
                 continue
             if float(actor.speed_mps) > self.config.stopped_speed_threshold_mps:
                 continue
-            actor_route_index, route_distance_to_centerline_m = self._nearest_route_point_index_for_actor(
+            (
+                route_distance_m,
+                route_distance_to_centerline_m,
+                route_lane_id,
+            ) = self._route_relative_progress_to_actor(
                 actor=actor,
-                start_route_index=bounded_route_index,
+                reference_route_index=bounded_route_index,
+                search_back_points=0,
             )
-            if actor_route_index is None or route_distance_to_centerline_m > 4.0:
+            if route_distance_m is None or route_distance_to_centerline_m > 4.0:
                 continue
-            trace_index = self._route_point_to_trace_index[actor_route_index]
-            route_lane_id = _lane_id(self._base_trace[trace_index][0])
             if route_lane_id != actor.lane_id:
                 continue
-            route_distance_m = self._route_point_progress_m[actor_route_index] - ego_route_progress_m
             if route_distance_m <= 0.0:
                 continue
             leads.append(
@@ -600,11 +614,53 @@ class ExpertBasicAgent:
                     is_stopped=True,
                 )
             )
-        return build_stopped_obstacle_targets(
+        targets = build_stopped_obstacle_targets(
             leads,
             cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
         )
+        enriched_targets: list[StoppedObstacleTargetSnapshot] = []
+        for target in targets:
+            matching_actor = next(
+                (actor for actor in tracked_objects if actor.actor_id == target.primary_actor_id),
+                None,
+            )
+            adjacent_lane_available = True
+            if matching_actor is not None:
+                target_waypoint = self._map.get_waypoint(
+                    self._carla.Location(x=matching_actor.x_m, y=matching_actor.y_m, z=0.0),
+                    lane_type=self._carla.LaneType.Driving,
+                )
+                target_left_waypoint = (
+                    target_waypoint.get_left_lane() if target_waypoint is not None else None
+                )
+                target_right_waypoint = (
+                    target_waypoint.get_right_lane() if target_waypoint is not None else None
+                )
+                adjacent_lane_available = bool(
+                    (
+                        target_left_waypoint is not None
+                        and target_left_waypoint.lane_type == self._carla.LaneType.Driving
+                    )
+                    or (
+                        target_right_waypoint is not None
+                        and target_right_waypoint.lane_type == self._carla.LaneType.Driving
+                    )
+                )
+            enriched_targets.append(
+                StoppedObstacleTargetSnapshot(
+                    kind=target.kind,
+                    primary_actor_id=target.primary_actor_id,
+                    member_actor_ids=target.member_actor_ids,
+                    lane_id=target.lane_id,
+                    entry_distance_m=target.entry_distance_m,
+                    exit_distance_m=target.exit_distance_m,
+                    speed_mps=target.speed_mps,
+                    is_stopped=target.is_stopped,
+                    adjacent_lane_available=adjacent_lane_available,
+                )
+            )
+        return enriched_targets
 
     def _visible_overtake_target_actors(
         self,
@@ -723,7 +779,6 @@ class ExpertBasicAgent:
             not origin_samples
             or not target_samples
             or target_lane_id is None
-            or target_lane_id != self._overtake_target_lane_id
         ):
             self._lane_change_path_available = False
             self._lane_change_path_failure_reason = "rejoin_lane_sample_missing"
@@ -1223,23 +1278,48 @@ class ExpertBasicAgent:
                 scene_state.tracked_objects
             )
             target_actor_visible = bool(visible_target_actors)
+            target_longitudinal_distance_m = None
             target_exit_longitudinal_distance_m = None
-            visible_longitudinal_distances = [
-                float(actor.longitudinal_distance_m)
-                for actor in visible_target_actors
-                if actor.longitudinal_distance_m is not None
-            ]
-            if visible_longitudinal_distances:
-                target_exit_longitudinal_distance_m = max(visible_longitudinal_distances)
+            visible_route_relative_progress_m = []
+            if route_index is not None:
+                for visible_actor in visible_target_actors:
+                    route_relative_progress_m, _distance_to_centerline_m, _route_lane_id = (
+                        self._route_relative_progress_to_actor(
+                            actor=visible_actor,
+                            reference_route_index=route_index,
+                            search_back_points=48,
+                            search_forward_points=96,
+                        )
+                    )
+                    if route_relative_progress_m is not None:
+                        visible_route_relative_progress_m.append(route_relative_progress_m)
+                    if (
+                        target_actor is not None
+                        and visible_actor.actor_id == target_actor.actor_id
+                        and route_relative_progress_m is not None
+                    ):
+                        target_longitudinal_distance_m = route_relative_progress_m
+            if target_longitudinal_distance_m is None:
+                target_longitudinal_distance_m = (
+                    float(target_actor.longitudinal_distance_m)
+                    if target_actor is not None and target_actor.longitudinal_distance_m is not None
+                    else None
+                )
+            if visible_route_relative_progress_m:
+                target_exit_longitudinal_distance_m = max(visible_route_relative_progress_m)
+            else:
+                visible_longitudinal_distances = [
+                    float(actor.longitudinal_distance_m)
+                    for actor in visible_target_actors
+                    if actor.longitudinal_distance_m is not None
+                ]
+                if visible_longitudinal_distances:
+                    target_exit_longitudinal_distance_m = max(visible_longitudinal_distances)
             self._overtake_memory = evaluate_pass_progress(
                 self._overtake_memory,
                 timestamp_s=scene_state.timestamp_s,
                 target_actor_visible=target_actor_visible,
-                target_longitudinal_distance_m=(
-                    float(target_actor.longitudinal_distance_m)
-                    if target_actor is not None and target_actor.longitudinal_distance_m is not None
-                    else None
-                ),
+                target_longitudinal_distance_m=target_longitudinal_distance_m,
                 overtake_resume_front_gap_m=self.config.overtake_resume_front_gap_m,
                 target_kind=self._overtake_memory.target_kind,
                 target_exit_longitudinal_distance_m=target_exit_longitudinal_distance_m,

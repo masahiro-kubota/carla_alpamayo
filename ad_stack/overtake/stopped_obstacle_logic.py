@@ -48,6 +48,7 @@ class StoppedObstacleTargetSnapshot:
     exit_distance_m: float
     speed_mps: float
     is_stopped: bool
+    adjacent_lane_available: bool = True
 
 
 @dataclass(slots=True)
@@ -192,6 +193,8 @@ def choose_overtake_action(
         and context.signal_stop_distance_m <= signal_suppression_distance_m
     ):
         return OvertakeDecision("car_follow", reject_reason="signal_suppressed")
+    if active_target is not None and not active_target.adjacent_lane_available:
+        return OvertakeDecision("car_follow", reject_reason="adjacent_lane_closed")
 
     candidates: list[tuple[Literal["left", "right"], AdjacentLaneGapSnapshot | None]] = []
     if context.preferred_direction == "left_first":
@@ -393,7 +396,7 @@ def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidation
         and snapshot.obstacle_lane_id == snapshot.obstacle_route_lane_id
     )
     obstacle_expected_in_current_or_future_lane = snapshot.obstacle_lane_id == snapshot.ego_lane_id
-    if snapshot.scenario_kind == "curve_clear":
+    if snapshot.scenario_kind in {"curve_clear", "adjacent_lane_closed"}:
         obstacle_expected_in_current_or_future_lane = (
             obstacle_expected_in_current_or_future_lane or obstacle_aligned_with_route
         )
