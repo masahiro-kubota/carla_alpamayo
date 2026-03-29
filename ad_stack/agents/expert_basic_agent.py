@@ -10,6 +10,7 @@ from ad_stack.overtake import (
     choose_overtake_action,
     evaluate_pass_progress,
     is_traffic_light_violation,
+    resolve_active_light,
     resolve_overtake_runtime_transition,
     should_stop_for_light,
     should_begin_rejoin,
@@ -247,56 +248,18 @@ class ExpertBasicAgent:
             return
         self._activate_trace_execution_plan(remaining_trace.trace, update_waypoints=False)
 
-    @staticmethod
-    def _select_active_light(
-        traffic_lights: tuple[TrafficLightStateView, ...],
-    ) -> TrafficLightStateView | None:
-        candidates = [light for light in traffic_lights if light.affects_ego]
-        if not candidates:
-            return None
-        return min(
-            candidates,
-            key=lambda light: (
-                float(light.stop_line_distance_m)
-                if light.stop_line_distance_m is not None
-                else float(light.distance_m)
-            ),
-        )
-
-    def _resolve_active_light(
-        self,
-        traffic_lights: tuple[TrafficLightStateView, ...],
-        *,
-        timestamp_s: float,
-    ) -> TrafficLightStateView | None:
-        active_light = self._select_active_light(traffic_lights)
-        if active_light is not None:
-            if active_light.state == "red":
-                self._latched_red_light = active_light
-                self._latched_red_until_s = (
-                    timestamp_s + self.config.traffic_light_red_latch_seconds
-                )
-            else:
-                self._latched_red_light = None
-                self._latched_red_until_s = -1.0
-            return active_light
-
-        if self._latched_red_light is not None and timestamp_s <= self._latched_red_until_s:
-            return self._latched_red_light
-
-        self._latched_red_light = None
-        self._latched_red_until_s = -1.0
-        return None
-
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
         route_index = scene_state.route.route_index
         if route_index is not None:
             self._max_route_index = max(self._max_route_index, route_index)
 
-        active_light = self._resolve_active_light(
-            scene_state.traffic_lights,
+        active_light, self._latched_red_light, self._latched_red_until_s = resolve_active_light(
+            traffic_lights=scene_state.traffic_lights,
             timestamp_s=scene_state.timestamp_s,
+            latched_red_light=self._latched_red_light,
+            latched_red_until_s=self._latched_red_until_s,
+            red_latch_seconds=self.config.traffic_light_red_latch_seconds,
         )
         planner_state = "nominal_cruise"
         target_speed_kmh = self.config.target_speed_kmh

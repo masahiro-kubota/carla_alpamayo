@@ -17,6 +17,7 @@ from .runtime_transition import (
     OvertakeRuntimeTransition,
     resolve_overtake_runtime_transition,
 )
+from .traffic_light_service import resolve_active_light, select_active_light
 
 __all__ = [
     "build_route_aligned_lane_change_plan",
@@ -26,6 +27,8 @@ __all__ = [
     "OvertakeRuntimeTransition",
     "should_stop_for_light",
     "speed_control",
+    "resolve_active_light",
+    "select_active_light",
     "stopping_distance_m",
     "resolve_overtake_runtime_transition",
     "should_begin_rejoin",
