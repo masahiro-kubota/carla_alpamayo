@@ -21,126 +21,94 @@
   - `ScenarioKind` は production domain から削除した
 - [snapshot_builder.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/snapshot_builder.py) が concrete stopped-target policy を固定していた問題
   - いまは `target_policy` を注入する
+- [expert_basic_agent.py](/home/masa/carla_alpamayo/ad_stack/agents/expert_basic_agent.py) に route-loop step の高水準分岐が残っていた問題
+  - いまは [step_service.py](/home/masa/carla_alpamayo/ad_stack/overtake/application/step_service.py) が application 入口になっている
+- candidate builder が stopped vehicle 前提だった問題
+  - いまは [build_target_candidates](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/snapshot_builder.py) が generic candidate extraction を返し、policy が stopped target へ正規化する
+- `planning_debug` payload が 1 枚の flat dict だった問題
+  - いまは `core` と `target` に分かれ、payload も nested contract になっている
+- telemetry の public naming が `lead_vehicle_*` と `overtake_target_*` で混在していた問題
+  - いまは public telemetry を `follow_target_*` と `overtake_target_*` に分けている
+- integration harness が suite ごとの shell orchestration に偏っていた問題
+  - いまは [carla_harness.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/_shared/carla_harness.py) と [run_suite.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_suite.py) に寄っている
+- suite declaration が module 直書きだった問題
+  - いまは [suite_runner.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/_shared/suite_runner.py) の declarative spec を使う
 - suite root に進行メモと実働資産が混在していた問題
   - 進行メモは [docs/stopped_obstacle](/home/masa/carla_alpamayo/docs/stopped_obstacle) に移した
+- suite docs の verified / inspect-only / exploratory が同居していた問題
+  - いまは directory を分けた
 - 未参照 legacy asset が残っていた問題
   - 旧 short env と旧 double-stopped run-config は削除した
+- `snapshot_builder.py` に extractor / projector / assembler が混在していた問題
+  - いまは `candidate_extractor.py`, `route_projection.py`, `scene_assembler.py` に分割した
+- [run.py](/home/masa/carla_alpamayo/ad_stack/run.py) の recording loop が manifest / MCAP の field 展開を重複して持っていた問題
+  - いまは [RouteLoopFrameTelemetryRequest](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/telemetry_mapper.py) と `build_frame_telemetry(...)` に寄せている
+- stopped target policy の選択が agent 側で固定されていた問題
+  - いまは [api.py](/home/masa/carla_alpamayo/ad_stack/api.py) から `target_policy` を注入している
 
 ## 2. いま残っている問題
 
-### 2.1 `expert_basic_agent.py` に application orchestration がまだ残る
+### 2.1 `OvertakeContext` と decision service はまだ stopped-oriented
 
-[expert_basic_agent.py](/home/masa/carla_alpamayo/ad_stack/agents/expert_basic_agent.py) は以前よりかなり薄いですが、まだ
+[models.py](/home/masa/carla_alpamayo/ad_stack/overtake/domain/models.py) と [decision_service.py](/home/masa/carla_alpamayo/ad_stack/overtake/application/decision_service.py) は、今も
 
-- traffic light / follow / overtake の mode 切り替え
-- application service の呼び出し順
-- route-loop step 内の高水準分岐
+- `stopped_speed_threshold_mps`
+- `active_target.is_stopped`
+- stopped obstacle 前提の reject reason
 
-を持っています。
+に寄っています。
 
-これは stopped-obstacle だけなら許容できますが、`moving lead vehicle` を足すと
+moving overtake を入れるなら、
 
-- target policy の切り替え
-- moving target 固有の abort 条件
-- conservative future estimate
+- stopped / moving で分かれる target accept 条件
+- pass / abort 条件
+- follow target が moving のときの制限速度
 
-が入り、再び agent が太りやすいです。
+を policy extension として外せるようにする必要があります。
 
-必要なのは、
+### 2.2 MCAP schema と EpisodeRecord が still hand-maintained
 
-- `OvertakeUseCase`
-- `OvertakeFacade`
-- もしくは `StepDecisionService`
+[mcap_route_log.py](/home/masa/carla_alpamayo/libs/schemas/mcap_route_log.py) と [episode_schema.py](/home/masa/carla_alpamayo/libs/schemas/episode_schema.py) は、今も
 
-のような明示的な application 入口です。
+- field 定義
+- JSON schema
+- telemetry mapper
 
-### 2.2 target policy seam はできたが、candidate builder はまだ stopped 前提
+の 3 箇所で人手同期しています。
 
-[snapshot_builder.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/snapshot_builder.py) は `target_policy` を受け取るようになりました。
+今回の refactor で naming は整理されましたが、moving overtake を入れると field が増えるので、
 
-ただし現在の adapter にはまだ
+- domain telemetry DTO
+- manifest projection
+- MCAP projection / schema
 
-- `build_same_lane_stopped_targets()`
-- `build_route_aligned_stopped_targets()`
+の生成責務をもう少し一元化したいです。
 
-があり、raw candidate の時点で stopped vehicle 前提です。
+### 2.3 suite assertions は shared harness に比べると still per-suite module が厚い
 
-moving overtake を入れるなら、さらに
+[tests/integration/ad_stack/_shared](/home/masa/carla_alpamayo/tests/integration/ad_stack/_shared) には harness と declarative suite spec が入りました。
 
-- raw candidate extraction
-- target normalization / clustering
-- target selection
+ただし stopped-obstacle suite ではまだ
 
-を 3 段に分ける必要があります。
+- [assertions.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/assertions.py)
+- verified scenario markdown
 
-つまり次の seam は
+に scenario 固有 acceptance が厚く残っています。
 
-- `TargetCandidateBuilder`
-- `TargetPolicy`
-- `TargetSelectionService`
+これは間違いではありませんが、moving suite を足すなら
 
-です。
+- reusable acceptance primitives
+- scenario matrix から assertion へ写像する小さな DSL
 
-### 2.3 telemetry DTO は共通化されたが、payload 契約はまだ feature 寄り
-
-[telemetry_mapper.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/telemetry_mapper.py) と domain DTO 化で改善はしました。
-
-ただ、`planning_debug` にはまだ
-
-- stopped-obstacle を中心にした field
-- integration suite で重要だった field
-
-がそのまま残っています。
-
-moving overtake を足すなら、
-
-- feature 共通の core telemetry
-- target-specific extension
-
-に分けないと、payload が平面的に増え続けます。
-
-### 2.4 integration harness はまだ suite ごとの shell orchestration が主
-
-[tests/integration/ad_stack/_shared](/home/masa/carla_alpamayo/tests/integration/ad_stack/_shared) に assertion helper はあります。
-
-ただし、実行自体はまだ
-
-- suite ごとの shell runner
-- suite ごとの inspect 呼び出し順
-- suite ごとの CARLA 起動停止ルール
-
-が中心です。
-
-moving suite を足すと、
-
-- CARLA lifecycle
-- inspect contract
-- summary / manifest assertion
-
-をもう一段共通化した `integration harness` が欲しくなります。
-
-### 2.5 suite docs は整理されたが、長期的には `verified` と `exploratory` をさらに分けたい
-
-現在の [README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/README.md) は前より整理されています。
-
-ただし今後 scenario が増えると、
-
-- verified baseline
-- verified but inspect-only
-- exploratory / deferred
-
-を別 directory か別 index で分けたくなる可能性があります。
-
-今すぐの問題ではないですが、moving suite を追加する段階では考慮したほうがよいです。
+を持ったほうが diff が小さくなります。
 
 ## 3. 優先順位
 
 moving overtake 前に優先して直すなら次です。
 
-1. `expert_basic_agent.py` の orchestration を application facade に寄せる
-2. candidate builder を stopped 前提から外す
-3. telemetry を `core + extension` に分ける
-4. integration harness を `_shared` に寄せる
+1. stopped-oriented な decision vocabulary を policy extension 側へ押し出す
+2. telemetry schema / projection の同期点を減らす
+3. suite assertions を scenario matrix 駆動に近づける
 
 ## 4. いま言えること
 
@@ -149,7 +117,10 @@ moving overtake 前に優先して直すなら次です。
 - production / tests の境界
 - generic parser と feature contract の境界
 - policy seam
-- suite root と planning memo の境界
+- suite root と planning memo / scenario docs の境界
+- application entry
+- telemetry の `core + target` 分離
+- shared integration harness
 
 はかなり改善しています。
 
