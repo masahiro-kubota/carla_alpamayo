@@ -521,6 +521,7 @@ moving vehicle 追い越しでは、停止障害物よりも
   - lane-change path materialization
   - overtake runtime transition の pure 化
   - longitudinal / traffic-light control profile の pure 化
+  - active traffic-light selection / red-latch の pure 化
   - waypoint queue consumption / controller dispatch の adapter 化
   - overtake execution queue state の adapter 化
 - 残り:
