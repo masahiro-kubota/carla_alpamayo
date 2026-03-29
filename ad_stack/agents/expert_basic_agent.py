@@ -10,8 +10,14 @@ from ad_stack.overtake import (
     OvertakeMemory,
     choose_overtake_action,
     evaluate_pass_progress,
+    is_traffic_light_violation,
     resolve_overtake_runtime_transition,
+    should_stop_for_light,
     should_begin_rejoin,
+    speed_control,
+    traffic_light_stop_control,
+    traffic_light_stop_target_distance_m,
+    traffic_light_stop_target_speed_kmh,
 )
 from ad_stack.overtake.infrastructure.carla import (
     build_base_trace_execution_plan,
@@ -20,15 +26,14 @@ from ad_stack.overtake.infrastructure.carla import (
     build_overtake_planning_debug,
     build_overtake_waypoint_execution_plan,
     build_rejoin_waypoint_execution_plan,
+    consume_waypoint_queue,
     lane_gaps_for_lane_id,
+    run_tracking_control,
 )
 from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
 
 if TYPE_CHECKING:
     from ad_stack.world_model import DynamicVehicleStateView, SceneState, TrafficLightStateView
-
-def _speed_kmh(speed_mps: float) -> float:
-    return speed_mps * 3.6
 
 
 @dataclass(slots=True)
@@ -184,35 +189,6 @@ class ExpertBasicAgent:
         self._latched_red_light = None
         self._latched_red_until_s = -1.0
 
-    def _speed_control(
-        self,
-        *,
-        current_speed_mps: float,
-        target_speed_kmh: float,
-        max_throttle: float = 0.75,
-        max_brake: float = 1.0,
-    ) -> tuple[float, float]:
-        current_speed_kmh = _speed_kmh(current_speed_mps)
-        error_kmh = target_speed_kmh - current_speed_kmh
-        derivative_kmh = error_kmh - self._longitudinal_speed_error_kmh
-        self._longitudinal_speed_error_kmh = error_kmh
-
-        if error_kmh >= 0.0:
-            throttle = min(
-                max_throttle,
-                max(0.0, (0.06 * error_kmh) + (0.01 * derivative_kmh)),
-            )
-            return throttle, 0.0
-
-        brake = min(max_brake, max(0.0, 0.08 * (-error_kmh)))
-        return 0.0, brake
-
-    def _stopping_distance_m(self, current_speed_mps: float) -> float:
-        return self.config.reaction_margin_m + (
-            (current_speed_mps * current_speed_mps)
-            / max(2.0 * self.config.preferred_deceleration_mps2, 1e-3)
-        )
-
     def _activate_waypoint_execution_plan(
         self,
         target_lane_id: str | None,
@@ -274,21 +250,6 @@ class ExpertBasicAgent:
             return
         self._activate_trace_execution_plan(remaining_trace.trace, update_waypoints=False)
 
-    def _consume_overtake_waypoint(self) -> Any | None:
-        if not self._overtake_waypoints:
-            return None
-        vehicle_location = self._vehicle.get_location()
-        # Overtake paths include large lateral shifts. Using the default 3 m acceptance radius lets
-        # the controller skip lane-center waypoints before the ego vehicle has actually settled into
-        # the adjacent lane, which leaves the car straddling the lane boundary during pass/rejoin.
-        acceptance_radius_m = min(1.0, max(0.6, self.config.sampling_resolution_m * 0.4))
-        while len(self._overtake_waypoints) > 1:
-            next_waypoint = self._overtake_waypoints[0]
-            if vehicle_location.distance(next_waypoint.transform.location) > acceptance_radius_m:
-                break
-            self._overtake_waypoints.popleft()
-        return self._overtake_waypoints[0]
-
     @staticmethod
     def _select_active_light(
         traffic_lights: tuple[TrafficLightStateView, ...],
@@ -329,108 +290,6 @@ class ExpertBasicAgent:
         self._latched_red_light = None
         self._latched_red_until_s = -1.0
         return None
-
-
-    def _should_stop_for_light(
-        self,
-        light: TrafficLightStateView | None,
-        current_speed_mps: float,
-    ) -> bool:
-        if self.config.ignore_traffic_lights or light is None:
-            return False
-
-        raw_stop_distance = (
-            light.stop_line_distance_m
-            if light.stop_line_distance_m is not None
-            else light.distance_m
-        )
-        if light.state == "red":
-            return True
-        if raw_stop_distance < 0.5:
-            return False
-        target_stop_distance = max(0.0, raw_stop_distance - self.config.traffic_light_stop_buffer_m)
-        if light.state != "yellow":
-            return False
-
-        stopping_distance = self._stopping_distance_m(current_speed_mps)
-        margin_distance = current_speed_mps * self.config.yellow_stop_margin_seconds
-        return target_stop_distance >= (stopping_distance + margin_distance)
-
-    def _traffic_light_stop_target_distance_m(
-        self, light: TrafficLightStateView | None
-    ) -> float | None:
-        if light is None:
-            return None
-        stop_distance = (
-            light.stop_line_distance_m
-            if light.stop_line_distance_m is not None
-            else light.distance_m
-        )
-        return max(0.0, stop_distance - self.config.traffic_light_stop_buffer_m)
-
-    def _traffic_light_stop_target_speed_kmh(
-        self,
-        light: TrafficLightStateView | None,
-        *,
-        current_speed_mps: float,
-    ) -> float:
-        target_distance = self._traffic_light_stop_target_distance_m(light)
-        if target_distance is None or target_distance <= 0.0:
-            return 0.0
-
-        brake_start_distance_m = max(self.config.traffic_light_brake_start_distance_m, 1e-3)
-        if target_distance >= brake_start_distance_m:
-            target_speed_kmh = self.config.target_speed_kmh
-        else:
-            target_speed_kmh = self.config.target_speed_kmh * max(
-                0.0, min(1.0, target_distance / brake_start_distance_m)
-            )
-
-        if (
-            current_speed_mps <= 0.2
-            and target_distance > self.config.traffic_light_creep_resume_distance_m
-        ):
-            target_speed_kmh = max(target_speed_kmh, self.config.traffic_light_creep_speed_kmh)
-
-        return min(self.config.target_speed_kmh, max(0.0, target_speed_kmh))
-
-    def _traffic_light_stop_control(
-        self,
-        *,
-        current_speed_mps: float,
-        light: TrafficLightStateView | None,
-        stop_target_distance_m: float | None,
-        target_speed_kmh: float,
-    ) -> tuple[float, float]:
-        if light is None:
-            self._longitudinal_speed_error_kmh = 0.0
-            return 0.0, 0.0
-
-        if stop_target_distance_m is None:
-            self._longitudinal_speed_error_kmh = 0.0
-            return 0.0, 0.45 if current_speed_mps > 0.1 else 0.0
-
-        if light.state == "red":
-            if stop_target_distance_m <= 0.5:
-                self._longitudinal_speed_error_kmh = 0.0
-                return (
-                    0.0,
-                    1.0 if current_speed_mps > 2.0 else 0.45 if current_speed_mps > 0.1 else 0.0,
-                )
-
-            stopping_distance_m = self._stopping_distance_m(current_speed_mps)
-            if stop_target_distance_m <= stopping_distance_m:
-                self._longitudinal_speed_error_kmh = 0.0
-                late_ratio = 1.0 - min(1.0, stop_target_distance_m / max(stopping_distance_m, 1e-3))
-                return 0.0, min(1.0, max(0.45, 0.45 + (0.55 * late_ratio)))
-
-        throttle, brake = self._speed_control(
-            current_speed_mps=current_speed_mps,
-            target_speed_kmh=target_speed_kmh,
-            max_throttle=0.75,
-            max_brake=1.0,
-        )
-        return throttle, brake
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
@@ -488,6 +347,7 @@ class ExpertBasicAgent:
         min_ttc = overtake_scene.min_ttc
         same_lane_min_ttc = overtake_scene.same_lane_min_ttc
         follow_target_speed_kmh = overtake_scene.follow_target_speed_kmh
+        lead_speed_kmh = lead_speed_mps * 3.6
         left_front_gap_m = overtake_scene.left_front_gap_m
         left_rear_gap_m = overtake_scene.left_rear_gap_m
         right_front_gap_m = overtake_scene.right_front_gap_m
@@ -505,7 +365,20 @@ class ExpertBasicAgent:
             "event_overtake_abort": False,
             "event_unsafe_lane_change_reject": False,
         }
-        stop_for_light = self._should_stop_for_light(active_light, current_speed_mps)
+        stop_for_light = should_stop_for_light(
+            ignore_traffic_lights=self.config.ignore_traffic_lights,
+            light_state=active_light.state if active_light is not None else None,
+            raw_stop_distance_m=(
+                active_light.stop_line_distance_m
+                if active_light is not None and active_light.stop_line_distance_m is not None
+                else active_light.distance_m if active_light is not None else None
+            ),
+            current_speed_mps=current_speed_mps,
+            stop_buffer_m=self.config.traffic_light_stop_buffer_m,
+            reaction_margin_m=self.config.reaction_margin_m,
+            preferred_deceleration_mps2=self.config.preferred_deceleration_mps2,
+            yellow_stop_margin_seconds=self.config.yellow_stop_margin_seconds,
+        )
 
         if self._overtake_state != "idle":
             transition = resolve_overtake_runtime_transition(
@@ -546,12 +419,23 @@ class ExpertBasicAgent:
                 self._resume_base_route(route_index)
                 planner_state = "nominal_cruise"
 
-        stop_target_distance_m = self._traffic_light_stop_target_distance_m(active_light)
+        stop_target_distance_m = traffic_light_stop_target_distance_m(
+            distance_m=(
+                active_light.stop_line_distance_m
+                if active_light is not None and active_light.stop_line_distance_m is not None
+                else active_light.distance_m if active_light is not None else None
+            ),
+            stop_buffer_m=self.config.traffic_light_stop_buffer_m,
+        )
         if stop_for_light and self._overtake_state == "idle":
             planner_state = "traffic_light_stop"
-            target_speed_kmh = self._traffic_light_stop_target_speed_kmh(
-                active_light,
+            target_speed_kmh = traffic_light_stop_target_speed_kmh(
+                stop_target_distance_m=stop_target_distance_m,
                 current_speed_mps=current_speed_mps,
+                target_speed_kmh=self.config.target_speed_kmh,
+                brake_start_distance_m=self.config.traffic_light_brake_start_distance_m,
+                creep_resume_distance_m=self.config.traffic_light_creep_resume_distance_m,
+                creep_speed_kmh=self.config.traffic_light_creep_speed_kmh,
             )
             if lead_vehicle is not None and not self.config.ignore_vehicles:
                 # Red-light stopping still needs to respect a stopped or slow lead in the same lane.
@@ -756,16 +640,21 @@ class ExpertBasicAgent:
             self._longitudinal_speed_error_kmh = 0.0
         self._previous_planner_state = planner_state
 
-        self._agent.set_target_speed(max(0.0, target_speed_kmh))
         target_waypoint = (
-            self._consume_overtake_waypoint() if self._overtake_state != "idle" else None
-        )
-        if target_waypoint is not None:
-            control = self._overtake_controller.run_step(
-                max(0.0, target_speed_kmh), target_waypoint
+            consume_waypoint_queue(
+                vehicle_location=self._vehicle.get_location(),
+                waypoints=self._overtake_waypoints,
+                sampling_resolution_m=self.config.sampling_resolution_m,
             )
-        else:
-            control = self._agent.run_step()
+            if self._overtake_state != "idle"
+            else None
+        )
+        control = run_tracking_control(
+            local_agent=self._agent,
+            overtake_controller=self._overtake_controller,
+            target_speed_kmh=target_speed_kmh,
+            target_waypoint=target_waypoint,
+        )
 
         emergency_stop = (
             not self.config.ignore_vehicles
@@ -779,18 +668,21 @@ class ExpertBasicAgent:
             )
         )
         if planner_state == "traffic_light_stop":
-            traffic_light_throttle, traffic_light_brake = self._traffic_light_stop_control(
+            traffic_light_throttle, traffic_light_brake, self._longitudinal_speed_error_kmh = traffic_light_stop_control(
                 current_speed_mps=current_speed_mps,
-                light=active_light,
+                light_state=active_light.state if active_light is not None else None,
                 stop_target_distance_m=stop_target_distance_m,
                 target_speed_kmh=target_speed_kmh,
+                previous_error_kmh=self._longitudinal_speed_error_kmh,
+                preferred_deceleration_mps2=self.config.preferred_deceleration_mps2,
             )
             control.throttle = traffic_light_throttle
             control.brake = traffic_light_brake
         else:
-            control.throttle, control.brake = self._speed_control(
+            control.throttle, control.brake, self._longitudinal_speed_error_kmh = speed_control(
                 current_speed_mps=current_speed_mps,
                 target_speed_kmh=target_speed_kmh,
+                previous_error_kmh=self._longitudinal_speed_error_kmh,
                 max_throttle=0.75,
                 max_brake=0.8,
             )
@@ -799,16 +691,13 @@ class ExpertBasicAgent:
             control.throttle = 0.0
             control.brake = max(float(control.brake), 0.8)
 
-        if (
-            active_light is not None
-            and active_light.state == "red"
-            and active_light.stop_line_distance_m is not None
-            and active_light.stop_line_distance_m <= 0.5
-            and current_speed_mps > 2.0
-        ):
-            event_flags["traffic_light_violation"] = True
-        else:
-            event_flags["traffic_light_violation"] = False
+        event_flags["traffic_light_violation"] = is_traffic_light_violation(
+            light_state=active_light.state if active_light is not None else None,
+            stop_line_distance_m=(
+                active_light.stop_line_distance_m if active_light is not None else None
+            ),
+            current_speed_mps=current_speed_mps,
+        )
 
         behavior = self.current_behavior()
         planning_debug = build_overtake_planning_debug(

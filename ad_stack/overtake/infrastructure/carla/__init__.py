@@ -1,3 +1,4 @@
+from .controller_executor import consume_waypoint_queue, run_tracking_control
 from .preflight_validation import (
     build_stopped_obstacle_scenario_validation,
     warm_up_and_build_stopped_obstacle_scenario_validation,
@@ -33,6 +34,7 @@ from .telemetry_mapper import (
 )
 
 __all__ = [
+    "consume_waypoint_queue",
     "build_overtake_pass_snapshot",
     "build_base_trace_execution_plan",
     "build_stopped_obstacle_scenario_validation",
@@ -56,6 +58,7 @@ __all__ = [
     "build_episode_record",
     "build_overtake_planning_debug",
     "build_planning_debug_mcap_payload",
+    "run_tracking_control",
     "visible_overtake_target_actors",
     "warm_up_and_build_stopped_obstacle_scenario_validation",
 ]
