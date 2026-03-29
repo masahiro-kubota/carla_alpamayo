@@ -27,6 +27,7 @@ from .telemetry_mapper import (
     RouteLoopTelemetryAccumulator,
     build_ego_state_sample,
     build_episode_record,
+    build_overtake_planning_debug,
     build_planning_debug_mcap_payload,
 )
 
@@ -51,6 +52,7 @@ __all__ = [
     "RouteLoopTelemetryAccumulator",
     "build_ego_state_sample",
     "build_episode_record",
+    "build_overtake_planning_debug",
     "build_planning_debug_mcap_payload",
     "visible_overtake_target_actors",
     "warm_up_and_build_stopped_obstacle_scenario_validation",

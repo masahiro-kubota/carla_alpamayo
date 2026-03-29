@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -102,6 +103,116 @@ def build_planning_debug_mcap_payload(planning_debug: Mapping[str, Any]) -> dict
         key: value
         for key, value in planning_debug.items()
         if key not in _PLANNING_DEBUG_MCAP_OMIT_KEYS
+    }
+
+
+def build_overtake_planning_debug(
+    *,
+    remaining_waypoints: int,
+    route_index: int | None,
+    max_route_index: int,
+    current_lane_id: str | None,
+    lane_center_offset_m: float | None,
+    route_target_lane_id: str | None,
+    left_lane_open: bool,
+    right_lane_open: bool,
+    active_light: Any | None,
+    red_light_latched: bool,
+    traffic_light_stop_buffer_m: float,
+    traffic_light_stop_target_distance_m: float | None,
+    target_speed_kmh: float,
+    lead_vehicle: Any | None,
+    active_target: Any | None,
+    lead_distance_m: float | None,
+    lead_speed_mps: float | None,
+    closing_speed_mps: float | None,
+    left_lane_front_gap_m: float,
+    left_lane_rear_gap_m: float,
+    right_lane_front_gap_m: float,
+    right_lane_rear_gap_m: float,
+    rejoin_front_gap_m: float,
+    rejoin_rear_gap_m: float,
+    overtake_considered: bool,
+    overtake_reject_reason: str | None,
+    overtake_state: str,
+    overtake_direction: str | None,
+    overtake_origin_lane_id: str | None,
+    overtake_target_actor_id: int | None,
+    overtake_target_kind: str,
+    overtake_target_member_actor_ids: tuple[int, ...],
+    overtake_target_lane_id: str | None,
+    target_passed: bool,
+    distance_past_target_m: float | None,
+    target_actor_visible: bool,
+    target_actor_last_seen_s: float | None,
+    lane_change_path_available: bool,
+    lane_change_path_failed_reason: str | None,
+    target_lane_id: str | None,
+    min_ttc: float,
+    emergency_stop: bool,
+    event_flags: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "remaining_waypoints": remaining_waypoints,
+        "route_progress_index": route_index,
+        "max_route_index": max_route_index,
+        "current_lane_id": current_lane_id,
+        "lane_center_offset_m": lane_center_offset_m,
+        "route_target_lane_id": route_target_lane_id,
+        "left_lane_open": left_lane_open,
+        "right_lane_open": right_lane_open,
+        "traffic_light_actor_id": active_light.actor_id if active_light is not None else None,
+        "traffic_light_state": active_light.state if active_light is not None else None,
+        "traffic_light_distance_m": active_light.distance_m if active_light is not None else None,
+        "traffic_light_stop_line_distance_m": (
+            active_light.stop_line_distance_m if active_light is not None else None
+        ),
+        "traffic_light_red_latched": red_light_latched,
+        "traffic_light_stop_buffer_m": traffic_light_stop_buffer_m,
+        "traffic_light_stop_target_distance_m": traffic_light_stop_target_distance_m,
+        "target_speed_kmh": target_speed_kmh,
+        "lead_vehicle_id": (
+            lead_vehicle.actor_id
+            if lead_vehicle is not None
+            else active_target.primary_actor_id
+            if active_target is not None
+            else None
+        ),
+        "lead_vehicle_distance_m": lead_distance_m,
+        "lead_vehicle_speed_mps": lead_speed_mps if lead_vehicle is not None else None,
+        "lead_vehicle_relative_speed_mps": closing_speed_mps if lead_vehicle is not None else None,
+        "lead_vehicle_lane_id": (
+            lead_vehicle.lane_id
+            if lead_vehicle is not None
+            else active_target.lane_id
+            if active_target is not None
+            else None
+        ),
+        "left_lane_front_gap_m": _finite_or_none(left_lane_front_gap_m),
+        "left_lane_rear_gap_m": _finite_or_none(left_lane_rear_gap_m),
+        "right_lane_front_gap_m": _finite_or_none(right_lane_front_gap_m),
+        "right_lane_rear_gap_m": _finite_or_none(right_lane_rear_gap_m),
+        "rejoin_front_gap_m": _finite_or_none(rejoin_front_gap_m),
+        "rejoin_rear_gap_m": _finite_or_none(rejoin_rear_gap_m),
+        "overtake_considered": overtake_considered,
+        "overtake_reject_reason": overtake_reject_reason,
+        "overtake_state": overtake_state,
+        "overtake_direction": overtake_direction,
+        "overtake_origin_lane_id": overtake_origin_lane_id,
+        "overtake_target_actor_id": overtake_target_actor_id,
+        "overtake_target_kind": overtake_target_kind,
+        "overtake_target_member_actor_ids": list(overtake_target_member_actor_ids),
+        "overtake_target_lane_id": overtake_target_lane_id,
+        "target_passed": target_passed,
+        "distance_past_target_m": distance_past_target_m,
+        "target_actor_visible": target_actor_visible,
+        "target_actor_last_seen_s": target_actor_last_seen_s,
+        "lane_change_path_available": lane_change_path_available,
+        "lane_change_path_failed_reason": lane_change_path_failed_reason,
+        "target_lane_id": target_lane_id,
+        "min_ttc": _finite_or_none(min_ttc),
+        "emergency_stop": emergency_stop,
+        **event_flags,
     }
 
 
@@ -253,3 +364,9 @@ def _as_optional_float(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _finite_or_none(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return float(value) if math.isfinite(float(value)) else None

@@ -18,6 +18,7 @@ from ad_stack.overtake.infrastructure.carla import (
     adjacent_lane_waypoint,
     build_overtake_scene_snapshot,
     build_route_aligned_lane_samples,
+    build_overtake_planning_debug,
     interpolate_waypoint,
     lane_gaps_for_lane_id,
     materialize_lane_change_waypoints,
@@ -999,6 +1000,57 @@ class ExpertBasicAgent:
             event_flags["traffic_light_violation"] = False
 
         behavior = self.current_behavior()
+        planning_debug = build_overtake_planning_debug(
+            remaining_waypoints=len(self._agent.get_local_planner().get_plan()),
+            route_index=route_index,
+            max_route_index=self._max_route_index,
+            current_lane_id=current_lane_id,
+            lane_center_offset_m=lane_center_offset_m,
+            route_target_lane_id=scene_state.route.target_lane_id,
+            left_lane_open=bool(scene_state.ego.adjacent_lanes_open.get("left", False)),
+            right_lane_open=bool(scene_state.ego.adjacent_lanes_open.get("right", False)),
+            active_light=active_light,
+            red_light_latched=bool(
+                active_light is not None
+                and self._latched_red_light is not None
+                and active_light.actor_id == self._latched_red_light.actor_id
+                and active_light.state == "red"
+                and scene_state.timestamp_s <= self._latched_red_until_s
+            ),
+            traffic_light_stop_buffer_m=self.config.traffic_light_stop_buffer_m,
+            traffic_light_stop_target_distance_m=stop_target_distance_m,
+            target_speed_kmh=target_speed_kmh,
+            lead_vehicle=lead_vehicle,
+            active_target=active_overtake_target,
+            lead_distance_m=lead_distance_m,
+            lead_speed_mps=lead_speed_mps,
+            closing_speed_mps=closing_speed_mps,
+            left_lane_front_gap_m=left_front_gap_m,
+            left_lane_rear_gap_m=left_rear_gap_m,
+            right_lane_front_gap_m=right_front_gap_m,
+            right_lane_rear_gap_m=right_rear_gap_m,
+            rejoin_front_gap_m=rejoin_front_gap_m,
+            rejoin_rear_gap_m=rejoin_rear_gap_m,
+            overtake_considered=overtake_considered,
+            overtake_reject_reason=overtake_reject_reason,
+            overtake_state=self._overtake_state,
+            overtake_direction=self._overtake_direction,
+            overtake_origin_lane_id=self._overtake_origin_lane_id,
+            overtake_target_actor_id=self._overtake_target_actor_id,
+            overtake_target_kind=self._overtake_memory.target_kind,
+            overtake_target_member_actor_ids=self._overtake_target_member_actor_ids,
+            overtake_target_lane_id=self._overtake_target_lane_id,
+            target_passed=self._overtake_memory.target_passed,
+            distance_past_target_m=self._overtake_memory.target_pass_distance_m,
+            target_actor_visible=target_actor_visible,
+            target_actor_last_seen_s=self._overtake_memory.target_actor_last_seen_s,
+            lane_change_path_available=self._lane_change_path_available,
+            lane_change_path_failed_reason=self._lane_change_path_failure_reason,
+            target_lane_id=target_lane_id,
+            min_ttc=min_ttc,
+            emergency_stop=emergency_stop,
+            event_flags=event_flags,
+        )
         return ControlDecision(
             command=VehicleCommand(
                 steer=float(control.steer),
@@ -1009,92 +1061,5 @@ class ExpertBasicAgent:
             ).bounded(),
             behavior=behavior,
             planner_state=planner_state,
-            debug={
-                "remaining_waypoints": len(self._agent.get_local_planner().get_plan()),
-                "route_progress_index": route_index,
-                "max_route_index": self._max_route_index,
-                "current_lane_id": current_lane_id,
-                "lane_center_offset_m": lane_center_offset_m,
-                "route_target_lane_id": scene_state.route.target_lane_id,
-                "left_lane_open": bool(scene_state.ego.adjacent_lanes_open.get("left", False)),
-                "right_lane_open": bool(scene_state.ego.adjacent_lanes_open.get("right", False)),
-                "traffic_light_actor_id": active_light.actor_id
-                if active_light is not None
-                else None,
-                "traffic_light_state": active_light.state if active_light is not None else None,
-                "traffic_light_distance_m": active_light.distance_m
-                if active_light is not None
-                else None,
-                "traffic_light_stop_line_distance_m": (
-                    active_light.stop_line_distance_m if active_light is not None else None
-                ),
-                "traffic_light_red_latched": bool(
-                    active_light is not None
-                    and self._latched_red_light is not None
-                    and active_light.actor_id == self._latched_red_light.actor_id
-                    and active_light.state == "red"
-                    and scene_state.timestamp_s <= self._latched_red_until_s
-                ),
-                "traffic_light_stop_buffer_m": self.config.traffic_light_stop_buffer_m,
-                "traffic_light_stop_target_distance_m": stop_target_distance_m,
-                "target_speed_kmh": target_speed_kmh,
-                "lead_vehicle_id": (
-                    lead_vehicle.actor_id
-                    if lead_vehicle is not None
-                    else active_overtake_target.primary_actor_id
-                    if active_overtake_target is not None
-                    else None
-                ),
-                "lead_vehicle_distance_m": lead_distance_m,
-                "lead_vehicle_speed_mps": lead_speed_mps if lead_vehicle is not None else None,
-                "lead_vehicle_relative_speed_mps": closing_speed_mps
-                if lead_vehicle is not None
-                else None,
-                "lead_vehicle_lane_id": (
-                    lead_vehicle.lane_id
-                    if lead_vehicle is not None
-                    else active_overtake_target.lane_id
-                    if active_overtake_target is not None
-                    else None
-                ),
-                "left_lane_front_gap_m": None
-                if not math.isfinite(left_front_gap_m)
-                else float(left_front_gap_m),
-                "left_lane_rear_gap_m": None
-                if not math.isfinite(left_rear_gap_m)
-                else float(left_rear_gap_m),
-                "right_lane_front_gap_m": None
-                if not math.isfinite(right_front_gap_m)
-                else float(right_front_gap_m),
-                "right_lane_rear_gap_m": None
-                if not math.isfinite(right_rear_gap_m)
-                else float(right_rear_gap_m),
-                "rejoin_front_gap_m": None
-                if not math.isfinite(rejoin_front_gap_m)
-                else float(rejoin_front_gap_m),
-                "rejoin_rear_gap_m": None
-                if not math.isfinite(rejoin_rear_gap_m)
-                else float(rejoin_rear_gap_m),
-                "overtake_considered": overtake_considered,
-                "overtake_reject_reason": overtake_reject_reason,
-                "overtake_state": self._overtake_state,
-                "overtake_direction": self._overtake_direction,
-                "overtake_origin_lane_id": self._overtake_origin_lane_id,
-                "overtake_target_actor_id": self._overtake_target_actor_id,
-                "overtake_target_kind": self._overtake_memory.target_kind,
-                "overtake_target_member_actor_ids": list(
-                    self._overtake_target_member_actor_ids
-                ),
-                "overtake_target_lane_id": self._overtake_target_lane_id,
-                "target_passed": self._overtake_memory.target_passed,
-                "distance_past_target_m": self._overtake_memory.target_pass_distance_m,
-                "target_actor_visible": target_actor_visible,
-                "target_actor_last_seen_s": self._overtake_memory.target_actor_last_seen_s,
-                "lane_change_path_available": self._lane_change_path_available,
-                "lane_change_path_failed_reason": self._lane_change_path_failure_reason,
-                "target_lane_id": target_lane_id,
-                "min_ttc": None if not math.isfinite(min_ttc) else float(min_ttc),
-                "emergency_stop": emergency_stop,
-                **event_flags,
-            },
+            debug=planning_debug,
         )
