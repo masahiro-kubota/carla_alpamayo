@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ad_stack.overtake.application import build_route_aligned_lane_change_plan
+from ad_stack.overtake.application import LaneChangePathStatus, build_route_aligned_lane_change_plan
 from ad_stack.overtake.domain import LaneChangePlanPoint
 
 
@@ -20,10 +20,17 @@ class RouteAlignedWaypoint:
 
 @dataclass(slots=True)
 class WaypointExecutionPlan:
-    available: bool
+    lane_change_path: LaneChangePathStatus
     waypoints: list[Any]
     target_lane_id: str | None = None
-    failure_reason: str | None = None
+
+    @property
+    def available(self) -> bool:
+        return self.lane_change_path.available
+
+    @property
+    def failure_reason(self) -> str | None:
+        return self.lane_change_path.failure_reason
 
 
 @dataclass(slots=True)
@@ -244,9 +251,11 @@ def build_overtake_waypoint_execution_plan(
 ) -> WaypointExecutionPlan:
     if not base_trace:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason="missing_base_trace",
+            ),
             waypoints=[],
-            failure_reason="missing_base_trace",
         )
 
     (
@@ -263,9 +272,11 @@ def build_overtake_waypoint_execution_plan(
     )
     if not origin_samples or not target_samples or target_lane_id is None:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason="adjacent_lane_sample_missing",
+            ),
             waypoints=[],
-            failure_reason="adjacent_lane_sample_missing",
         )
 
     lane_change_plan = build_route_aligned_lane_change_plan(
@@ -277,9 +288,11 @@ def build_overtake_waypoint_execution_plan(
     )
     if not lane_change_plan.available:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason=lane_change_plan.failure_reason,
+            ),
             waypoints=[],
-            failure_reason=lane_change_plan.failure_reason,
         )
 
     lane_change_end_m = (
@@ -300,13 +313,15 @@ def build_overtake_waypoint_execution_plan(
     )
     if not materialized:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason="lane_change_materialization_failed",
+            ),
             waypoints=[],
-            failure_reason="lane_change_materialization_failed",
         )
 
     return WaypointExecutionPlan(
-        available=True,
+        lane_change_path=LaneChangePathStatus(available=True),
         waypoints=materialized,
         target_lane_id=target_lane_id,
     )
@@ -331,9 +346,11 @@ def build_rejoin_waypoint_execution_plan(
         or target_lane_id is None
     ):
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason="missing_rejoin_context",
+            ),
             waypoints=[],
-            failure_reason="missing_rejoin_context",
         )
 
     (
@@ -350,9 +367,11 @@ def build_rejoin_waypoint_execution_plan(
     )
     if not origin_samples or not destination_samples:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason="rejoin_lane_sample_missing",
+            ),
             waypoints=[],
-            failure_reason="rejoin_lane_sample_missing",
         )
 
     rejoin_plan = build_route_aligned_lane_change_plan(
@@ -364,9 +383,11 @@ def build_rejoin_waypoint_execution_plan(
     )
     if not rejoin_plan.available:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason=rejoin_plan.failure_reason,
+            ),
             waypoints=[],
-            failure_reason=rejoin_plan.failure_reason,
         )
 
     lane_change_end_m = destination_samples[0].progress_m + lane_change_distance_m
@@ -385,13 +406,15 @@ def build_rejoin_waypoint_execution_plan(
     )
     if not materialized:
         return WaypointExecutionPlan(
-            available=False,
+            lane_change_path=LaneChangePathStatus(
+                available=False,
+                failure_reason="rejoin_materialization_failed",
+            ),
             waypoints=[],
-            failure_reason="rejoin_materialization_failed",
         )
 
     return WaypointExecutionPlan(
-        available=True,
+        lane_change_path=LaneChangePathStatus(available=True),
         waypoints=materialized,
         target_lane_id=origin_lane_id,
     )

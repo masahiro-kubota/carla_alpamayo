@@ -7,6 +7,7 @@ from .control_profile import (
     traffic_light_stop_target_distance_m,
     traffic_light_stop_target_speed_kmh,
 )
+from .execution_contract import ExecutionActivationResult, LaneChangePathStatus
 from .decision_service import (
     choose_overtake_action,
     evaluate_pass_progress,
@@ -24,7 +25,9 @@ __all__ = [
     "build_route_aligned_lane_change_plan",
     "choose_overtake_action",
     "evaluate_pass_progress",
+    "ExecutionActivationResult",
     "is_traffic_light_violation",
+    "LaneChangePathStatus",
     "OvertakeRuntimeTransition",
     "OvertakeRuntimeState",
     "should_stop_for_light",

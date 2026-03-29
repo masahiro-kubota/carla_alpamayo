@@ -1,4 +1,6 @@
 from .application import (
+    ExecutionActivationResult,
+    LaneChangePathStatus,
     OvertakeRuntimeState,
     OvertakeRuntimeTransition,
     build_route_aligned_lane_change_plan,
@@ -45,8 +47,10 @@ from .validation import (
 
 __all__ = [
     "AdjacentLaneGapSnapshot",
+    "ExecutionActivationResult",
     "LaneChangePlanPoint",
     "LaneChangePlanResult",
+    "LaneChangePathStatus",
     "OvertakeDecision",
     "OvertakeContext",
     "OvertakeEventFlags",

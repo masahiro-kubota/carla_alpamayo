@@ -360,7 +360,7 @@ class ExpertBasicAgent:
                 signal_suppression_distance_m=self.config.overtake_signal_suppression_distance_m,
             )
             if overtake_decision.planner_state == "lane_change_out" and overtake_decision.direction is not None:
-                if self._execution.activate_overtake_plan(
+                activation = self._execution.activate_overtake_plan(
                     carla_module=self._carla,
                     direction=overtake_decision.direction,
                     route_index=route_index,
@@ -369,7 +369,8 @@ class ExpertBasicAgent:
                     distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
                     lane_change_distance_m=self.config.lane_change_distance_m,
                     overtake_hold_distance_m=self.config.overtake_hold_distance_m,
-                ):
+                )
+                if activation.activated:
                     self._overtake.begin_lane_change_out(
                         direction=overtake_decision.direction,
                         origin_lane_id=current_lane_id,
@@ -377,7 +378,7 @@ class ExpertBasicAgent:
                         lead_actor_id=lead_vehicle.actor_id if lead_vehicle is not None else None,
                         lead_lane_id=lead_vehicle.lane_id if lead_vehicle is not None else None,
                         lead_distance_m=lead_distance_m,
-                        target_lane_id=self._execution.target_lane_id,
+                        target_lane_id=activation.target_lane_id,
                     )
                     planner_state = "lane_change_out"
                     event_flags["event_overtake_attempt"] = True
@@ -455,7 +456,7 @@ class ExpertBasicAgent:
                     overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
                 )
             ):
-                if self._execution.try_activate_rejoin_plan(
+                rejoin_activation = self._execution.try_activate_rejoin_plan(
                     carla_module=self._carla,
                     direction=self._overtake.direction,
                     route_index=route_index,
@@ -464,7 +465,8 @@ class ExpertBasicAgent:
                     origin_lane_id=self._overtake.origin_lane_id,
                     target_lane_id=self._execution.target_lane_id,
                     lane_change_distance_m=self.config.lane_change_distance_m,
-                ):
+                )
+                if rejoin_activation.activated:
                     self._overtake.state = "lane_change_back"
                     planner_state = "lane_change_back"
             self._overtake.memory.state = self._overtake.state
@@ -583,8 +585,8 @@ class ExpertBasicAgent:
             distance_past_target_m=self._overtake.memory.target_pass_distance_m,
             target_actor_visible=target_actor_visible,
             target_actor_last_seen_s=self._overtake.memory.target_actor_last_seen_s,
-            lane_change_path_available=self._execution.lane_change_path_available,
-            lane_change_path_failed_reason=self._execution.lane_change_path_failure_reason,
+            lane_change_path_available=self._execution.lane_change_path.available,
+            lane_change_path_failed_reason=self._execution.lane_change_path.failure_reason,
             target_lane_id=target_lane_id,
             min_ttc=min_ttc,
             emergency_stop=emergency_stop,

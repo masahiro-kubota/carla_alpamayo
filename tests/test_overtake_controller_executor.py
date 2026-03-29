@@ -216,7 +216,7 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
         manager = OvertakeExecutionManager(local_agent=agent, sampling_resolution_m=2.0)
         base_trace, route_point_to_trace_index = _build_trace()
 
-        activated = manager.activate_overtake_plan(
+        activation = manager.activate_overtake_plan(
             carla_module=_FakeCarla,
             direction="left",
             route_index=0,
@@ -227,9 +227,10 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
             overtake_hold_distance_m=4.0,
         )
 
-        self.assertTrue(activated)
-        self.assertTrue(manager.lane_change_path_available)
-        self.assertIsNone(manager.lane_change_path_failure_reason)
+        self.assertTrue(activation.activated)
+        self.assertEqual(activation.outcome, "activated")
+        self.assertTrue(manager.lane_change_path.available)
+        self.assertIsNone(manager.lane_change_path.failure_reason)
         self.assertEqual(manager.target_lane_id, "15:1")
         next_waypoint = manager.consume_next_waypoint(vehicle_location=_FakeLocation(0.0, 0.0, 0.0))
         self.assertIsNotNone(next_waypoint)
@@ -239,7 +240,7 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
         manager = OvertakeExecutionManager(local_agent=agent, sampling_resolution_m=2.0)
         base_trace, route_point_to_trace_index = _build_trace()
 
-        manager.prepare_abort_return(
+        activation = manager.prepare_abort_return(
             carla_module=_FakeCarla,
             direction=None,
             route_index=0,
@@ -250,8 +251,10 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
             lane_change_distance_m=4.0,
         )
 
-        self.assertFalse(manager.lane_change_path_available)
-        self.assertEqual(manager.lane_change_path_failure_reason, "missing_rejoin_context")
+        self.assertTrue(activation.activated)
+        self.assertEqual(activation.outcome, "fallback_trace_activated")
+        self.assertFalse(manager.lane_change_path.available)
+        self.assertEqual(manager.lane_change_path.failure_reason, "missing_rejoin_context")
         self.assertEqual(len(agent.plans), 1)
         next_waypoint = manager.consume_next_waypoint(vehicle_location=_FakeLocation(0.0, 0.0, 0.0))
         self.assertIsNotNone(next_waypoint)
