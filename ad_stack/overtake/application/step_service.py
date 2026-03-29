@@ -22,6 +22,10 @@ def _active_motion_profile(context: OvertakeContext) -> str | None:
     return None
 
 
+def _stopped_target_lane_change_floor_kmh(target_speed_kmh: float) -> float:
+    return max(0.0, target_speed_kmh * 0.5)
+
+
 @dataclass(frozen=True, slots=True)
 class OvertakeStepRequest:
     runtime_state: OvertakeRuntimeState
@@ -93,9 +97,12 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
             transition.state == "lane_change_out"
             and _active_motion_profile(request.decision_context) == "stopped"
         ):
-            # Once a stopped obstacle overtake has been accepted, keep cruise speed through
-            # the lane-change entry instead of collapsing to a lead-speed-based cap.
-            target_speed_kmh = request.target_speed_kmh
+            # Keep a meaningful lane-change entry speed for stopped-obstacle overtakes
+            # without forcing full cruise speed through a tight lateral maneuver.
+            target_speed_kmh = max(
+                target_speed_kmh,
+                _stopped_target_lane_change_floor_kmh(request.target_speed_kmh),
+            )
         request_rejoin = (
             transition.state == "pass_vehicle"
             and not transition.aborted

@@ -142,7 +142,7 @@ class OvertakeStepServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.planner_state, "lane_change_out")
-        self.assertEqual(decision.target_speed_kmh, 30.0)
+        self.assertEqual(decision.target_speed_kmh, 15.0)
 
     def test_marks_signal_suppressed_while_waiting_at_red(self) -> None:
         active_target = OvertakeTargetSnapshot(
