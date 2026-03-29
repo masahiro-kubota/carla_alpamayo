@@ -184,7 +184,7 @@ run config JSON から `policy.expert_config_path` で config file を選び、
 traffic_light_stop_buffer_m: float = 3.0
 follow_headway_seconds: float = 1.8
 yellow_stop_margin_seconds: float = 1.0
-overtake_speed_delta_kmh: float = 8.0
+overtake_target_speed_kmh: float = 30.0
 overtake_min_front_gap_m: float = 20.0
 overtake_min_rear_gap_m: float = 15.0
 overtake_signal_suppression_distance_m: float = 35.0

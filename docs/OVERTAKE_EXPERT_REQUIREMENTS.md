@@ -169,8 +169,8 @@ privileged 情報を完全に捨てる必要はないが、用途を限定する
 
 - `overtake_trigger_distance_m`
   - 追い越し検討を始める最大距離
-- `overtake_speed_delta_kmh`
-  - 追い越し中にどれだけ速度を上乗せするか
+- `overtake_target_speed_kmh`
+  - `lane_change_out / pass_vehicle / lane_change_back` で使う追い越し目標速度
 - `overtake_min_front_gap_m`
   - 隣接 lane 前方に必要な最小 gap
 - `overtake_min_rear_gap_m`
