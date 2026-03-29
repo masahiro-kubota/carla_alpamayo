@@ -243,6 +243,11 @@ def build_overtake_scene_snapshot(
             target_speed_kmh,
             distance_limited_speed_kmh,
         )
+        if (
+            same_lane_follow_distance_m is not None
+            and same_lane_follow_speed_mps <= stopped_speed_threshold_mps
+        ):
+            follow_target_speed_kmh = min(follow_target_speed_kmh, 10.0)
 
     left_front_gap_m, left_rear_gap_m = lane_gaps(tracked_objects, "left_lane")
     right_front_gap_m, right_rear_gap_m = lane_gaps(tracked_objects, "right_lane")

@@ -46,7 +46,7 @@ class _WorldMap:
 
 
 class OvertakeSceneAssemblerTests(unittest.TestCase):
-    def test_stopped_lead_does_not_force_two_kmh_follow_speed(self) -> None:
+    def test_stopped_lead_uses_ten_kmh_follow_cap_instead_of_two_kmh(self) -> None:
         tracked_objects = (
             SimpleNamespace(
                 actor_id=101,
@@ -87,7 +87,7 @@ class OvertakeSceneAssemblerTests(unittest.TestCase):
             route_point_progress_m=[],
         )
 
-        self.assertEqual(snapshot.follow_target_speed_kmh, 20.0)
+        self.assertEqual(snapshot.follow_target_speed_kmh, 10.0)
 
 
 if __name__ == "__main__":
