@@ -3,6 +3,6 @@
   "town": "Town01",
   "closed_loop": false,
   "sampling_resolution_m": 2.0,
-  "anchor_spawn_indices": [214, 121],
-  "description": "Short Town01 route that transitions from road-15 into the curved road-13 section, used for stopped-obstacle bypass checks on a gentle curve."
+  "anchor_spawn_indices": [214, 205],
+  "description": "Town01 route that transitions from road-15 into the curved road-13 section and then continues along road-3, leaving enough room for pass-complete and rejoin checks on a gentle curve."
 }
