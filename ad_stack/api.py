@@ -5,16 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ad_stack.agents import (
-    ExpertBasicAgent,
-    ExpertBasicAgentConfig,
-    LearnedLateralAgent,
-    PilotNetScenePolicy,
-)
+from ad_stack.agents.base import ControlDecision, VehicleCommand
+from ad_stack.agents.expert_basic_agent import ExpertBasicAgent, ExpertBasicAgentConfig
+from ad_stack.agents.learned_lateral_agent import LearnedLateralAgent, PilotNetScenePolicy
+from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.overtake.policies import accept_stopped_overtake_target
 from ad_stack.overtake.policies.stopped_target_policy import build_stopped_obstacle_targets
-from ad_stack.agents.base import ControlDecision, VehicleCommand
-from ad_stack.inference import load_pilotnet_runtime, select_device
 from ad_stack.runtime import ObservationBuilder
 from ad_stack.world_model import (
     DynamicVehicleStateView,

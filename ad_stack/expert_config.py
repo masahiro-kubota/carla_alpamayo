@@ -5,7 +5,7 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 from typing import Any
 
-from ad_stack.agents import ExpertBasicAgentConfig
+from ad_stack.agents.expert_basic_agent import ExpertBasicAgentConfig
 from libs.project import PROJECT_ROOT
 
 DEFAULT_EXPERT_CONFIG_PATH = Path("ad_stack/configs/expert/default.json")
