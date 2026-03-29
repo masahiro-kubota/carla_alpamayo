@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from ad_stack.overtake.infrastructure.carla import build_stopped_obstacle_scenario_validation
+from ad_stack.overtake.infrastructure.carla import (
+    build_stopped_obstacle_scenario_validation,
+    warm_up_and_build_stopped_obstacle_scenario_validation,
+)
 from simulation.environment_config import EnvironmentConfigSpec, StoppedObstacleScenarioConfig
 
 
@@ -79,6 +82,18 @@ class _FakeWorldMap:
 
     def get_waypoint(self, location: _FakeLocation) -> _FakeWaypoint:
         return self._mapping[(location.x, location.y, location.z)]
+
+
+class _FakeWorld:
+    def __init__(self, world_map: _FakeWorldMap) -> None:
+        self._world_map = world_map
+        self.tick_count = 0
+
+    def tick(self) -> None:
+        self.tick_count += 1
+
+    def get_map(self) -> _FakeWorldMap:
+        return self._world_map
 
 
 class StoppedObstacleScenarioValidationTest(unittest.TestCase):
@@ -200,6 +215,46 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
 
         self.assertTrue(result["valid"])
         self.assertAlmostEqual(result["snapshot"]["ego_to_obstacle_longitudinal_distance_m"], 10.0)
+
+    def test_warm_up_helper_ticks_world_before_building_snapshot(self) -> None:
+        ego_location = _FakeLocation(0.0, 0.0, 0.0)
+        obstacle_location = _FakeLocation(10.0, 0.0, 0.0)
+        ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=0.0, location=ego_location)
+        obstacle_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=10.0, location=obstacle_location)
+        left_waypoint = _FakeWaypoint(
+            road_id=1,
+            lane_id=-1,
+            s=10.0,
+            location=_FakeLocation(10.0, 3.5, 0.0),
+        )
+        obstacle_waypoint.set_left_lane(left_waypoint)
+        world_map = _FakeWorldMap(
+            {
+                (ego_location.x, ego_location.y, ego_location.z): ego_waypoint,
+                (obstacle_location.x, obstacle_location.y, obstacle_location.z): obstacle_waypoint,
+            }
+        )
+        world = _FakeWorld(world_map)
+        ego_vehicle = _FakeActor(1, ego_location)
+        obstacle_actor = _FakeActor(201, obstacle_location)
+        environment = EnvironmentConfigSpec(
+            name="clear_case",
+            town="Town01",
+            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+        )
+
+        result = warm_up_and_build_stopped_obstacle_scenario_validation(
+            world=world,
+            environment_config=environment,
+            route_trace=[(ego_waypoint, None), (obstacle_waypoint, None)],
+            ego_vehicle=ego_vehicle,
+            npc_actor_refs=[obstacle_actor],
+            driving_lane_type="Driving",
+            warmup_ticks=3,
+        )
+
+        self.assertEqual(world.tick_count, 3)
+        self.assertTrue(result["valid"])
 
     def test_route_target_lane_uses_nearest_route_waypoint_to_ego(self) -> None:
         ego_location = _FakeLocation(0.0, 0.0, 0.0)

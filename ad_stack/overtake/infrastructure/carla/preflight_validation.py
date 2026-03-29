@@ -211,3 +211,25 @@ def build_stopped_obstacle_scenario_validation(
             ),
         },
     }
+
+
+def warm_up_and_build_stopped_obstacle_scenario_validation(
+    *,
+    world: Any,
+    environment_config: EnvironmentConfigSpec | None,
+    route_trace: list[tuple[Any, Any]],
+    ego_vehicle: Any,
+    npc_actor_refs: Sequence[Any],
+    driving_lane_type: Any,
+    warmup_ticks: int = 3,
+) -> dict[str, Any] | None:
+    for _ in range(max(0, int(warmup_ticks))):
+        world.tick()
+    return build_stopped_obstacle_scenario_validation(
+        environment_config=environment_config,
+        world_map=world.get_map(),
+        route_trace=route_trace,
+        ego_vehicle=ego_vehicle,
+        npc_actor_refs=npc_actor_refs,
+        driving_lane_type=driving_lane_type,
+    )

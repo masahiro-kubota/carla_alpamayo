@@ -49,7 +49,7 @@ from ad_stack.overtake.infrastructure.carla import (
     RouteLoopTelemetryAccumulator,
     build_ego_state_sample,
     build_episode_record,
-    build_stopped_obstacle_scenario_validation,
+    warm_up_and_build_stopped_obstacle_scenario_validation,
 )
 from libs.utils import render_png_sequence_to_mp4
 from simulation.environment_config import (
@@ -1021,11 +1021,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             spawned_actor_refs=npc_actor_refs,
         )
         npc_actor_metadata_by_id = {int(item["actor_id"]): item for item in npc_actors_summary}
-        for _ in range(3):
-            world.tick()
-        scenario_validation = build_stopped_obstacle_scenario_validation(
+        scenario_validation = warm_up_and_build_stopped_obstacle_scenario_validation(
+            world=world,
             environment_config=environment_config,
-            world_map=world.get_map(),
             route_trace=planned_route.trace,
             ego_vehicle=vehicle,
             npc_actor_refs=npc_actor_refs,

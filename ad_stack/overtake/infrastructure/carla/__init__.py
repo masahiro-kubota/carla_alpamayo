@@ -1,4 +1,7 @@
-from .preflight_validation import build_stopped_obstacle_scenario_validation
+from .preflight_validation import (
+    build_stopped_obstacle_scenario_validation,
+    warm_up_and_build_stopped_obstacle_scenario_validation,
+)
 from .route_alignment import (
     RouteAlignedWaypoint,
     adjacent_lane_waypoint,
@@ -44,4 +47,5 @@ __all__ = [
     "build_episode_record",
     "build_planning_debug_mcap_payload",
     "visible_overtake_target_actors",
+    "warm_up_and_build_stopped_obstacle_scenario_validation",
 ]
