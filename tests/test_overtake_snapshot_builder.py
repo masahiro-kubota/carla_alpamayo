@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
+from ad_stack.overtake import build_stopped_obstacle_targets
 from ad_stack.overtake.infrastructure.carla import (
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
@@ -137,6 +138,7 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
             stopped_speed_threshold_mps=0.3,
             cluster_merge_gap_m=10.0,
             cluster_max_member_speed_mps=0.5,
+            target_policy=build_stopped_obstacle_targets,
             active_signal_state=None,
             signal_stop_distance_m=None,
             allow_overtake=True,
@@ -212,6 +214,7 @@ class OvertakeSceneSnapshotTests(unittest.TestCase):
             stopped_speed_threshold_mps=0.3,
             cluster_merge_gap_m=10.0,
             cluster_max_member_speed_mps=0.5,
+            target_policy=build_stopped_obstacle_targets,
             active_signal_state=None,
             signal_stop_distance_m=None,
             allow_overtake=True,

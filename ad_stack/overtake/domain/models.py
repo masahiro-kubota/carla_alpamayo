@@ -12,18 +12,6 @@ PlannerState = Literal[
     "abort_return",
 ]
 PreferredDirection = Literal["left_first", "right_first"]
-ScenarioKind = Literal[
-    "clear",
-    "blocked_static",
-    "blocked_oncoming",
-    "signal_suppressed",
-    "rejoin_blocked_then_release",
-    "adjacent_lane_closed",
-    "double_stopped_separated",
-    "double_stopped_clustered",
-    "curve_clear",
-    "near_junction_preflight_reject",
-]
 TargetKind = Literal["single_actor", "cluster"]
 
 

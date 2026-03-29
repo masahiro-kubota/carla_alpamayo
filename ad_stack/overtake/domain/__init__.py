@@ -11,7 +11,6 @@ from .models import (
     OvertakeTargetSnapshot,
     PlannerState,
     PreferredDirection,
-    ScenarioKind,
     TargetKind,
 )
 from .selectors import lane_gap_for_lane_id
@@ -29,7 +28,6 @@ __all__ = [
     "OvertakeTargetSnapshot",
     "PlannerState",
     "PreferredDirection",
-    "ScenarioKind",
     "TargetKind",
     "lane_gap_for_lane_id",
 ]

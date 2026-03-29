@@ -11,7 +11,7 @@ from ad_stack.overtake.domain import (
     OvertakeTargetSnapshot,
 )
 from ad_stack.overtake.infrastructure.carla.route_alignment import lane_id
-from ad_stack.overtake.policies import build_stopped_obstacle_targets
+from ad_stack.overtake.policies import TargetPolicy
 
 
 @dataclass(slots=True)
@@ -150,6 +150,7 @@ def route_relative_progress_to_actor(
 def build_same_lane_stopped_targets(
     tracked_objects: tuple[Any, ...],
     *,
+    target_policy: TargetPolicy,
     stopped_speed_threshold_mps: float,
     cluster_merge_gap_m: float,
     cluster_max_member_speed_mps: float,
@@ -171,7 +172,7 @@ def build_same_lane_stopped_targets(
             and float(actor.longitudinal_distance_m) > 0.0
         )
     ]
-    return build_stopped_obstacle_targets(
+    return target_policy(
         leads,
         cluster_merge_gap_m=cluster_merge_gap_m,
         cluster_max_member_speed_mps=cluster_max_member_speed_mps,
@@ -181,6 +182,7 @@ def build_same_lane_stopped_targets(
 def build_route_aligned_stopped_targets(
     tracked_objects: tuple[Any, ...],
     *,
+    target_policy: TargetPolicy,
     route_index: int | None,
     base_trace: list[tuple[Any, Any]],
     route_point_to_trace_index: list[int],
@@ -223,7 +225,7 @@ def build_route_aligned_stopped_targets(
                 is_stopped=True,
             )
         )
-    return build_stopped_obstacle_targets(
+    return target_policy(
         leads,
         cluster_merge_gap_m=cluster_merge_gap_m,
         cluster_max_member_speed_mps=cluster_max_member_speed_mps,
@@ -292,6 +294,7 @@ def build_overtake_scene_snapshot(
     stopped_speed_threshold_mps: float,
     cluster_merge_gap_m: float,
     cluster_max_member_speed_mps: float,
+    target_policy: TargetPolicy,
     active_signal_state: str | None,
     signal_stop_distance_m: float | None,
     allow_overtake: bool,
@@ -305,12 +308,14 @@ def build_overtake_scene_snapshot(
     lead_vehicle = nearest_lead(tracked_objects, relation="same_lane")
     same_lane_stopped_targets = build_same_lane_stopped_targets(
         tracked_objects,
+        target_policy=target_policy,
         stopped_speed_threshold_mps=stopped_speed_threshold_mps,
         cluster_merge_gap_m=cluster_merge_gap_m,
         cluster_max_member_speed_mps=cluster_max_member_speed_mps,
     )
     route_aligned_stopped_targets = build_route_aligned_stopped_targets(
         tracked_objects,
+        target_policy=target_policy,
         route_index=route_index,
         base_trace=base_trace,
         route_point_to_trace_index=route_point_to_trace_index,

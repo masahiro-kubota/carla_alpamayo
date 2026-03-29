@@ -31,20 +31,13 @@ from .domain import (
     OvertakeTargetSnapshot,
     PlannerState,
     PreferredDirection,
-    ScenarioKind,
     TargetKind,
     lane_gap_for_lane_id,
 )
 from .policies import (
+    TargetPolicy,
     build_stopped_obstacle_targets,
     next_stopped_obstacle_target,
-)
-from .validation import (
-    PreflightValidationInput,
-    ScenarioValidationResult,
-    OvertakeScenarioConfig,
-    parse_overtake_scenario_config,
-    validate_preflight,
 )
 
 __all__ = [
@@ -63,12 +56,9 @@ __all__ = [
     "OvertakeRuntimeState",
     "OvertakeTargetSnapshot",
     "PlannerState",
-    "PreflightValidationInput",
     "PreferredDirection",
-    "ScenarioKind",
-    "ScenarioValidationResult",
-    "OvertakeScenarioConfig",
     "TargetKind",
+    "TargetPolicy",
     "build_stopped_obstacle_targets",
     "build_route_aligned_lane_change_plan",
     "choose_overtake_action",
@@ -86,6 +76,4 @@ __all__ = [
     "traffic_light_stop_control",
     "traffic_light_stop_target_distance_m",
     "traffic_light_stop_target_speed_kmh",
-    "parse_overtake_scenario_config",
-    "validate_preflight",
 ]

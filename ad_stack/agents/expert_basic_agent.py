@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake import (
     OvertakeRuntimeState,
+    build_stopped_obstacle_targets,
     choose_overtake_action,
     evaluate_pass_progress,
     is_traffic_light_violation,
@@ -208,6 +209,7 @@ class ExpertBasicAgent:
             stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
             cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
             cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
+            target_policy=build_stopped_obstacle_targets,
             active_signal_state=active_light.state if active_light is not None else None,
             signal_stop_distance_m=(
                 active_light.stop_line_distance_m if active_light is not None else None
