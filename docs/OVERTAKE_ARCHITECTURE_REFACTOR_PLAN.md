@@ -485,12 +485,14 @@ moving vehicle 追い越しでは、停止障害物よりも
 
 - [simulation/tests](/home/masa/carla_alpamayo/simulation/tests)
   - ほぼ使っていない中途半端な場所になっている
-- [preflight_validation.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/preflight_validation.py)
-  - `run.py` / inspector が使う feature 固有 preflight の CARLA adapter
-- [run.py](/home/masa/carla_alpamayo/ad_stack/run.py)
-  - telemetry 組み立てと scenario preflight の feature 固有処理がまだ多い
 - [expert_basic_agent.py](/home/masa/carla_alpamayo/ad_stack/agents/expert_basic_agent.py)
-  - adapter / decision / execution が混ざっている
+  - adapter / decision / execution の混線はかなり減ったが、
+  - まだ overtake state orchestration と lane-change control execution が同居している
+- [route_alignment.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/route_alignment.py)
+  - lane-change plan materialization は adapter に寄ったが、
+  - まだ execution policy の共通 contract までは上がっていない
+- `tests/integration/ad_stack/_shared/`
+  - 共通 helper はできたが、suite 間の assert / runner contract はまだ薄い
 
 ## 6. 段階的リファクタ計画
 
@@ -510,11 +512,16 @@ moving vehicle 追い越しでは、停止障害物よりも
 
 ### Phase 3: CARLA adapter の明示化
 
-- `expert_basic_agent.py` から
+- 完了済み:
   - target extraction
   - lane gap extraction
   - route corridor extraction
-  を infrastructure adapter module へ出す
+  - telemetry mapping
+  - preflight warmup / validation
+  - lane-change path materialization
+- 残り:
+  - `expert_basic_agent.py` に残る overtake state orchestration と control execution の境界整理
+  - CARLA adapter が返す execution contract の共通化
 
 ### Phase 4: moving vehicle overtake の pure design 追加
 
@@ -548,8 +555,8 @@ moving vehicle 追い越しでは、停止障害物よりも
 優先度順:
 
 1. `expert_basic_agent.py` の adapter / decision 分離
-2. stopped-obstacle pure module の分割
-3. `scenario_validation` の feature module 化
+2. overtake execution contract の共通化
+3. tests/integration の shared contract 強化
 4. overtake telemetry schema の共通化
 5. moving vehicle overtake の pure design 追加
 
