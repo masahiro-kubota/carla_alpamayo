@@ -19,7 +19,6 @@ ScenarioKind = Literal[
     "signal_suppressed",
     "rejoin_blocked_then_release",
     "adjacent_lane_closed",
-    "double_stopped_obstacle",
     "double_stopped_separated",
     "double_stopped_clustered",
     "curve_clear",
@@ -74,7 +73,7 @@ class OvertakeContext:
     signal_stop_distance_m: float | None
     allow_overtake: bool
     preferred_direction: PreferredDirection
-    obstacle_target: OvertakeTargetSnapshot | None = None
+    active_target: OvertakeTargetSnapshot | None = None
 
 
 @dataclass(slots=True)

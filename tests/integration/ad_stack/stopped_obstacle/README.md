@@ -32,12 +32,6 @@
 
 この 10 本が現在の verified integration set です。
 
-## Scenario Family / Legacy
-
-- [double_stopped_obstacle.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_obstacle.md)
-
-`double_stopped_obstacle` は legacy な混在 scenario で、`double_stopped_separated` と `double_stopped_clustered` に置き換え済みです。
-
 ## Deferred / Exploratory Scenarios
 
 - [right_first_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/right_first_clear.md)

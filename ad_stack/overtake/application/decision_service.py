@@ -23,7 +23,7 @@ def choose_overtake_action(
     overtake_min_rear_gap_m: float,
     signal_suppression_distance_m: float,
 ) -> OvertakeDecision:
-    active_target = context.obstacle_target
+    active_target = context.active_target
     target_distance_m = active_target.entry_distance_m if active_target is not None else None
     target_speed_mps = active_target.speed_mps if active_target is not None else None
     target_is_stopped = active_target.is_stopped if active_target is not None else None

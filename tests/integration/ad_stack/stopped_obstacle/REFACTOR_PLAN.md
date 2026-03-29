@@ -187,7 +187,8 @@ scenario は 3 層に分ける。
 
 - `signal_suppressed`
 - `rejoin_blocked_then_release`
-- `double_stopped_obstacle`
+- `double_stopped_separated`
+- `double_stopped_clustered`
 - `curve_clear`
 - `near_junction_preflight_reject`
 - `adjacent_lane_closed`
@@ -241,7 +242,7 @@ Done:
 
 1. `signal_suppressed`
 2. `rejoin_blocked_then_release`
-3. `double_stopped_obstacle`
+3. `double_stopped_separated / double_stopped_clustered`
 4. `curve_clear`
 5. `near_junction_preflight_reject`
 6. `adjacent_lane_closed`

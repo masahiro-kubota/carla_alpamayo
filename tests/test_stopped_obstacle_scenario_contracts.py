@@ -79,6 +79,7 @@ def _context(
         signal_stop_distance_m=signal_stop_distance_m,
         allow_overtake=True,
         preferred_direction="left_first",
+        active_target=None,
     )
 
 

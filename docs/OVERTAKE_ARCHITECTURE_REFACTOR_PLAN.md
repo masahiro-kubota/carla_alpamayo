@@ -40,7 +40,7 @@
 
 ### 1.2 `stopped obstacle` 専用の概念が feature 全体の概念になっていない
 
-現在の pure logic は [stopped_obstacle_logic.py](/home/masa/carla_alpamayo/ad_stack/overtake/stopped_obstacle_logic.py) に切り出されているが、名前と型が停止障害物に寄りすぎています。
+現在の pure logic は `ad_stack/overtake/domain|application|policies` に分割されたが、なお naming の一部が停止障害物に寄りすぎています。
 
 たとえば今後の moving vehicle 追い越しでは、次の共通概念が必要です。
 
@@ -283,7 +283,7 @@ ad_stack/
       contracts.py
     policies/
       stopped_target_policy.py
-      moving_target_policy.py
+      moving_target_policy.py  # 将来追加
     infrastructure/
       carla/
         snapshot_builder.py
@@ -291,7 +291,7 @@ ad_stack/
         telemetry_mapper.py
 ```
 
-最終的には [stopped_obstacle_logic.py](/home/masa/carla_alpamayo/ad_stack/overtake/stopped_obstacle_logic.py) の中身を上のように分割するのが自然です。
+現在の stopped-obstacle 実装はすでに上記の層へ分割済みで、以後はこの構成を維持したまま整理を続ける。
 
 ### この構成にしたい理由
 
@@ -502,11 +502,11 @@ moving vehicle 追い越しでは、停止障害物よりも
 
 ### Phase 2: stopped-obstacle logic の分割
 
-- [stopped_obstacle_logic.py](/home/masa/carla_alpamayo/ad_stack/overtake/stopped_obstacle_logic.py) を
+- stopped-obstacle の pure rule を
   - domain
   - application
   - policies
- へ分割
+ へ維持したまま、stopped 固有 naming を generic 化する
 
 ### Phase 3: CARLA adapter の明示化
 

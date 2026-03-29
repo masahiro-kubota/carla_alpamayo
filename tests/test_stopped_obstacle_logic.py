@@ -35,7 +35,7 @@ def _context(
     right_front_gap_m: float | None = 40.0,
     right_rear_gap_m: float | None = 20.0,
     right_lane_open: bool = True,
-    obstacle_target: OvertakeTargetSnapshot | None = None,
+    active_target: OvertakeTargetSnapshot | None = None,
 ) -> OvertakeContext:
     return OvertakeContext(
         timestamp_s=0.0,
@@ -72,7 +72,7 @@ def _context(
         signal_stop_distance_m=signal_stop_distance_m,
         allow_overtake=True,
         preferred_direction=preferred_direction,  # type: ignore[arg-type]
-        obstacle_target=obstacle_target,
+        active_target=active_target,
     )
 
 
@@ -142,7 +142,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(
                 lead_distance_m=None,
-                obstacle_target=OvertakeTargetSnapshot(
+                active_target=OvertakeTargetSnapshot(
                     kind="single_actor",
                     primary_actor_id=301,
                     member_actor_ids=(301,),
@@ -588,7 +588,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(
                 lead_distance_m=80.0,
-                obstacle_target=OvertakeTargetSnapshot(
+                active_target=OvertakeTargetSnapshot(
                     kind="cluster",
                     primary_actor_id=101,
                     member_actor_ids=(101, 102),

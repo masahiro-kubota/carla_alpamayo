@@ -962,7 +962,7 @@ class ExpertBasicAgent:
                         relative_speed_mps=closing_speed_mps,
                         is_stopped=lead_speed_mps <= 0.3,
                     ),
-                    obstacle_target=active_overtake_target,
+                    active_target=active_overtake_target,
                     left_lane=left_lane_snapshot,
                     right_lane=right_lane_snapshot,
                     active_signal_state=active_light.state if active_light is not None else None,

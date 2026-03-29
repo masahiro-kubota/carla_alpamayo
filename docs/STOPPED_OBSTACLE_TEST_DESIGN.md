@@ -39,7 +39,7 @@
 
 対象:
 
-- `SceneState -> StoppedObstacleContext`
+- `SceneState -> OvertakeContext`
 - route trace -> `RouteLaneSample[]`
 - tracked object -> lead / blocker / cluster / rejoin gap 変換
 
