@@ -1,7 +1,9 @@
 from .application import (
+    OvertakeRuntimeTransition,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
+    resolve_overtake_runtime_transition,
     should_begin_rejoin,
 )
 from .domain import (
@@ -37,6 +39,7 @@ __all__ = [
     "OvertakeContext",
     "OvertakeLeadSnapshot",
     "OvertakeMemory",
+    "OvertakeRuntimeTransition",
     "OvertakeTargetSnapshot",
     "PlannerState",
     "PreflightValidationInput",
@@ -50,6 +53,7 @@ __all__ = [
     "evaluate_pass_progress",
     "lane_gap_for_lane_id",
     "next_stopped_obstacle_target",
+    "resolve_overtake_runtime_transition",
     "should_begin_rejoin",
     "validate_preflight",
 ]

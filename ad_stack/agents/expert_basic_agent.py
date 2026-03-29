@@ -10,6 +10,7 @@ from ad_stack.overtake import (
     OvertakeMemory,
     choose_overtake_action,
     evaluate_pass_progress,
+    resolve_overtake_runtime_transition,
     should_begin_rejoin,
 )
 from ad_stack.overtake.infrastructure.carla import (
@@ -504,59 +505,34 @@ class ExpertBasicAgent:
             "event_overtake_abort": False,
             "event_unsafe_lane_change_reject": False,
         }
+        stop_for_light = self._should_stop_for_light(active_light, current_speed_mps)
 
         if self._overtake_state != "idle":
-            if (
-                self._overtake_state == "lane_change_out"
-                and current_lane_id is not None
-                and current_lane_id == self._overtake_target_lane_id
-            ):
-                self._overtake_state = "pass_vehicle"
-                planner_state = "pass_vehicle"
-            elif self._overtake_state == "lane_change_back":
-                planner_state = "abort_return" if self._overtake_aborted else "lane_change_back"
-            else:
-                planner_state = "abort_return" if self._overtake_aborted else self._overtake_state
-
-            if self._overtake_state in {"lane_change_out", "abort_return"}:
-                lane_change_target_speed_kmh = min(
-                    self.config.target_speed_kmh,
-                    max(
-                        follow_target_speed_kmh,
-                        lead_speed_kmh + self.config.overtake_speed_delta_kmh,
-                    ),
-                )
-                target_speed_kmh = min(target_speed_kmh, lane_change_target_speed_kmh)
-
-            if self._overtake_state in {
-                "lane_change_out",
-                "pass_vehicle",
-            } and self._should_stop_for_light(
-                active_light,
-                current_speed_mps,
-            ):
+            transition = resolve_overtake_runtime_transition(
+                state=self._overtake_state,
+                aborted=self._overtake_aborted,
+                current_lane_id=current_lane_id,
+                target_lane_id=self._overtake_target_lane_id,
+                origin_lane_id=self._overtake_origin_lane_id,
+                route_target_lane_id=scene_state.route.target_lane_id,
+                lane_center_offset_m=lane_center_offset_m,
+                should_stop_for_light=stop_for_light,
+                target_speed_kmh=self.config.target_speed_kmh,
+                follow_target_speed_kmh=follow_target_speed_kmh,
+                lead_speed_kmh=lead_speed_kmh,
+                overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
+            )
+            self._overtake_state = transition.state
+            self._overtake_aborted = transition.aborted
+            planner_state = transition.planner_state
+            if transition.limited_target_speed_kmh is not None:
+                target_speed_kmh = min(target_speed_kmh, transition.limited_target_speed_kmh)
+            if transition.should_prepare_abort_return:
                 self._set_rejoin_plan(route_index)
-                self._overtake_state = "abort_return"
-                self._overtake_aborted = True
-                planner_state = "abort_return"
+            if transition.event_overtake_abort:
                 event_flags["event_overtake_abort"] = True
-
-            if (
-                current_lane_id is not None
-                and self._overtake_state in {"lane_change_back", "abort_return"}
-                and (
-                    (
-                        self._overtake_origin_lane_id is not None
-                        and current_lane_id == self._overtake_origin_lane_id
-                    )
-                    or (
-                        scene_state.route.target_lane_id is not None
-                        and current_lane_id == scene_state.route.target_lane_id
-                    )
-                )
-                and (lane_center_offset_m is None or lane_center_offset_m <= 0.75)
-            ):
-                if not self._overtake_aborted:
+            if transition.completed:
+                if transition.event_overtake_success:
                     event_flags["event_overtake_success"] = True
                 self._overtake_state = "idle"
                 self._overtake_direction = None
@@ -570,7 +546,6 @@ class ExpertBasicAgent:
                 self._resume_base_route(route_index)
                 planner_state = "nominal_cruise"
 
-        stop_for_light = self._should_stop_for_light(active_light, current_speed_mps)
         stop_target_distance_m = self._traffic_light_stop_target_distance_m(active_light)
         if stop_for_light and self._overtake_state == "idle":
             planner_state = "traffic_light_stop"
