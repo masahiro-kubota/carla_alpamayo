@@ -7,9 +7,9 @@ from pathlib import Path
 from ad_stack.overtake import (
     AdjacentLaneGapSnapshot,
     OvertakeLeadSnapshot,
+    OvertakeContext,
     OvertakeMemory,
     PreflightValidationInput,
-    StoppedObstacleContext,
     choose_overtake_action,
     should_begin_rejoin,
     validate_preflight,
@@ -47,8 +47,8 @@ def _context(
     left_rear_gap_m: float | None = 20.0,
     active_signal_state: str | None = None,
     signal_stop_distance_m: float | None = None,
-) -> StoppedObstacleContext:
-    return StoppedObstacleContext(
+) -> OvertakeContext:
+    return OvertakeContext(
         timestamp_s=0.0,
         current_lane_id="15:-1",
         origin_lane_id="15:-1",

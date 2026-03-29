@@ -6,10 +6,10 @@ from ad_stack.overtake import (
     AdjacentLaneGapSnapshot,
     LaneChangePlanPoint,
     OvertakeLeadSnapshot,
+    OvertakeContext,
     OvertakeMemory,
+    OvertakeTargetSnapshot,
     PreflightValidationInput,
-    StoppedObstacleTargetSnapshot,
-    StoppedObstacleContext,
     build_stopped_obstacle_targets,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
@@ -35,9 +35,9 @@ def _context(
     right_front_gap_m: float | None = 40.0,
     right_rear_gap_m: float | None = 20.0,
     right_lane_open: bool = True,
-    obstacle_target: StoppedObstacleTargetSnapshot | None = None,
-) -> StoppedObstacleContext:
-    return StoppedObstacleContext(
+    obstacle_target: OvertakeTargetSnapshot | None = None,
+) -> OvertakeContext:
+    return OvertakeContext(
         timestamp_s=0.0,
         current_lane_id="15:-1",
         origin_lane_id="15:-1",
@@ -142,7 +142,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(
                 lead_distance_m=None,
-                obstacle_target=StoppedObstacleTargetSnapshot(
+                obstacle_target=OvertakeTargetSnapshot(
                     kind="single_actor",
                     primary_actor_id=301,
                     member_actor_ids=(301,),
@@ -588,7 +588,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(
                 lead_distance_m=80.0,
-                obstacle_target=StoppedObstacleTargetSnapshot(
+                obstacle_target=OvertakeTargetSnapshot(
                     kind="cluster",
                     primary_actor_id=101,
                     member_actor_ids=(101, 102),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from ad_stack.overtake.domain import OvertakeLeadSnapshot, StoppedObstacleTargetSnapshot
+from ad_stack.overtake.domain import OvertakeLeadSnapshot, OvertakeTargetSnapshot
 from ad_stack.overtake.infrastructure.carla.route_alignment import lane_id
 from ad_stack.overtake.policies import build_stopped_obstacle_targets
 
@@ -101,7 +101,7 @@ def build_same_lane_stopped_targets(
     stopped_speed_threshold_mps: float,
     cluster_merge_gap_m: float,
     cluster_max_member_speed_mps: float,
-) -> list[StoppedObstacleTargetSnapshot]:
+) -> list[OvertakeTargetSnapshot]:
     leads = [
         OvertakeLeadSnapshot(
             actor_id=actor.actor_id,
@@ -136,7 +136,7 @@ def build_route_aligned_stopped_targets(
     stopped_speed_threshold_mps: float,
     cluster_merge_gap_m: float,
     cluster_max_member_speed_mps: float,
-) -> list[StoppedObstacleTargetSnapshot]:
+) -> list[OvertakeTargetSnapshot]:
     if route_index is None or not base_trace or not route_point_to_trace_index or not route_point_progress_m:
         return []
 
@@ -179,13 +179,13 @@ def build_route_aligned_stopped_targets(
 
 
 def enrich_targets_with_adjacent_lane_availability(
-    targets: list[StoppedObstacleTargetSnapshot],
+    targets: list[OvertakeTargetSnapshot],
     *,
     tracked_objects: tuple[Any, ...],
     world_map: Any,
     carla_module: Any,
-) -> list[StoppedObstacleTargetSnapshot]:
-    enriched_targets: list[StoppedObstacleTargetSnapshot] = []
+) -> list[OvertakeTargetSnapshot]:
+    enriched_targets: list[OvertakeTargetSnapshot] = []
     for target in targets:
         matching_actor = next(
             (actor for actor in tracked_objects if actor.actor_id == target.primary_actor_id),
@@ -210,7 +210,7 @@ def enrich_targets_with_adjacent_lane_availability(
                 )
             )
         enriched_targets.append(
-            StoppedObstacleTargetSnapshot(
+            OvertakeTargetSnapshot(
                 kind=target.kind,
                 primary_actor_id=target.primary_actor_id,
                 member_actor_ids=target.member_actor_ids,

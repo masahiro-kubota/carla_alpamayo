@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ad_stack.overtake.domain import (
     OvertakeLeadSnapshot,
-    StoppedObstacleTargetSnapshot,
+    OvertakeTargetSnapshot,
     TargetKind,
 )
 
@@ -15,7 +15,7 @@ def build_moving_overtake_targets(
     max_distance_m: float,
     cluster_merge_gap_m: float,
     cluster_max_member_speed_delta_mps: float,
-) -> list[StoppedObstacleTargetSnapshot]:
+) -> list[OvertakeTargetSnapshot]:
     moving_leads = [
         lead
         for lead in leads
@@ -31,7 +31,7 @@ def build_moving_overtake_targets(
     ]
     moving_leads.sort(key=lambda lead: (lead.lane_id or "", float(lead.distance_m or 0.0)))
 
-    targets: list[StoppedObstacleTargetSnapshot] = []
+    targets: list[OvertakeTargetSnapshot] = []
     current_cluster: list[OvertakeLeadSnapshot] = []
     for lead in moving_leads:
         if not current_cluster:
@@ -57,10 +57,10 @@ def build_moving_overtake_targets(
 
 
 def next_moving_overtake_target(
-    targets: list[StoppedObstacleTargetSnapshot],
+    targets: list[OvertakeTargetSnapshot],
     *,
     current_primary_actor_id: int | None,
-) -> StoppedObstacleTargetSnapshot | None:
+) -> OvertakeTargetSnapshot | None:
     if current_primary_actor_id is None:
         return targets[0] if targets else None
     for index, target in enumerate(targets):
@@ -69,12 +69,12 @@ def next_moving_overtake_target(
     return targets[0] if targets else None
 
 
-def _cluster_to_target(cluster: list[OvertakeLeadSnapshot]) -> StoppedObstacleTargetSnapshot:
+def _cluster_to_target(cluster: list[OvertakeLeadSnapshot]) -> OvertakeTargetSnapshot:
     first = cluster[0]
     last = cluster[-1]
     member_actor_ids = tuple(lead.actor_id for lead in cluster if lead.actor_id is not None)
     kind: TargetKind = "cluster" if len(member_actor_ids) > 1 else "single_actor"
-    return StoppedObstacleTargetSnapshot(
+    return OvertakeTargetSnapshot(
         kind=kind,
         primary_actor_id=int(first.actor_id),
         member_actor_ids=member_actor_ids,

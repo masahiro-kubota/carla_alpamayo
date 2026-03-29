@@ -10,9 +10,9 @@ from ad_stack.overtake import (
     AdjacentLaneGapSnapshot,
     LaneChangePlanPoint,
     OvertakeLeadSnapshot,
+    OvertakeContext,
     OvertakeMemory,
-    StoppedObstacleTargetSnapshot,
-    StoppedObstacleContext,
+    OvertakeTargetSnapshot,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
@@ -400,7 +400,7 @@ class ExpertBasicAgent:
     def _same_lane_stopped_targets(
         self,
         tracked_objects: tuple[DynamicVehicleStateView, ...],
-    ) -> list[StoppedObstacleTargetSnapshot]:
+    ) -> list[OvertakeTargetSnapshot]:
         return build_same_lane_stopped_targets(
             tracked_objects,
             stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
@@ -431,7 +431,7 @@ class ExpertBasicAgent:
         tracked_objects: tuple[DynamicVehicleStateView, ...],
         *,
         route_index: int | None,
-    ) -> list[StoppedObstacleTargetSnapshot]:
+    ) -> list[OvertakeTargetSnapshot]:
         targets = build_route_aligned_stopped_targets(
             tracked_objects,
             route_index=route_index,
@@ -935,7 +935,7 @@ class ExpertBasicAgent:
             )
             overtake_considered = True
             overtake_decision = choose_overtake_action(
-                StoppedObstacleContext(
+                OvertakeContext(
                     timestamp_s=scene_state.timestamp_s,
                     current_lane_id=current_lane_id,
                     origin_lane_id=current_lane_id,

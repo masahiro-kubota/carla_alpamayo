@@ -4,8 +4,8 @@ from dataclasses import replace
 
 from ad_stack.overtake.domain import (
     OvertakeDecision,
+    OvertakeContext,
     OvertakeMemory,
-    StoppedObstacleContext,
     TargetKind,
 )
 
@@ -15,7 +15,7 @@ def _lane_gap_value(gap_m: float | None) -> float:
 
 
 def choose_overtake_action(
-    context: StoppedObstacleContext,
+    context: OvertakeContext,
     *,
     overtake_trigger_distance_m: float,
     overtake_speed_delta_kmh: float,

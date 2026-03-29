@@ -39,7 +39,7 @@ class OvertakeLeadSnapshot:
 
 
 @dataclass(slots=True)
-class StoppedObstacleTargetSnapshot:
+class OvertakeTargetSnapshot:
     kind: TargetKind
     primary_actor_id: int
     member_actor_ids: tuple[int, ...]
@@ -60,7 +60,7 @@ class AdjacentLaneGapSnapshot:
 
 
 @dataclass(slots=True)
-class StoppedObstacleContext:
+class OvertakeContext:
     timestamp_s: float
     current_lane_id: str | None
     origin_lane_id: str | None
@@ -74,7 +74,7 @@ class StoppedObstacleContext:
     signal_stop_distance_m: float | None
     allow_overtake: bool
     preferred_direction: PreferredDirection
-    obstacle_target: StoppedObstacleTargetSnapshot | None = None
+    obstacle_target: OvertakeTargetSnapshot | None = None
 
 
 @dataclass(slots=True)
