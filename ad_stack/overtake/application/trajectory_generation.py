@@ -68,8 +68,21 @@ def build_signal_stop_trajectory(
         minimum_horizon_m=minimum_horizon_m,
         resample_interval_m=resample_interval_m,
     )
+    base_trajectory = build_pose_trajectory(
+        pose_samples=tuple(
+            Pose3D(x=point.x, y=point.y, z=point.z, yaw_deg=point.yaw_deg)
+            for point in points
+        ),
+        desired_speed_mps=desired_speed_mps,
+        trajectory_id=trajectory_id,
+        origin_lane_id=origin_lane_id,
+        target_lane_id=target_lane_id,
+        source_route_start_index=bounded_start_index,
+        source_route_end_index=end_route_index,
+        resample_interval_m=resample_interval_m,
+    )
     trajectory_points: list[TrajectoryPoint] = []
-    for index, point in enumerate(points):
+    for index, point in enumerate(base_trajectory.points):
         distance_from_start_m = index * resample_interval_m
         if distance_from_start_m >= stop_line_distance_m:
             speed_mps = 0.0
