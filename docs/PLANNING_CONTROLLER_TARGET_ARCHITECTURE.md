@@ -466,6 +466,74 @@ telemetry は `BehaviorPlan` と `Trajectory` を中心に設計する。
 
 ## 13. directory 設計
 
+### 13.1 推奨ディレクトリ構成
+
+```text
+ad_stack/
+  agents/
+    expert_basic_agent.py
+  overtake/
+    domain/
+      planning_models.py
+      telemetry_contract.py
+    application/
+      behavior_path_planner.py
+      trajectory_generation.py
+      pure_pursuit_controller.py
+    policies/
+      target_policy.py
+      stopped_target_policy.py
+      moving_target_policy.py
+      target_acceptance_policy.py
+    infrastructure/
+      carla/
+        scene_snapshot_builder.py
+        route_backbone_builder.py
+        trajectory_materializer.py
+        controller_adapter.py
+        telemetry_mapper.py
+
+libs/
+  carla_utils/
+    routes.py
+    route_guidance.py
+    geometry.py
+
+tests/
+  test_route_backbone_contract.py
+  test_planning_scene_contract.py
+  test_behavior_path_planner.py
+  test_trajectory_contract.py
+  test_pure_pursuit_controller.py
+  test_signal_stop_trajectory.py
+  test_behavior_trajectory_telemetry.py
+  integration/
+    ad_stack/
+      _shared/
+      stopped_obstacle/
+      moving_vehicle/
+
+scenarios/
+  routes/
+  environments/
+  npc_profiles/
+```
+
+この構成での正本は次。
+
+- `ad_stack/overtake/domain`
+  - planning / controller の pure DTO
+- `ad_stack/overtake/application`
+  - planner と controller の pure application logic
+- `ad_stack/overtake/policies`
+  - target selection / acceptance の差分
+- `ad_stack/overtake/infrastructure/carla`
+  - CARLA adapter
+- `tests/`
+  - unit / contract / integration test の正本
+- `scenarios/`
+  - route / environment / npc profile asset の正本
+
 ### `libs/carla_utils`
 
 - route backbone 生成
