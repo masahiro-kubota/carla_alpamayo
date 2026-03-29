@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from ad_stack.overtake.application import build_route_aligned_lane_change_plan
 from ad_stack.overtake.domain import LaneChangePlanPoint
 
 
@@ -17,7 +18,21 @@ class RouteAlignedWaypoint:
     transform: Any
 
 
-def adjacent_lane_waypoint(
+@dataclass(slots=True)
+class WaypointExecutionPlan:
+    available: bool
+    waypoints: list[Any]
+    target_lane_id: str | None = None
+    failure_reason: str | None = None
+
+
+@dataclass(slots=True)
+class TraceExecutionPlan:
+    trace: list[tuple[Any, Any]]
+    waypoints: list[Any]
+
+
+def _adjacent_lane_waypoint(
     carla_module: Any,
     origin_waypoint: Any,
     direction: Literal["left", "right"],
@@ -32,7 +47,7 @@ def adjacent_lane_waypoint(
     return adjacent_waypoint
 
 
-def route_aligned_waypoint(carla_module: Any, waypoint: Any, heading_source_waypoint: Any) -> Any:
+def _route_aligned_waypoint(carla_module: Any, waypoint: Any, heading_source_waypoint: Any) -> Any:
     location = waypoint.transform.location
     rotation = heading_source_waypoint.transform.rotation
     transform = carla_module.Transform(
@@ -46,7 +61,7 @@ def route_aligned_waypoint(carla_module: Any, waypoint: Any, heading_source_wayp
     return RouteAlignedWaypoint(transform=transform)
 
 
-def interpolate_waypoint(
+def _interpolate_waypoint(
     carla_module: Any,
     start_waypoint: Any,
     end_waypoint: Any,
@@ -70,7 +85,7 @@ def interpolate_waypoint(
     return RouteAlignedWaypoint(transform=transform)
 
 
-def build_route_aligned_lane_samples(
+def _build_route_aligned_lane_samples(
     *,
     carla_module: Any,
     direction: Literal["left", "right"],
@@ -107,11 +122,11 @@ def build_route_aligned_lane_samples(
                 progress_m=progress_m,
             )
         )
-        waypoint_lookup[(point_index, origin_lane)] = route_aligned_waypoint(
+        waypoint_lookup[(point_index, origin_lane)] = _route_aligned_waypoint(
             carla_module, origin_waypoint, origin_waypoint
         )
 
-        adjacent_waypoint = adjacent_lane_waypoint(carla_module, origin_waypoint, direction)
+        adjacent_waypoint = _adjacent_lane_waypoint(carla_module, origin_waypoint, direction)
         adjacent_lane = lane_id(adjacent_waypoint)
         if adjacent_waypoint is None or adjacent_lane is None:
             continue
@@ -124,14 +139,14 @@ def build_route_aligned_lane_samples(
                 progress_m=progress_m,
             )
         )
-        waypoint_lookup[(point_index, adjacent_lane)] = route_aligned_waypoint(
+        waypoint_lookup[(point_index, adjacent_lane)] = _route_aligned_waypoint(
             carla_module, adjacent_waypoint, origin_waypoint
         )
 
     return origin_samples, target_samples, waypoint_lookup, target_lane_id
 
 
-def materialize_lane_change_waypoints(
+def _materialize_lane_change_waypoints(
     *,
     carla_module: Any,
     start_samples: list[LaneChangePlanPoint],
@@ -167,7 +182,7 @@ def materialize_lane_change_waypoints(
             waypoint = start_waypoint
         elif point.progress_m < lane_change_end_m - 1e-6:
             alpha = (point.progress_m - same_lane_end_m) / max(lane_change_distance_m, 1e-6)
-            waypoint = interpolate_waypoint(
+            waypoint = _interpolate_waypoint(
                 carla_module,
                 start_waypoint,
                 destination_waypoint,
@@ -182,3 +197,201 @@ def materialize_lane_change_waypoints(
                 continue
         materialized.append(waypoint)
     return materialized
+
+
+def _route_trace_index(
+    route_point_to_trace_index: list[int],
+    route_index: int | None,
+) -> int:
+    if not route_point_to_trace_index:
+        return 0
+    if route_index is None:
+        return route_point_to_trace_index[0]
+    bounded_index = max(0, min(route_index, len(route_point_to_trace_index) - 1))
+    return route_point_to_trace_index[bounded_index]
+
+
+def build_base_trace_execution_plan(
+    *,
+    base_trace: list[tuple[Any, Any]],
+    route_point_to_trace_index: list[int],
+    route_index: int | None,
+    trace_offset: int,
+) -> TraceExecutionPlan | None:
+    if not base_trace:
+        return None
+    trace_index = min(
+        _route_trace_index(route_point_to_trace_index, route_index) + trace_offset,
+        len(base_trace) - 1,
+    )
+    trace = base_trace[trace_index:]
+    return TraceExecutionPlan(
+        trace=trace,
+        waypoints=[waypoint for waypoint, _option in trace],
+    )
+
+
+def build_overtake_waypoint_execution_plan(
+    *,
+    carla_module: Any,
+    direction: Literal["left", "right"],
+    route_index: int | None,
+    base_trace: list[tuple[Any, Any]],
+    route_point_to_trace_index: list[int],
+    distance_same_lane_m: float,
+    lane_change_distance_m: float,
+    overtake_hold_distance_m: float,
+) -> WaypointExecutionPlan:
+    if not base_trace:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason="missing_base_trace",
+        )
+
+    (
+        origin_samples,
+        target_samples,
+        waypoint_lookup,
+        target_lane_id,
+    ) = _build_route_aligned_lane_samples(
+        carla_module=carla_module,
+        direction=direction,
+        route_index=route_index,
+        base_trace=base_trace,
+        route_point_to_trace_index=route_point_to_trace_index,
+    )
+    if not origin_samples or not target_samples or target_lane_id is None:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason="adjacent_lane_sample_missing",
+        )
+
+    lane_change_plan = build_route_aligned_lane_change_plan(
+        origin_samples,
+        target_samples,
+        distance_same_lane_m=distance_same_lane_m,
+        lane_change_distance_m=lane_change_distance_m,
+        distance_other_lane_m=overtake_hold_distance_m,
+    )
+    if not lane_change_plan.available:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason=lane_change_plan.failure_reason,
+        )
+
+    lane_change_end_m = (
+        origin_samples[0].progress_m + distance_same_lane_m + lane_change_distance_m
+    )
+    target_lane_follow_distance_m = max(
+        overtake_hold_distance_m,
+        target_samples[-1].progress_m - lane_change_end_m,
+    )
+    materialized = _materialize_lane_change_waypoints(
+        carla_module=carla_module,
+        start_samples=origin_samples,
+        destination_samples=target_samples,
+        waypoint_lookup=waypoint_lookup,
+        distance_same_lane_m=distance_same_lane_m,
+        lane_change_distance_m=lane_change_distance_m,
+        distance_other_lane_m=target_lane_follow_distance_m,
+    )
+    if not materialized:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason="lane_change_materialization_failed",
+        )
+
+    return WaypointExecutionPlan(
+        available=True,
+        waypoints=materialized,
+        target_lane_id=target_lane_id,
+    )
+
+
+def build_rejoin_waypoint_execution_plan(
+    *,
+    carla_module: Any,
+    direction: Literal["left", "right"] | None,
+    route_index: int | None,
+    base_trace: list[tuple[Any, Any]],
+    route_point_to_trace_index: list[int],
+    origin_lane_id: str | None,
+    target_lane_id: str | None,
+    lane_change_distance_m: float,
+    sampling_resolution_m: float,
+) -> WaypointExecutionPlan:
+    if (
+        not base_trace
+        or direction is None
+        or origin_lane_id is None
+        or target_lane_id is None
+    ):
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason="missing_rejoin_context",
+        )
+
+    (
+        origin_samples,
+        destination_samples,
+        waypoint_lookup,
+        _sampled_target_lane_id,
+    ) = _build_route_aligned_lane_samples(
+        carla_module=carla_module,
+        direction=direction,
+        route_index=route_index,
+        base_trace=base_trace,
+        route_point_to_trace_index=route_point_to_trace_index,
+    )
+    if not origin_samples or not destination_samples:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason="rejoin_lane_sample_missing",
+        )
+
+    rejoin_plan = build_route_aligned_lane_change_plan(
+        destination_samples,
+        origin_samples,
+        distance_same_lane_m=0.0,
+        lane_change_distance_m=lane_change_distance_m,
+        distance_other_lane_m=max(sampling_resolution_m, 0.1),
+    )
+    if not rejoin_plan.available:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason=rejoin_plan.failure_reason,
+        )
+
+    lane_change_end_m = destination_samples[0].progress_m + lane_change_distance_m
+    origin_lane_follow_distance_m = max(
+        sampling_resolution_m,
+        origin_samples[-1].progress_m - lane_change_end_m,
+    )
+    materialized = _materialize_lane_change_waypoints(
+        carla_module=carla_module,
+        start_samples=destination_samples,
+        destination_samples=origin_samples,
+        waypoint_lookup=waypoint_lookup,
+        distance_same_lane_m=0.0,
+        lane_change_distance_m=lane_change_distance_m,
+        distance_other_lane_m=origin_lane_follow_distance_m,
+    )
+    if not materialized:
+        return WaypointExecutionPlan(
+            available=False,
+            waypoints=[],
+            failure_reason="rejoin_materialization_failed",
+        )
+
+    return WaypointExecutionPlan(
+        available=True,
+        waypoints=materialized,
+        target_lane_id=origin_lane_id,
+    )

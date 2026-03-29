@@ -7,23 +7,19 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake import (
-    LaneChangePlanPoint,
     OvertakeMemory,
-    build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
     should_begin_rejoin,
 )
 from ad_stack.overtake.infrastructure.carla import (
-    adjacent_lane_waypoint,
+    build_base_trace_execution_plan,
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
-    build_route_aligned_lane_samples,
     build_overtake_planning_debug,
-    interpolate_waypoint,
+    build_overtake_waypoint_execution_plan,
+    build_rejoin_waypoint_execution_plan,
     lane_gaps_for_lane_id,
-    materialize_lane_change_waypoints,
-    route_aligned_waypoint,
 )
 from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
 
@@ -216,88 +212,66 @@ class ExpertBasicAgent:
             / max(2.0 * self.config.preferred_deceleration_mps2, 1e-3)
         )
 
-    def _route_trace_index(self, route_index: int | None) -> int:
-        if not self._route_point_to_trace_index:
-            return 0
-        if route_index is None:
-            return self._route_point_to_trace_index[0]
-        bounded_index = max(0, min(route_index, len(self._route_point_to_trace_index) - 1))
-        return self._route_point_to_trace_index[bounded_index]
+    def _activate_waypoint_execution_plan(
+        self,
+        target_lane_id: str | None,
+        waypoints: list[Any],
+    ) -> None:
+        self._overtake_waypoints = deque(waypoints)
+        self._overtake_target_lane_id = target_lane_id
+        self._lane_change_path_available = True
+        self._lane_change_path_failure_reason = None
+
+    def _activate_trace_execution_plan(self, trace: list[tuple[Any, Any]], *, update_waypoints: bool) -> None:
+        self._agent.set_global_plan(
+            trace,
+            stop_waypoint_creation=True,
+            clean_queue=True,
+        )
+        if update_waypoints:
+            self._overtake_waypoints = deque(waypoint for waypoint, _option in trace)
 
     def _set_rejoin_plan(self, route_index: int | None) -> None:
-        if self._start_rejoin(route_index):
-            return
-        if not self._base_trace:
-            return
-        trace_index = min(self._route_trace_index(route_index) + 8, len(self._base_trace) - 1)
-        rejoin_plan = self._base_trace[trace_index:]
-        self._agent.set_global_plan(
-            rejoin_plan,
-            stop_waypoint_creation=True,
-            clean_queue=True,
-        )
-        self._overtake_waypoints = deque(waypoint for waypoint, _option in rejoin_plan)
-
-    def _resume_base_route(self, route_index: int | None) -> None:
-        if not self._base_trace:
-            return
-        trace_index = min(self._route_trace_index(route_index) + 1, len(self._base_trace) - 1)
-        remaining_plan = self._base_trace[trace_index:]
-        self._agent.set_global_plan(
-            remaining_plan,
-            stop_waypoint_creation=True,
-            clean_queue=True,
-        )
-
-    def _adjacent_lane_waypoint(
-        self, origin_waypoint: Any, direction: Literal["left", "right"]
-    ) -> Any | None:
-        return adjacent_lane_waypoint(self._carla, origin_waypoint, direction)
-
-    def _route_aligned_waypoint(self, waypoint: Any, heading_source_waypoint: Any) -> Any:
-        return route_aligned_waypoint(self._carla, waypoint, heading_source_waypoint)
-
-    def _interpolate_waypoint(self, start_waypoint: Any, end_waypoint: Any, alpha: float) -> Any:
-        return interpolate_waypoint(self._carla, start_waypoint, end_waypoint, alpha)
-
-    def _build_route_aligned_lane_samples(
-        self,
-        *,
-        direction: Literal["left", "right"],
-        route_index: int | None,
-    ) -> tuple[
-        list[LaneChangePlanPoint],
-        list[LaneChangePlanPoint],
-        dict[tuple[int, str], Any],
-        str | None,
-    ]:
-        return build_route_aligned_lane_samples(
+        rejoin_plan = build_rejoin_waypoint_execution_plan(
             carla_module=self._carla,
-            direction=direction,
+            direction=self._overtake_direction,
             route_index=route_index,
             base_trace=self._base_trace,
             route_point_to_trace_index=self._route_point_to_trace_index,
+            origin_lane_id=self._overtake_origin_lane_id,
+            target_lane_id=self._overtake_target_lane_id,
+            lane_change_distance_m=self.config.lane_change_distance_m,
+            sampling_resolution_m=self.config.sampling_resolution_m,
         )
+        if rejoin_plan.available:
+            self._activate_waypoint_execution_plan(
+                rejoin_plan.target_lane_id,
+                rejoin_plan.waypoints,
+            )
+            return
 
-    def _materialize_lane_change_waypoints(
-        self,
-        *,
-        start_samples: list[LaneChangePlanPoint],
-        destination_samples: list[LaneChangePlanPoint],
-        waypoint_lookup: dict[tuple[int, str], Any],
-        distance_same_lane_m: float,
-        lane_change_distance_m: float,
-        distance_other_lane_m: float,
-    ) -> list[Any]:
-        return materialize_lane_change_waypoints(
-            carla_module=self._carla,
-            start_samples=start_samples,
-            destination_samples=destination_samples,
-            waypoint_lookup=waypoint_lookup,
-            distance_same_lane_m=distance_same_lane_m,
-            lane_change_distance_m=lane_change_distance_m,
-            distance_other_lane_m=distance_other_lane_m,
+        self._lane_change_path_available = False
+        self._lane_change_path_failure_reason = rejoin_plan.failure_reason
+        fallback_trace = build_base_trace_execution_plan(
+            base_trace=self._base_trace,
+            route_point_to_trace_index=self._route_point_to_trace_index,
+            route_index=route_index,
+            trace_offset=8,
         )
+        if fallback_trace is None:
+            return
+        self._activate_trace_execution_plan(fallback_trace.trace, update_waypoints=True)
+
+    def _resume_base_route(self, route_index: int | None) -> None:
+        remaining_trace = build_base_trace_execution_plan(
+            base_trace=self._base_trace,
+            route_point_to_trace_index=self._route_point_to_trace_index,
+            route_index=route_index,
+            trace_offset=1,
+        )
+        if remaining_trace is None:
+            return
+        self._activate_trace_execution_plan(remaining_trace.trace, update_waypoints=False)
 
     def _consume_overtake_waypoint(self) -> Any | None:
         if not self._overtake_waypoints:
@@ -313,63 +287,6 @@ class ExpertBasicAgent:
                 break
             self._overtake_waypoints.popleft()
         return self._overtake_waypoints[0]
-
-    def _start_overtake(self, direction: Literal["left", "right"], route_index: int | None) -> bool:
-        if not self._base_trace:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = "missing_base_trace"
-            return False
-
-        (
-            origin_samples,
-            target_samples,
-            waypoint_lookup,
-            target_lane_id,
-        ) = self._build_route_aligned_lane_samples(direction=direction, route_index=route_index)
-        if not origin_samples or not target_samples or target_lane_id is None:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = "adjacent_lane_sample_missing"
-            return False
-
-        lane_change_plan = build_route_aligned_lane_change_plan(
-            origin_samples,
-            target_samples,
-            distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
-            lane_change_distance_m=self.config.lane_change_distance_m,
-            distance_other_lane_m=self.config.overtake_hold_distance_m,
-        )
-        if not lane_change_plan.available:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = lane_change_plan.failure_reason
-            return False
-
-        lane_change_end_m = (
-            origin_samples[0].progress_m
-            + self.config.lane_change_same_lane_distance_m
-            + self.config.lane_change_distance_m
-        )
-        target_lane_follow_distance_m = max(
-            self.config.overtake_hold_distance_m,
-            target_samples[-1].progress_m - lane_change_end_m,
-        )
-        materialized = self._materialize_lane_change_waypoints(
-            start_samples=origin_samples,
-            destination_samples=target_samples,
-            waypoint_lookup=waypoint_lookup,
-            distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
-            lane_change_distance_m=self.config.lane_change_distance_m,
-            distance_other_lane_m=target_lane_follow_distance_m,
-        )
-        if not materialized:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = "lane_change_materialization_failed"
-            return False
-
-        self._overtake_waypoints = deque(materialized)
-        self._overtake_target_lane_id = target_lane_id
-        self._lane_change_path_available = True
-        self._lane_change_path_failure_reason = None
-        return True
 
     @staticmethod
     def _select_active_light(
@@ -412,70 +329,6 @@ class ExpertBasicAgent:
         self._latched_red_until_s = -1.0
         return None
 
-    def _start_rejoin(self, route_index: int | None) -> bool:
-        if (
-            not self._base_trace
-            or self._overtake_direction is None
-            or self._overtake_origin_lane_id is None
-            or self._overtake_target_lane_id is None
-        ):
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = "missing_rejoin_context"
-            return False
-
-        (
-            origin_samples,
-            target_samples,
-            waypoint_lookup,
-            target_lane_id,
-        ) = self._build_route_aligned_lane_samples(
-            direction=self._overtake_direction,
-            route_index=route_index,
-        )
-        if (
-            not origin_samples
-            or not target_samples
-            or target_lane_id is None
-        ):
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = "rejoin_lane_sample_missing"
-            return False
-
-        rejoin_plan = build_route_aligned_lane_change_plan(
-            target_samples,
-            origin_samples,
-            distance_same_lane_m=0.0,
-            lane_change_distance_m=self.config.lane_change_distance_m,
-            distance_other_lane_m=max(self.config.sampling_resolution_m, 0.1),
-        )
-        if not rejoin_plan.available:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = rejoin_plan.failure_reason
-            return False
-
-        lane_change_end_m = target_samples[0].progress_m + self.config.lane_change_distance_m
-        origin_lane_follow_distance_m = max(
-            self.config.sampling_resolution_m,
-            origin_samples[-1].progress_m - lane_change_end_m,
-        )
-        materialized = self._materialize_lane_change_waypoints(
-            start_samples=target_samples,
-            destination_samples=origin_samples,
-            waypoint_lookup=waypoint_lookup,
-            distance_same_lane_m=0.0,
-            lane_change_distance_m=self.config.lane_change_distance_m,
-            distance_other_lane_m=origin_lane_follow_distance_m,
-        )
-        if not materialized:
-            self._lane_change_path_available = False
-            self._lane_change_path_failure_reason = "rejoin_materialization_failed"
-            return False
-
-        self._overtake_waypoints = deque(materialized)
-        self._overtake_target_lane_id = self._overtake_origin_lane_id
-        self._lane_change_path_available = True
-        self._lane_change_path_failure_reason = None
-        return True
 
     def _should_stop_for_light(
         self,
@@ -760,7 +613,21 @@ class ExpertBasicAgent:
             )
             if overtake_decision.planner_state == "lane_change_out" and overtake_decision.direction is not None:
                 self._overtake_origin_lane_id = current_lane_id
-                if self._start_overtake(overtake_decision.direction, route_index):
+                overtake_plan = build_overtake_waypoint_execution_plan(
+                    carla_module=self._carla,
+                    direction=overtake_decision.direction,
+                    route_index=route_index,
+                    base_trace=self._base_trace,
+                    route_point_to_trace_index=self._route_point_to_trace_index,
+                    distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
+                    lane_change_distance_m=self.config.lane_change_distance_m,
+                    overtake_hold_distance_m=self.config.overtake_hold_distance_m,
+                )
+                if overtake_plan.available:
+                    self._activate_waypoint_execution_plan(
+                        overtake_plan.target_lane_id,
+                        overtake_plan.waypoints,
+                    )
                     self._overtake_state = "lane_change_out"
                     self._overtake_direction = overtake_decision.direction
                     self._overtake_aborted = False
@@ -801,6 +668,8 @@ class ExpertBasicAgent:
                     event_flags["event_overtake_attempt"] = True
                     overtake_reject_reason = None
                 else:
+                    self._lane_change_path_available = False
+                    self._lane_change_path_failure_reason = overtake_plan.failure_reason
                     event_flags["event_unsafe_lane_change_reject"] = True
                     planner_state = "car_follow"
                     target_speed_kmh = follow_target_speed_kmh
@@ -874,10 +743,28 @@ class ExpertBasicAgent:
                     overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
                     overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
                 )
-                and self._start_rejoin(route_index)
             ):
-                self._overtake_state = "lane_change_back"
-                planner_state = "lane_change_back"
+                rejoin_plan = build_rejoin_waypoint_execution_plan(
+                    carla_module=self._carla,
+                    direction=self._overtake_direction,
+                    route_index=route_index,
+                    base_trace=self._base_trace,
+                    route_point_to_trace_index=self._route_point_to_trace_index,
+                    origin_lane_id=self._overtake_origin_lane_id,
+                    target_lane_id=self._overtake_target_lane_id,
+                    lane_change_distance_m=self.config.lane_change_distance_m,
+                    sampling_resolution_m=self.config.sampling_resolution_m,
+                )
+                if rejoin_plan.available:
+                    self._activate_waypoint_execution_plan(
+                        rejoin_plan.target_lane_id,
+                        rejoin_plan.waypoints,
+                    )
+                    self._overtake_state = "lane_change_back"
+                    planner_state = "lane_change_back"
+                else:
+                    self._lane_change_path_available = False
+                    self._lane_change_path_failure_reason = rejoin_plan.failure_reason
             self._overtake_memory.state = self._overtake_state
 
         if planner_state == "car_follow" and not self._car_follow_active:
