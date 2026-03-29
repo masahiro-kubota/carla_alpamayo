@@ -12,8 +12,6 @@ from tests.integration.ad_stack._shared import (
     CarlaHarness,
     CarlaHarnessConfig,
     CarlaIntegrationSuiteSpec,
-    InspectOnlySuiteCase,
-    RouteLoopSuiteCase,
     execute_carla_integration_suite,
 )
 from tests.integration.ad_stack.stopped_obstacle.assertions import (
@@ -21,68 +19,15 @@ from tests.integration.ad_stack.stopped_obstacle.assertions import (
     assert_stopped_obstacle_suite,
     load_stopped_obstacle_summaries,
 )
+from tests.integration.ad_stack.stopped_obstacle.scenario_matrix import (
+    INSPECT_ONLY_SCENARIOS,
+    ROUTE_LOOP_SCENARIOS,
+)
 SUITE_DIR = Path(__file__).resolve().parent
 SUITE_SPEC = CarlaIntegrationSuiteSpec(
     name="stopped_obstacle",
-    route_loop_cases=(
-        RouteLoopSuiteCase(
-            name="clear",
-            run_config_path=SUITE_DIR / "run_configs/town01_stopped_obstacle_clear_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="blocked_static",
-            run_config_path=SUITE_DIR / "run_configs/town01_stopped_obstacle_blocked_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="blocked_oncoming",
-            run_config_path=SUITE_DIR / "run_configs/town01_stopped_obstacle_blocked_oncoming_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="double_stopped_separated",
-            run_config_path=SUITE_DIR
-            / "run_configs/town01_stopped_obstacle_double_stopped_separated_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="double_stopped_clustered",
-            run_config_path=SUITE_DIR
-            / "run_configs/town01_stopped_obstacle_double_stopped_clustered_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="signal_suppressed",
-            run_config_path=SUITE_DIR
-            / "run_configs/town01_stopped_obstacle_signal_suppressed_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="adjacent_lane_closed",
-            run_config_path=SUITE_DIR
-            / "run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="curve_clear",
-            run_config_path=SUITE_DIR / "run_configs/town01_stopped_obstacle_curve_clear_long_expert.json",
-        ),
-        RouteLoopSuiteCase(
-            name="rejoin_blocked_then_release",
-            run_config_path=SUITE_DIR
-            / "run_configs/town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json",
-        ),
-    ),
-    inspect_only_cases=(
-        InspectOnlySuiteCase(
-            name="near_junction_preflight_reject",
-            command=(
-                "uv",
-                "run",
-                "python",
-                str(SUITE_DIR / "inspect_scenarios.py"),
-                "--allow-invalid",
-                str(
-                    SUITE_DIR
-                    / "run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json"
-                ),
-            ),
-        ),
-    ),
+    route_loop_cases=tuple(scenario.case for scenario in ROUTE_LOOP_SCENARIOS),
+    inspect_only_cases=INSPECT_ONLY_SCENARIOS,
 )
 
 
