@@ -4,7 +4,11 @@ import unittest
 from collections import deque
 from dataclasses import dataclass
 
-from ad_stack.overtake.infrastructure.carla import consume_waypoint_queue, run_tracking_control
+from ad_stack.overtake.infrastructure.carla import (
+    OvertakeExecutionQueue,
+    consume_waypoint_queue,
+    run_tracking_control,
+)
 
 
 @dataclass
@@ -43,9 +47,19 @@ class _FakeAgent:
     def __init__(self) -> None:
         self.target_speeds: list[float] = []
         self.run_calls = 0
+        self.plans: list[list[tuple[_FakeWaypoint, None]]] = []
 
     def set_target_speed(self, target_speed_kmh: float) -> None:
         self.target_speeds.append(target_speed_kmh)
+
+    def set_global_plan(
+        self,
+        trace: list[tuple[_FakeWaypoint, None]],
+        *,
+        stop_waypoint_creation: bool,
+        clean_queue: bool,
+    ) -> None:
+        self.plans.append(trace)
 
     def run_step(self) -> str:
         self.run_calls += 1
@@ -102,3 +116,40 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
         self.assertEqual(agent.run_calls, 1)
         self.assertEqual(controller.calls, [])
 
+    def test_execution_queue_tracks_target_lane_and_consumes_waypoints(self) -> None:
+        queue = OvertakeExecutionQueue()
+        queue.activate_waypoint_plan(
+            target_lane_id="15:1",
+            waypoints=[
+                _FakeWaypoint(_FakeTransform(_FakeLocation(0.2, 0.0, 0.0))),
+                _FakeWaypoint(_FakeTransform(_FakeLocation(3.0, 0.0, 0.0))),
+            ],
+        )
+
+        next_waypoint = queue.consume_next_waypoint(
+            vehicle_location=_FakeLocation(0.0, 0.0, 0.0),
+            sampling_resolution_m=2.0,
+        )
+
+        self.assertEqual(queue.target_lane_id, "15:1")
+        self.assertEqual(next_waypoint.transform.location.x, 3.0)
+
+    def test_execution_queue_activates_trace_plan(self) -> None:
+        queue = OvertakeExecutionQueue()
+        agent = _FakeAgent()
+        trace = [
+            (_FakeWaypoint(_FakeTransform(_FakeLocation(1.0, 0.0, 0.0))), None),
+            (_FakeWaypoint(_FakeTransform(_FakeLocation(2.0, 0.0, 0.0))), None),
+        ]
+
+        queue.activate_trace_plan(
+            local_agent=agent,
+            trace=trace,
+            update_waypoints=True,
+        )
+
+        self.assertEqual(len(agent.plans), 1)
+        self.assertEqual(queue.consume_next_waypoint(
+            vehicle_location=_FakeLocation(0.0, 0.0, 0.0),
+            sampling_resolution_m=2.0,
+        ).transform.location.x, 1.0)

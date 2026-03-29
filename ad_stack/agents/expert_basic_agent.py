@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from collections import deque
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -20,13 +19,13 @@ from ad_stack.overtake import (
     traffic_light_stop_target_speed_kmh,
 )
 from ad_stack.overtake.infrastructure.carla import (
+    OvertakeExecutionQueue,
     build_base_trace_execution_plan,
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
     build_overtake_planning_debug,
     build_overtake_waypoint_execution_plan,
     build_rejoin_waypoint_execution_plan,
-    consume_waypoint_queue,
     lane_gaps_for_lane_id,
     run_tracking_control,
 )
@@ -122,11 +121,10 @@ class ExpertBasicAgent:
         self._overtake_state = "idle"
         self._overtake_direction: Literal["left", "right"] | None = None
         self._overtake_origin_lane_id: str | None = None
-        self._overtake_target_lane_id: str | None = None
         self._overtake_target_actor_id: int | None = None
         self._overtake_target_member_actor_ids: tuple[int, ...] = ()
         self._overtake_aborted = False
-        self._overtake_waypoints: deque[Any] = deque()
+        self._execution_queue = OvertakeExecutionQueue()
         self._overtake_memory = OvertakeMemory()
         self._lane_change_path_available = False
         self._lane_change_path_failure_reason: str | None = None
@@ -174,11 +172,10 @@ class ExpertBasicAgent:
         self._overtake_state = "idle"
         self._overtake_direction = None
         self._overtake_origin_lane_id = None
-        self._overtake_target_lane_id = None
         self._overtake_target_actor_id = None
         self._overtake_target_member_actor_ids = ()
         self._overtake_aborted = False
-        self._overtake_waypoints.clear()
+        self._execution_queue.clear()
         self._overtake_memory = OvertakeMemory()
         self._lane_change_path_available = False
         self._lane_change_path_failure_reason = None
@@ -194,19 +191,19 @@ class ExpertBasicAgent:
         target_lane_id: str | None,
         waypoints: list[Any],
     ) -> None:
-        self._overtake_waypoints = deque(waypoints)
-        self._overtake_target_lane_id = target_lane_id
+        self._execution_queue.activate_waypoint_plan(
+            target_lane_id=target_lane_id,
+            waypoints=waypoints,
+        )
         self._lane_change_path_available = True
         self._lane_change_path_failure_reason = None
 
     def _activate_trace_execution_plan(self, trace: list[tuple[Any, Any]], *, update_waypoints: bool) -> None:
-        self._agent.set_global_plan(
-            trace,
-            stop_waypoint_creation=True,
-            clean_queue=True,
+        self._execution_queue.activate_trace_plan(
+            local_agent=self._agent,
+            trace=trace,
+            update_waypoints=update_waypoints,
         )
-        if update_waypoints:
-            self._overtake_waypoints = deque(waypoint for waypoint, _option in trace)
 
     def _set_rejoin_plan(self, route_index: int | None) -> None:
         rejoin_plan = build_rejoin_waypoint_execution_plan(
@@ -216,7 +213,7 @@ class ExpertBasicAgent:
             base_trace=self._base_trace,
             route_point_to_trace_index=self._route_point_to_trace_index,
             origin_lane_id=self._overtake_origin_lane_id,
-            target_lane_id=self._overtake_target_lane_id,
+            target_lane_id=self._execution_queue.target_lane_id,
             lane_change_distance_m=self.config.lane_change_distance_m,
             sampling_resolution_m=self.config.sampling_resolution_m,
         )
@@ -385,7 +382,7 @@ class ExpertBasicAgent:
                 state=self._overtake_state,
                 aborted=self._overtake_aborted,
                 current_lane_id=current_lane_id,
-                target_lane_id=self._overtake_target_lane_id,
+                target_lane_id=self._execution_queue.target_lane_id,
                 origin_lane_id=self._overtake_origin_lane_id,
                 route_target_lane_id=scene_state.route.target_lane_id,
                 lane_center_offset_m=lane_center_offset_m,
@@ -410,11 +407,10 @@ class ExpertBasicAgent:
                 self._overtake_state = "idle"
                 self._overtake_direction = None
                 self._overtake_origin_lane_id = None
-                self._overtake_target_lane_id = None
+                self._execution_queue.clear()
                 self._overtake_target_actor_id = None
                 self._overtake_target_member_actor_ids = ()
                 self._overtake_aborted = False
-                self._overtake_waypoints.clear()
                 self._overtake_memory = OvertakeMemory()
                 self._resume_base_route(route_index)
                 planner_state = "nominal_cruise"
@@ -504,7 +500,7 @@ class ExpertBasicAgent:
                         state="lane_change_out",
                         direction=overtake_decision.direction,
                         origin_lane_id=current_lane_id,
-                        target_lane_id=self._overtake_target_lane_id,
+                        target_lane_id=self._execution_queue.target_lane_id,
                         target_actor_id=self._overtake_target_actor_id,
                         target_actor_lane_id=(
                             active_overtake_target.lane_id
@@ -610,7 +606,7 @@ class ExpertBasicAgent:
                     base_trace=self._base_trace,
                     route_point_to_trace_index=self._route_point_to_trace_index,
                     origin_lane_id=self._overtake_origin_lane_id,
-                    target_lane_id=self._overtake_target_lane_id,
+                    target_lane_id=self._execution_queue.target_lane_id,
                     lane_change_distance_m=self.config.lane_change_distance_m,
                     sampling_resolution_m=self.config.sampling_resolution_m,
                 )
@@ -641,9 +637,8 @@ class ExpertBasicAgent:
         self._previous_planner_state = planner_state
 
         target_waypoint = (
-            consume_waypoint_queue(
+            self._execution_queue.consume_next_waypoint(
                 vehicle_location=self._vehicle.get_location(),
-                waypoints=self._overtake_waypoints,
                 sampling_resolution_m=self.config.sampling_resolution_m,
             )
             if self._overtake_state != "idle"
@@ -739,7 +734,7 @@ class ExpertBasicAgent:
             overtake_target_actor_id=self._overtake_target_actor_id,
             overtake_target_kind=self._overtake_memory.target_kind,
             overtake_target_member_actor_ids=self._overtake_target_member_actor_ids,
-            overtake_target_lane_id=self._overtake_target_lane_id,
+            overtake_target_lane_id=self._execution_queue.target_lane_id,
             target_passed=self._overtake_memory.target_passed,
             distance_past_target_m=self._overtake_memory.target_pass_distance_m,
             target_actor_visible=target_actor_visible,
