@@ -67,3 +67,28 @@ class TrajectoryMaterializerTests(unittest.TestCase):
         self.assertEqual(trajectory.target_lane_id, "15:1")
         self.assertAlmostEqual(trajectory.points[1].y - trajectory.points[0].y, 1.0, places=3)
 
+    def test_build_waypoint_trajectory_keeps_spacing_near_one_meter_for_irregular_length(self) -> None:
+        trajectory = build_waypoint_trajectory(
+            waypoints=[
+                _FakeWaypoint(
+                    transform=_FakeTransform(
+                        location=_FakeLocation(0.0, 0.0),
+                        rotation=_FakeRotation(0.0),
+                    )
+                ),
+                _FakeWaypoint(
+                    transform=_FakeTransform(
+                        location=_FakeLocation(3.3, 0.0),
+                        rotation=_FakeRotation(0.0),
+                    )
+                ),
+            ],
+            desired_speed_mps=4.0,
+            trajectory_id="lane_change_out",
+        )
+
+        spacings = [
+            trajectory.points[index + 1].x - trajectory.points[index].x
+            for index in range(len(trajectory.points) - 1)
+        ]
+        self.assertTrue(all(0.8 <= spacing <= 1.2 for spacing in spacings))

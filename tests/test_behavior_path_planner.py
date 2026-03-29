@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from ad_stack.overtake.application.behavior_path_planner import BehaviorPathPlanner
-from ad_stack.overtake.domain.planning_models import BehaviorPlan, TrackedTarget, TrafficLightObservation
+from ad_stack.overtake.domain.planning_models import BehaviorPlan, Pose3D, TrackedTarget, TrafficLightObservation
 from tests.planning_controller_test_helpers import make_scene, make_straight_route_backbone
 
 
@@ -181,3 +181,51 @@ class BehaviorPathPlannerTests(unittest.TestCase):
         self.assertEqual(plan.state, "abort_return")
         self.assertEqual(plan.reject_reason, "signal_stop")
         self.assertEqual(trajectory.trajectory_id, "abort_return")
+
+    def test_plan_runtime_builds_behavior_plan_and_route_trajectory(self) -> None:
+        planner = BehaviorPathPlanner()
+
+        plan, trajectory = planner.plan_runtime(
+            route_backbone=make_straight_route_backbone(road_option="right"),
+            route_index=3,
+            route_command="right",
+            planner_state="nominal_cruise",
+            desired_speed_mps=5.0,
+            active_target_id=None,
+            active_target_kind=None,
+            origin_lane_id=None,
+            target_lane_id=None,
+            reject_reason=None,
+        )
+
+        self.assertEqual(plan.state, "lane_follow")
+        self.assertEqual(plan.route_command, "right")
+        self.assertEqual(trajectory.trajectory_id, "lane_follow")
+        self.assertIsNone(trajectory.origin_lane_id)
+
+    def test_plan_runtime_uses_local_path_samples_for_overtake_states(self) -> None:
+        planner = BehaviorPathPlanner()
+
+        plan, trajectory = planner.plan_runtime(
+            route_backbone=make_straight_route_backbone(),
+            route_index=2,
+            route_command="straight",
+            planner_state="lane_change_out",
+            desired_speed_mps=4.0,
+            active_target_id=91,
+            active_target_kind="single_actor",
+            origin_lane_id="15:-1",
+            target_lane_id="15:-1:left",
+            reject_reason=None,
+            local_path_samples=(
+                Pose3D(x=0.0, y=0.0, z=0.0, yaw_deg=0.0),
+                Pose3D(x=1.2, y=0.2, z=0.0, yaw_deg=5.0),
+                Pose3D(x=2.6, y=0.9, z=0.0, yaw_deg=15.0),
+            ),
+        )
+
+        self.assertEqual(plan.state, "lane_change_out")
+        self.assertEqual(plan.active_target_id, 91)
+        self.assertEqual(trajectory.trajectory_id, "lane_change_out")
+        self.assertEqual(trajectory.origin_lane_id, "15:-1")
+        self.assertEqual(trajectory.target_lane_id, "15:-1:left")
