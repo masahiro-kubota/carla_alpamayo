@@ -537,7 +537,6 @@ runtime 中にこの区別が失われないようにする。
 - `target_actor_last_seen_s`
 - `lane_change_path_available`
 - `lane_change_path_failed_reason`
-- `scenario_validation_errors`
 
 ### 7.2 `/world/tracked_vehicles`
 
@@ -550,7 +549,6 @@ runtime 中にこの区別が失われないようにする。
 
 ### 7.3 summary
 
-- `scenario_validation`
 - `overtake_target_actor_id`
 - `first_overtake_attempt_s`
 - `first_target_passed_s`

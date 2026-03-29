@@ -3,11 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from ad_stack.overtake.validation import (
-    OvertakeScenarioConfig,
-    parse_overtake_scenario_config,
-)
 from libs.project import PROJECT_ROOT
 
 
@@ -81,7 +78,7 @@ class EnvironmentConfigSpec:
     traffic_light_phase_cycle: TrafficLightPhaseCycleSpec | None = None
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
     traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
-    overtake_scenario: OvertakeScenarioConfig | None = None
+    overtake_scenario: dict[str, Any] | None = None
     description: str = ""
 
 
@@ -190,6 +187,8 @@ def load_environment_config(path: Path) -> EnvironmentConfigSpec:
             )
             for item in raw.get("traffic_light_schedules", [])
         ],
-        overtake_scenario=parse_overtake_scenario_config(raw_overtake_scenario),
+        overtake_scenario=(
+            dict(raw_overtake_scenario) if isinstance(raw_overtake_scenario, dict) else None
+        ),
         description=str(raw.get("description", "")),
     )

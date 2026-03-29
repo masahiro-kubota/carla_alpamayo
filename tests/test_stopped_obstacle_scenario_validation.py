@@ -3,12 +3,11 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass
 
-from ad_stack.overtake.infrastructure.carla import (
+from simulation.environment_config import EnvironmentConfigSpec
+from tests.integration.ad_stack._shared.overtake_scenario_contract import (
     build_overtake_scenario_validation,
     warm_up_and_build_overtake_scenario_validation,
 )
-from ad_stack.overtake.validation import OvertakeScenarioConfig
-from simulation.environment_config import EnvironmentConfigSpec
 
 
 @dataclass
@@ -102,7 +101,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="test",
             town="Town01",
-            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
+            overtake_scenario={"scenario_kind": "clear"},
         )
         ego_location = _FakeLocation(0.0, 0.0, 0.0)
         ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=0.0, location=ego_location)
@@ -149,7 +148,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
+            overtake_scenario={"scenario_kind": "clear"},
         )
 
         result = build_overtake_scenario_validation(
@@ -202,7 +201,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
+            overtake_scenario={"scenario_kind": "clear"},
         )
 
         result = build_overtake_scenario_validation(
@@ -241,7 +240,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
+            overtake_scenario={"scenario_kind": "clear"},
         )
 
         result = warm_up_and_build_overtake_scenario_validation(
@@ -286,7 +285,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
+            overtake_scenario={"scenario_kind": "clear"},
         )
 
         result = build_overtake_scenario_validation(
@@ -335,7 +334,7 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="curve_case",
             town="Town01",
-            overtake_scenario=OvertakeScenarioConfig(scenario_kind="curve_clear"),
+            overtake_scenario={"scenario_kind": "curve_clear"},
         )
 
         result = build_overtake_scenario_validation(

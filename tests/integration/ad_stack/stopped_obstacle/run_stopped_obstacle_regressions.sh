@@ -17,13 +17,14 @@ RUN_CONFIGS=(
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_separated_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_double_stopped_clustered_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_signal_suppressed_long_expert.json"
-  "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_adjacent_lane_closed_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_curve_clear_long_expert.json"
   "tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_rejoin_blocked_then_release_long_expert.json"
 )
+NEAR_JUNCTION_INSPECT_CONFIG="tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_near_junction_preflight_reject_long_expert.json"
 
 SUMMARY_PATHS=()
+INSPECT_OUTPUT_PATH=""
 
 wait_for_carla() {
   local timeout_s=60
@@ -120,23 +121,56 @@ run_scenario() {
   done
 }
 
+run_inspection() {
+  local run_config="$1"
+  local output=""
+  local status=1
+
+  INSPECT_OUTPUT_PATH="$(mktemp)"
+  echo "==> inspecting ${run_config}"
+  start_carla
+  set +e
+  output="$(PYTHONPATH="" uv run python tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py --allow-invalid "${run_config}" 2>&1)"
+  status=$?
+  set -e
+  echo "${output}"
+  stop_carla
+
+  if (( status != 0 )); then
+    echo "inspection failed with exit code ${status}: ${run_config}" >&2
+    return 1
+  fi
+
+  printf '%s\n' "${output}" > "${INSPECT_OUTPUT_PATH}"
+}
+
 trap stop_carla EXIT
 
 for run_config in "${RUN_CONFIGS[@]}"; do
   run_scenario "${run_config}"
 done
 
-python - "${SUMMARY_PATHS[@]}" <<'PY'
+run_inspection "${NEAR_JUNCTION_INSPECT_CONFIG}"
+
+python - "${INSPECT_OUTPUT_PATH}" "${SUMMARY_PATHS[@]}" <<'PY'
+import json
 import sys
 from tests.integration.ad_stack.stopped_obstacle.assertions import (
+    assert_near_junction_preflight_contract,
     assert_stopped_obstacle_suite,
     load_stopped_obstacle_summaries,
 )
 
-summary_paths = sys.argv[1:]
+inspect_output_path = sys.argv[1]
+summary_paths = sys.argv[2:]
+with open(inspect_output_path, "r", encoding="utf-8") as handle:
+    inspection_payload = json.load(handle)
+
+assert_near_junction_preflight_contract(inspection_payload["scenario_validation"])
 assert_stopped_obstacle_suite(load_stopped_obstacle_summaries(summary_paths))
 
 print("stopped-obstacle regressions passed")
 for path in summary_paths:
     print(path)
+print(inspect_output_path)
 PY

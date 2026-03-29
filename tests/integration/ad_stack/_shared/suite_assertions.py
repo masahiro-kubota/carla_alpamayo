@@ -18,8 +18,6 @@ class ScenarioSummaryExpectation:
     min_overtake_success_count: int | None = None
     exact_overtake_success_count: int | None = None
     min_unsafe_lane_change_reject_count: int | None = None
-    scenario_validation_valid: bool | None = None
-    required_validation_errors: tuple[str, ...] = ()
     require_positive_rejoin_wait: bool = False
 
 
@@ -86,17 +84,6 @@ def assert_summary_expectations(
                 >= expectation.min_unsafe_lane_change_reject_count,
                 f"{expectation.name} unsafe_lane_change_reject_count too small: "
                 f"{summary['unsafe_lane_change_reject_count']}",
-            )
-        if expectation.scenario_validation_valid is not None:
-            require(
-                bool(summary["scenario_validation"]["valid"]) is expectation.scenario_validation_valid,
-                f"{expectation.name} scenario_validation.valid unexpected: "
-                f"{summary['scenario_validation']['valid']}",
-            )
-        for error in expectation.required_validation_errors:
-            require(
-                error in summary["scenario_validation"]["errors"],
-                f"{expectation.name} missing scenario_validation error: {error}",
             )
         if expectation.require_positive_rejoin_wait:
             wait_after_pass_s = summary.get("rejoin_wait_after_target_passed_s")

@@ -9,7 +9,6 @@ from ad_stack.overtake import (
     OvertakeContext,
     OvertakeMemory,
     OvertakeTargetSnapshot,
-    PreflightValidationInput,
     build_stopped_obstacle_targets,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
@@ -17,6 +16,9 @@ from ad_stack.overtake import (
     lane_gap_for_lane_id,
     next_stopped_obstacle_target,
     should_begin_rejoin,
+)
+from tests.integration.ad_stack._shared.overtake_scenario_contract import (
+    PreflightValidationInput,
     validate_preflight,
 )
 

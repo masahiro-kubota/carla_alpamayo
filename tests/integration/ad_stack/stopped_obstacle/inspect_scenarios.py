@@ -13,11 +13,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ad_stack.overtake.infrastructure.carla import build_overtake_scenario_validation
 from libs.carla_utils import build_planned_route, destroy_actors, load_route_config, require_blueprint, setup_world
 from libs.project import current_git_commit_short, ensure_clean_git_worktree, relative_to_project
 from simulation.environment_config import load_environment_config
 from simulation.pipelines.route_loop_run_config import load_route_loop_run_config
+from tests.integration.ad_stack._shared.overtake_scenario_contract import (
+    build_overtake_scenario_validation,
+    parse_overtake_scenario_config,
+)
 
 route_run = importlib.import_module("ad_stack.run")
 
@@ -32,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
         "config_paths",
         nargs="+",
         help="Path(s) to stopped-obstacle route-loop run config JSON files.",
+    )
+    parser.add_argument(
+        "--allow-invalid",
+        action="store_true",
+        help="Do not fail the command when scenario_validation.valid is false.",
     )
     return parser
 
@@ -173,7 +181,8 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
 
     environment_config_path = Path(scenario.environment_config_path).resolve()
     environment_config = load_environment_config(environment_config_path)
-    if environment_config.overtake_scenario is None:
+    scenario_config = parse_overtake_scenario_config(environment_config.overtake_scenario)
+    if scenario_config is None:
         raise ValueError(
             "Stopped-obstacle inspection requires environment.overtake_scenario."
         )
@@ -247,9 +256,9 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
         "environment_name": environment_config.name,
         "town": route_config.town,
         "overtake_scenario": {
-            "scenario_kind": environment_config.overtake_scenario.scenario_kind,
-            "obstacle_npc_index": environment_config.overtake_scenario.obstacle_npc_index,
-            "blocker_npc_index": environment_config.overtake_scenario.blocker_npc_index,
+            "scenario_kind": scenario_config.scenario_kind,
+            "obstacle_npc_index": scenario_config.obstacle_npc_index,
+            "blocker_npc_index": scenario_config.blocker_npc_index,
         },
         "npc_vehicles": npc_actors_summary,
         "scenario_validation": scenario_validation,
@@ -269,7 +278,10 @@ def main() -> None:
         print(json.dumps(results[0], indent=2))
     else:
         print(json.dumps(results, indent=2))
-    if any(not bool(result.get("scenario_validation", {}).get("valid", False)) for result in results):
+    if (
+        not args.allow_invalid
+        and any(not bool(result.get("scenario_validation", {}).get("valid", False)) for result in results)
+    ):
         raise SystemExit(1)
 
 

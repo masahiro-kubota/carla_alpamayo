@@ -68,7 +68,7 @@
 - expectation
   - `tests/integration/ad_stack/stopped_obstacle/*.md`
 - validation / inspector
-  - [preflight_validation.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/preflight_validation.py)
+  - [overtake_scenario_contract.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/_shared/overtake_scenario_contract.py)
   - [inspect_scenarios.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py)
 
 この分離自体は正しいが、

@@ -19,7 +19,6 @@ SCENARIO_ORDER = (
     "double_stopped_separated",
     "double_stopped_clustered",
     "signal_suppressed",
-    "near_junction_preflight_reject",
     "adjacent_lane_closed",
     "curve_clear",
     "rejoin_blocked_then_release",
@@ -69,14 +68,6 @@ SUMMARY_EXPECTATIONS = (
         failure_reason="stalled",
         collision_count=0,
         exact_overtake_attempt_count=0,
-        scenario_validation_valid=True,
-    ),
-    ScenarioSummaryExpectation(
-        name="near_junction_preflight_reject",
-        success=False,
-        failure_reason="scenario_preflight_invalid",
-        scenario_validation_valid=False,
-        required_validation_errors=("junction_nearby",),
     ),
     ScenarioSummaryExpectation(
         name="adjacent_lane_closed",
@@ -146,3 +137,12 @@ def assert_stopped_obstacle_suite(summaries: dict[str, dict[str, Any]]) -> None:
             load_manifest(summaries[scenario_name]),
             expectations,
         )
+
+
+def assert_near_junction_preflight_contract(validation_payload: dict[str, Any]) -> None:
+    assert not bool(validation_payload.get("valid", True)), (
+        "near_junction_preflight_reject should fail preflight"
+    )
+    assert "junction_nearby" in tuple(validation_payload.get("errors", ())), (
+        "near_junction_preflight_reject missing junction_nearby validation error"
+    )

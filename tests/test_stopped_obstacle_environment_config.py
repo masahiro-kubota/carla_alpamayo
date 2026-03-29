@@ -6,6 +6,9 @@ import unittest
 from pathlib import Path
 
 from simulation.environment_config import load_environment_config
+from tests.integration.ad_stack._shared.overtake_scenario_contract import (
+    parse_overtake_scenario_config,
+)
 
 
 class StoppedObstacleEnvironmentConfigTests(unittest.TestCase):
@@ -49,11 +52,12 @@ class StoppedObstacleEnvironmentConfigTests(unittest.TestCase):
         self.assertEqual(npc.spawn_transform.x, 1.0)
         self.assertEqual(npc.spawn_transform.yaw_deg, 90.0)
         self.assertIsNotNone(config.overtake_scenario)
-        assert config.overtake_scenario is not None
-        self.assertEqual(config.overtake_scenario.scenario_kind, "curve_clear")
-        self.assertEqual(config.overtake_scenario.obstacle_npc_index, 0)
-        self.assertTrue(config.overtake_scenario.route_aligned_adjacent_lane_available)
-        self.assertEqual(config.overtake_scenario.nearest_junction_distance_m, 42.0)
+        scenario_config = parse_overtake_scenario_config(config.overtake_scenario)
+        assert scenario_config is not None
+        self.assertEqual(scenario_config.scenario_kind, "curve_clear")
+        self.assertEqual(scenario_config.obstacle_npc_index, 0)
+        self.assertTrue(scenario_config.route_aligned_adjacent_lane_available)
+        self.assertEqual(scenario_config.nearest_junction_distance_m, 42.0)
 
 
 if __name__ == "__main__":

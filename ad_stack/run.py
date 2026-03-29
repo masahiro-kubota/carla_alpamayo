@@ -49,7 +49,6 @@ from ad_stack.overtake.infrastructure.carla import (
     RouteLoopTelemetryAccumulator,
     build_ego_state_sample,
     build_episode_record,
-    warm_up_and_build_overtake_scenario_validation,
 )
 from libs.utils import render_png_sequence_to_mp4
 from simulation.environment_config import (
@@ -898,7 +897,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     traffic_light_phase_indices: dict[int, int] = {}
     traffic_light_runtime_groups: list[TrafficLightPhaseRuntimeGroup] = []
     controlled_cycle_actor_ids: set[int] = set()
-    scenario_validation: dict[str, Any] | None = None
     explicit_traffic_light_actor_ids = {
         override.actor_id
         for override in (
@@ -1021,14 +1019,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             spawned_actor_refs=npc_actor_refs,
         )
         npc_actor_metadata_by_id = {int(item["actor_id"]): item for item in npc_actors_summary}
-        scenario_validation = warm_up_and_build_overtake_scenario_validation(
-            world=world,
-            environment_config=environment_config,
-            route_trace=planned_route.trace,
-            ego_vehicle=vehicle,
-            npc_actor_refs=npc_actor_refs,
-            driving_lane_type=carla.LaneType.Driving,
-        )
         traffic_manager = client.get_trafficmanager(8000)
 
         if policy.kind == "expert":
@@ -1066,250 +1056,237 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             )
             stack_description = stack.describe()
 
-        should_skip_route_loop = bool(
-            scenario_validation is not None
-            and not bool(scenario_validation.get("valid", True))
-            and scenario_validation.get("scenario_kind") == "near_junction_preflight_reject"
-        )
-        if should_skip_route_loop:
-            failure_reason = "scenario_preflight_invalid"
-            distance_to_goal_m = float(vehicle.get_location().distance(goal_location))
-        else:
+        world_frame = world.tick()
+        current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
+        if mcap_writer is not None:
+            lane_centerlines = (
+                _lane_centerlines_all_map(world.get_map())
+                if artifacts.mcap_map_scope == "full"
+                else _lane_centerlines_near_route(world.get_map(), planned_route.trace)
+            )
+            mcap_writer.write_static_scene(
+                timestamp_s=current_image.timestamp,
+                route_name=route_config.name,
+                route_points=_route_trace_xyz(planned_route.trace),
+                lane_centerlines=lane_centerlines,
+            )
+        preview_sink = policy.preview_sink
+        while True:
+            _apply_npc_target_speeds(
+                traffic_manager=traffic_manager,
+                npc_actor_refs=npc_actor_refs,
+                npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+            )
+            _apply_derived_traffic_light_group_cycle(
+                carla,
+                lights_by_id,
+                traffic_light_runtime_groups,
+                environment_config.traffic_light_phase_cycle
+                if environment_config is not None
+                else None,
+                elapsed_seconds=elapsed_seconds,
+                applied_states=traffic_light_cycle_states,
+                excluded_actor_ids=explicit_traffic_light_actor_ids,
+            )
+            _apply_traffic_light_schedules(
+                carla,
+                lights_by_id,
+                environment_config.traffic_light_schedules if environment_config is not None else [],
+                elapsed_seconds=elapsed_seconds,
+                applied_phase_indices=traffic_light_phase_indices,
+            )
+            current_speed = speed_mps(vehicle)
+            vehicle_transform = vehicle.get_transform()
+            vehicle_location = vehicle_transform.location
+            current_rgb = _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
+
+            if policy.kind == "learned":
+                step_result = stack.run_step(
+                    timestamp_s=elapsed_seconds,
+                    vehicle_transform=vehicle_transform,
+                    speed_mps=current_speed,
+                    current_rgb=current_rgb,
+                    steering_smoothing=policy.steer_smoothing,
+                    max_steer_delta=policy.max_steer_delta,
+                )
+            else:
+                step_result = stack.run_step(
+                    timestamp_s=elapsed_seconds,
+                    vehicle_transform=vehicle_transform,
+                    speed_mps=current_speed,
+                )
+
+            decision = step_result.decision
+            control = to_carla_control(carla, decision.command)
+            vehicle.apply_control(control)
+
+            collision, lane_invasion = frame_events.consume_frame_flags()
+            speed_sum += current_speed
+            frame_index += 1
+            elapsed_seconds = frame_index * runtime.fixed_delta_seconds
+            average_speed_mps = speed_sum / frame_index
+
+            if current_speed < scenario.stationary_speed_threshold_mps:
+                current_stationary_seconds += runtime.fixed_delta_seconds
+            else:
+                current_stationary_seconds = 0.0
+            max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
+
+            current_completion_ratio = step_result.progress_ratio
+            max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
+            distance_to_goal_m = vehicle_location.distance(goal_location)
+            route_point = step_result.route_point
+            behavior = step_result.behavior or decision.behavior
+            planning_decision = step_result.expert_decision or decision
+            planning_debug = planning_decision.debug
+            if planning_debug is None:
+                raise RuntimeError("Expert planning debug payload is required")
+            should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
+
+            telemetry_accumulator.observe(
+                planning_debug=planning_debug,
+                elapsed_seconds=elapsed_seconds,
+            )
+
+            if should_record:
+                if current_rgb is None:
+                    current_rgb = _carla_image_to_rgb_array(current_image)
+
+                image_path: Path | None = None
+                if artifacts.record_video and image_dir is not None:
+                    image_path = image_dir / f"{recorded_frame_index:06d}.png"
+                    current_image.save_to_disk(str(image_path))
+
+                mcap_segment_index: int | None = None
+                mcap_segment_path: str | None = None
+
+                if mcap_writer is not None:
+                    npc_vehicle_states = _collect_npc_vehicle_states(
+                        npc_actor_refs=npc_actor_refs,
+                        npc_actor_metadata_by_id=npc_actor_metadata_by_id,
+                        world_map=world.get_map(),
+                    )
+                    tracked_vehicle_states = _collect_tracked_vehicle_states(
+                        scene_state=step_result.scene_state
+                    )
+                    traffic_light_states = _collect_traffic_light_states(
+                        scene_state=step_result.scene_state
+                    )
+                    mcap_segment = mcap_writer.write_frame(
+                        current_rgb=current_rgb,
+                        ego_state=build_ego_state_sample(
+                            episode_id=episode_id,
+                            frame_id=frame_index - 1,
+                            timestamp_s=current_image.timestamp,
+                            elapsed_seconds=elapsed_seconds,
+                            speed_mps=current_speed,
+                            behavior=behavior,
+                            route_completion_ratio=current_completion_ratio,
+                            distance_to_goal_m=distance_to_goal_m,
+                            planner_state=planning_decision.planner_state,
+                            traffic_light_state=planning_debug.traffic_light_state,
+                            lead_vehicle_distance_m=planning_debug.lead_vehicle_distance_m,
+                            overtake_state=planning_debug.overtake_state,
+                            target_lane_id=planning_debug.target_lane_id,
+                            min_ttc=planning_debug.min_ttc,
+                            pose={
+                                "x": float(vehicle_location.x),
+                                "y": float(vehicle_location.y),
+                                "z": float(vehicle_location.z),
+                                "yaw_deg": float(vehicle_transform.rotation.yaw),
+                                "pitch_deg": float(vehicle_transform.rotation.pitch),
+                                "roll_deg": float(vehicle_transform.rotation.roll),
+                            },
+                            control={
+                                "steer": float(decision.command.steer),
+                                "throttle": float(decision.command.throttle),
+                                "brake": float(decision.command.brake),
+                            },
+                            planning_debug=planning_debug,
+                        ),
+                        npc_vehicle_states=npc_vehicle_states,
+                        tracked_vehicle_states=tracked_vehicle_states,
+                        traffic_light_states=traffic_light_states,
+                    )
+                    mcap_segment_index = mcap_segment.segment_index
+                    mcap_segment_path = relative_to_project(mcap_segment.path)
+
+                record = build_episode_record(
+                    episode_id=episode_id,
+                    frame_id=frame_index - 1,
+                    town_id=route_config.town,
+                    route_id=route_config.name,
+                    weather_id=scenario.weather,
+                    timestamp=current_image.timestamp,
+                    speed=current_speed,
+                    command=behavior,
+                    steer=decision.command.steer,
+                    throttle=decision.command.throttle,
+                    brake=decision.command.brake,
+                    collision=collision,
+                    lane_invasion=lane_invasion,
+                    success=not collision and not failure_reason,
+                    vehicle_x=vehicle_location.x,
+                    vehicle_y=vehicle_location.y,
+                    vehicle_z=vehicle_location.z,
+                    vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                    route_completion_ratio=current_completion_ratio,
+                    distance_to_goal_m=distance_to_goal_m,
+                    expert_steer=(
+                        step_result.expert_decision.command.steer
+                        if step_result.expert_decision is not None
+                        else None
+                    ),
+                    route_target_x=route_point[0] if route_point is not None else None,
+                    route_target_y=route_point[1] if route_point is not None else None,
+                    planner_state=planning_decision.planner_state,
+                    planning_debug=planning_debug,
+                    mcap_segment_index=mcap_segment_index,
+                    mcap_segment_path=mcap_segment_path,
+                )
+                append_jsonl(manifest_path, record)
+
+                recorded_frame_index += 1
+                while next_record_elapsed_s <= elapsed_seconds + 1e-9:
+                    next_record_elapsed_s += record_period_s
+
+            if preview_sink is not None:
+                if current_rgb is None:
+                    current_rgb = _carla_image_to_rgb_array(current_image)
+                behavior_label = behavior or "unknown"
+                status_core = (
+                    f"policy={policy.kind:<7} behavior={behavior_label:<12} "
+                    f"speed={current_speed * 3.6:5.1f} km/h progress={current_completion_ratio:5.3f} "
+                    f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
+                )
+                keep_preview = preview_sink(current_rgb, status_core)
+                if keep_preview is False:
+                    preview_sink = None
+
+            if collision:
+                failure_reason = "collision"
+                break
+
+            reached_success_goal = (
+                current_completion_ratio >= success_criteria["route_completion_ratio_min"]
+                and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
+            )
+            if reached_success_goal:
+                break
+
+            if max_stationary_seconds >= scenario.max_stop_seconds:
+                failure_reason = "stalled"
+                break
+
+            if step_result.done:
+                break
+
+            if elapsed_seconds >= scenario.max_seconds:
+                failure_reason = "max_seconds_exceeded"
+                break
+
             world_frame = world.tick()
             current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
-            if mcap_writer is not None:
-                lane_centerlines = (
-                    _lane_centerlines_all_map(world.get_map())
-                    if artifacts.mcap_map_scope == "full"
-                    else _lane_centerlines_near_route(world.get_map(), planned_route.trace)
-                )
-                mcap_writer.write_static_scene(
-                    timestamp_s=current_image.timestamp,
-                    route_name=route_config.name,
-                    route_points=_route_trace_xyz(planned_route.trace),
-                    lane_centerlines=lane_centerlines,
-                )
-            preview_sink = policy.preview_sink
-            while True:
-                _apply_npc_target_speeds(
-                    traffic_manager=traffic_manager,
-                    npc_actor_refs=npc_actor_refs,
-                    npc_actor_metadata_by_id=npc_actor_metadata_by_id,
-                )
-                _apply_derived_traffic_light_group_cycle(
-                    carla,
-                    lights_by_id,
-                    traffic_light_runtime_groups,
-                    environment_config.traffic_light_phase_cycle
-                    if environment_config is not None
-                    else None,
-                    elapsed_seconds=elapsed_seconds,
-                    applied_states=traffic_light_cycle_states,
-                    excluded_actor_ids=explicit_traffic_light_actor_ids,
-                )
-                _apply_traffic_light_schedules(
-                    carla,
-                    lights_by_id,
-                    environment_config.traffic_light_schedules
-                    if environment_config is not None
-                    else [],
-                    elapsed_seconds=elapsed_seconds,
-                    applied_phase_indices=traffic_light_phase_indices,
-                )
-                current_speed = speed_mps(vehicle)
-                vehicle_transform = vehicle.get_transform()
-                vehicle_location = vehicle_transform.location
-                current_rgb = (
-                    _carla_image_to_rgb_array(current_image) if policy.kind == "learned" else None
-                )
-
-                if policy.kind == "learned":
-                    step_result = stack.run_step(
-                        timestamp_s=elapsed_seconds,
-                        vehicle_transform=vehicle_transform,
-                        speed_mps=current_speed,
-                        current_rgb=current_rgb,
-                        steering_smoothing=policy.steer_smoothing,
-                        max_steer_delta=policy.max_steer_delta,
-                    )
-                else:
-                    step_result = stack.run_step(
-                        timestamp_s=elapsed_seconds,
-                        vehicle_transform=vehicle_transform,
-                        speed_mps=current_speed,
-                    )
-
-                decision = step_result.decision
-                control = to_carla_control(carla, decision.command)
-                vehicle.apply_control(control)
-
-                collision, lane_invasion = frame_events.consume_frame_flags()
-                speed_sum += current_speed
-                frame_index += 1
-                elapsed_seconds = frame_index * runtime.fixed_delta_seconds
-                average_speed_mps = speed_sum / frame_index
-
-                if current_speed < scenario.stationary_speed_threshold_mps:
-                    current_stationary_seconds += runtime.fixed_delta_seconds
-                else:
-                    current_stationary_seconds = 0.0
-                max_stationary_seconds = max(max_stationary_seconds, current_stationary_seconds)
-
-                current_completion_ratio = step_result.progress_ratio
-                max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
-                distance_to_goal_m = vehicle_location.distance(goal_location)
-                route_point = step_result.route_point
-                behavior = step_result.behavior or decision.behavior
-                planning_decision = step_result.expert_decision or decision
-                planning_debug = planning_decision.debug
-                if planning_debug is None:
-                    raise RuntimeError("Expert planning debug payload is required")
-                should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
-
-                telemetry_accumulator.observe(
-                    planning_debug=planning_debug,
-                    elapsed_seconds=elapsed_seconds,
-                )
-
-                if should_record:
-                    if current_rgb is None:
-                        current_rgb = _carla_image_to_rgb_array(current_image)
-
-                    image_path: Path | None = None
-                    if artifacts.record_video and image_dir is not None:
-                        image_path = image_dir / f"{recorded_frame_index:06d}.png"
-                        current_image.save_to_disk(str(image_path))
-
-                    mcap_segment_index: int | None = None
-                    mcap_segment_path: str | None = None
-
-                    if mcap_writer is not None:
-                        npc_vehicle_states = _collect_npc_vehicle_states(
-                            npc_actor_refs=npc_actor_refs,
-                            npc_actor_metadata_by_id=npc_actor_metadata_by_id,
-                            world_map=world.get_map(),
-                        )
-                        tracked_vehicle_states = _collect_tracked_vehicle_states(
-                            scene_state=step_result.scene_state
-                        )
-                        traffic_light_states = _collect_traffic_light_states(
-                            scene_state=step_result.scene_state
-                        )
-                        mcap_segment = mcap_writer.write_frame(
-                            current_rgb=current_rgb,
-                            ego_state=build_ego_state_sample(
-                                episode_id=episode_id,
-                                frame_id=frame_index - 1,
-                                timestamp_s=current_image.timestamp,
-                                elapsed_seconds=elapsed_seconds,
-                                speed_mps=current_speed,
-                                behavior=behavior,
-                                route_completion_ratio=current_completion_ratio,
-                                distance_to_goal_m=distance_to_goal_m,
-                                planner_state=planning_decision.planner_state,
-                                traffic_light_state=planning_debug.traffic_light_state,
-                                lead_vehicle_distance_m=planning_debug.lead_vehicle_distance_m,
-                                overtake_state=planning_debug.overtake_state,
-                                target_lane_id=planning_debug.target_lane_id,
-                                min_ttc=planning_debug.min_ttc,
-                                pose={
-                                    "x": float(vehicle_location.x),
-                                    "y": float(vehicle_location.y),
-                                    "z": float(vehicle_location.z),
-                                    "yaw_deg": float(vehicle_transform.rotation.yaw),
-                                    "pitch_deg": float(vehicle_transform.rotation.pitch),
-                                    "roll_deg": float(vehicle_transform.rotation.roll),
-                                },
-                                control={
-                                    "steer": float(decision.command.steer),
-                                    "throttle": float(decision.command.throttle),
-                                    "brake": float(decision.command.brake),
-                                },
-                                planning_debug=planning_debug,
-                            ),
-                            npc_vehicle_states=npc_vehicle_states,
-                            tracked_vehicle_states=tracked_vehicle_states,
-                            traffic_light_states=traffic_light_states,
-                        )
-                        mcap_segment_index = mcap_segment.segment_index
-                        mcap_segment_path = relative_to_project(mcap_segment.path)
-
-                    record = build_episode_record(
-                        episode_id=episode_id,
-                        frame_id=frame_index - 1,
-                        town_id=route_config.town,
-                        route_id=route_config.name,
-                        weather_id=scenario.weather,
-                        timestamp=current_image.timestamp,
-                        speed=current_speed,
-                        command=behavior,
-                        steer=decision.command.steer,
-                        throttle=decision.command.throttle,
-                        brake=decision.command.brake,
-                        collision=collision,
-                        lane_invasion=lane_invasion,
-                        success=not collision and not failure_reason,
-                        vehicle_x=vehicle_location.x,
-                        vehicle_y=vehicle_location.y,
-                        vehicle_z=vehicle_location.z,
-                        vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                        route_completion_ratio=current_completion_ratio,
-                        distance_to_goal_m=distance_to_goal_m,
-                        expert_steer=(
-                            step_result.expert_decision.command.steer
-                            if step_result.expert_decision is not None
-                            else None
-                        ),
-                        route_target_x=route_point[0] if route_point is not None else None,
-                        route_target_y=route_point[1] if route_point is not None else None,
-                        planner_state=planning_decision.planner_state,
-                        planning_debug=planning_debug,
-                        mcap_segment_index=mcap_segment_index,
-                        mcap_segment_path=mcap_segment_path,
-                    )
-                    append_jsonl(manifest_path, record)
-
-                    recorded_frame_index += 1
-                    while next_record_elapsed_s <= elapsed_seconds + 1e-9:
-                        next_record_elapsed_s += record_period_s
-
-                if preview_sink is not None:
-                    if current_rgb is None:
-                        current_rgb = _carla_image_to_rgb_array(current_image)
-                    behavior_label = behavior or "unknown"
-                    status_core = (
-                        f"policy={policy.kind:<7} behavior={behavior_label:<12} "
-                        f"speed={current_speed * 3.6:5.1f} km/h progress={current_completion_ratio:5.3f} "
-                        f"collisions={frame_events.collision_count} lane={frame_events.lane_invasion_count}"
-                    )
-                    keep_preview = preview_sink(current_rgb, status_core)
-                    if keep_preview is False:
-                        preview_sink = None
-
-                if collision:
-                    failure_reason = "collision"
-                    break
-
-                reached_success_goal = (
-                    current_completion_ratio >= success_criteria["route_completion_ratio_min"]
-                    and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
-                )
-                if reached_success_goal:
-                    break
-
-                if max_stationary_seconds >= scenario.max_stop_seconds:
-                    failure_reason = "stalled"
-                    break
-
-                if step_result.done:
-                    break
-
-                if elapsed_seconds >= scenario.max_seconds:
-                    failure_reason = "max_seconds_exceeded"
-                    break
-
-                world_frame = world.tick()
-                current_image = wait_for_image(image_queue, world_frame, runtime.sensor_timeout)
 
         max_completion_ratio = max(max_completion_ratio, current_completion_ratio)
         distance_to_goal_m = vehicle.get_location().distance(goal_location)
@@ -1420,7 +1397,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "lane_invasion_count": frame_events.lane_invasion_count,
         **telemetry_accumulator.summary_fields(),
         "allow_overtake": allow_overtake,
-        "scenario_validation": scenario_validation,
         "max_stationary_seconds": round(max_stationary_seconds, 2),
         "route_completion_ratio": round(max_completion_ratio, 4),
         "distance_to_goal_m": round(distance_to_goal_m, 2),

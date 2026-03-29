@@ -1,10 +1,167 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal, Sequence
 
-from ad_stack.overtake.validation import PreflightValidationInput, validate_preflight
 from simulation.environment_config import EnvironmentConfigSpec
+
+ScenarioKind = Literal[
+    "clear",
+    "blocked_static",
+    "blocked_oncoming",
+    "signal_suppressed",
+    "rejoin_blocked_then_release",
+    "adjacent_lane_closed",
+    "double_stopped_separated",
+    "double_stopped_clustered",
+    "curve_clear",
+    "near_junction_preflight_reject",
+]
+
+
+@dataclass(slots=True)
+class OvertakeScenarioConfig:
+    scenario_kind: ScenarioKind
+    obstacle_npc_index: int = 0
+    blocker_npc_index: int | None = None
+    route_aligned_adjacent_lane_available: bool | None = None
+    nearest_signal_distance_m: float | None = None
+    nearest_junction_distance_m: float | None = None
+
+
+def parse_overtake_scenario_config(
+    raw: dict[str, Any] | None,
+) -> OvertakeScenarioConfig | None:
+    if raw is None:
+        return None
+    return OvertakeScenarioConfig(
+        scenario_kind=str(raw["scenario_kind"]),  # type: ignore[arg-type]
+        obstacle_npc_index=int(raw.get("obstacle_npc_index", 0)),
+        blocker_npc_index=(
+            int(raw["blocker_npc_index"]) if raw.get("blocker_npc_index") is not None else None
+        ),
+        route_aligned_adjacent_lane_available=(
+            bool(raw["route_aligned_adjacent_lane_available"])
+            if raw.get("route_aligned_adjacent_lane_available") is not None
+            else None
+        ),
+        nearest_signal_distance_m=(
+            float(raw["nearest_signal_distance_m"])
+            if raw.get("nearest_signal_distance_m") is not None
+            else None
+        ),
+        nearest_junction_distance_m=(
+            float(raw["nearest_junction_distance_m"])
+            if raw.get("nearest_junction_distance_m") is not None
+            else None
+        ),
+    )
+
+
+@dataclass(slots=True)
+class PreflightValidationInput:
+    scenario_kind: ScenarioKind
+    ego_lane_id: str | None
+    obstacle_lane_id: str | None
+    obstacle_route_lane_id: str | None = None
+    blocker_lane_id: str | None = None
+    ego_to_obstacle_longitudinal_distance_m: float | None = None
+    ego_to_blocker_longitudinal_distance_m: float | None = None
+    left_lane_is_driving: bool = False
+    right_lane_is_driving: bool = False
+    route_target_lane_id: str | None = None
+    nearest_signal_distance_m: float | None = None
+    nearest_junction_distance_m: float | None = None
+    route_aligned_adjacent_lane_available: bool = False
+
+
+@dataclass(slots=True)
+class ScenarioValidationResult:
+    scenario_kind: ScenarioKind
+    errors: list[str]
+    warnings: list[str]
+
+    @property
+    def is_valid(self) -> bool:
+        return not self.errors
+
+
+def validate_preflight(snapshot: PreflightValidationInput) -> ScenarioValidationResult:
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    obstacle_aligned_with_route = (
+        snapshot.obstacle_route_lane_id is not None
+        and snapshot.obstacle_lane_id == snapshot.obstacle_route_lane_id
+    )
+    obstacle_expected_in_current_or_future_lane = snapshot.obstacle_lane_id == snapshot.ego_lane_id
+    if snapshot.scenario_kind in {"curve_clear", "adjacent_lane_closed"}:
+        obstacle_expected_in_current_or_future_lane = (
+            obstacle_expected_in_current_or_future_lane or obstacle_aligned_with_route
+        )
+    if not obstacle_expected_in_current_or_future_lane:
+        errors.append("obstacle_not_in_ego_lane")
+    if (
+        snapshot.ego_to_obstacle_longitudinal_distance_m is None
+        or snapshot.ego_to_obstacle_longitudinal_distance_m <= 0.0
+    ):
+        errors.append("obstacle_not_ahead")
+    if snapshot.scenario_kind != "adjacent_lane_closed":
+        if not (snapshot.left_lane_is_driving or snapshot.right_lane_is_driving):
+            errors.append("no_adjacent_driving_lane")
+        if not snapshot.route_aligned_adjacent_lane_available:
+            errors.append("route_aligned_adjacent_lane_unavailable")
+    if (
+        snapshot.route_target_lane_id is not None
+        and snapshot.ego_lane_id is not None
+        and snapshot.route_target_lane_id != snapshot.ego_lane_id
+    ):
+        errors.append("route_target_lane_conflict")
+    signal_nearby = (
+        snapshot.nearest_signal_distance_m is not None
+        and snapshot.nearest_signal_distance_m < 25.0
+    )
+    junction_nearby = (
+        snapshot.nearest_junction_distance_m is not None
+        and snapshot.nearest_junction_distance_m < 30.0
+    )
+    if signal_nearby:
+        warnings.append("signal_nearby")
+    if junction_nearby:
+        warnings.append("junction_nearby")
+
+    if snapshot.scenario_kind == "blocked_static":
+        if snapshot.blocker_lane_id is None:
+            errors.append("blocker_missing")
+        elif snapshot.blocker_lane_id == snapshot.ego_lane_id:
+            errors.append("blocker_not_in_opposite_lane")
+
+    if snapshot.scenario_kind == "blocked_oncoming":
+        if snapshot.blocker_lane_id is None:
+            errors.append("oncoming_blocker_missing")
+
+    if snapshot.scenario_kind in {"double_stopped_separated", "double_stopped_clustered"}:
+        if snapshot.obstacle_lane_id is None:
+            errors.append("obstacle_actor_missing")
+
+    if snapshot.scenario_kind == "adjacent_lane_closed":
+        if snapshot.route_aligned_adjacent_lane_available or (
+            snapshot.left_lane_is_driving or snapshot.right_lane_is_driving
+        ):
+            errors.append("adjacent_lane_not_closed")
+
+    if snapshot.scenario_kind == "near_junction_preflight_reject":
+        if signal_nearby:
+            errors.append("signal_nearby")
+        if junction_nearby:
+            errors.append("junction_nearby")
+
+    return ScenarioValidationResult(
+        scenario_kind=snapshot.scenario_kind,
+        errors=errors,
+        warnings=warnings,
+    )
 
 
 def _lane_id(waypoint: Any | None) -> str | None:
@@ -83,9 +240,8 @@ def build_overtake_scenario_validation(
     npc_actor_refs: Sequence[Any],
     driving_lane_type: Any,
 ) -> dict[str, Any] | None:
-    scenario_config = (
-        environment_config.overtake_scenario if environment_config is not None else None
-    )
+    raw_contract = environment_config.overtake_scenario if environment_config is not None else None
+    scenario_config = parse_overtake_scenario_config(raw_contract)
     if scenario_config is None:
         return None
 

@@ -58,7 +58,6 @@ class StoppedObstacleSuiteAssertionsTest(unittest.TestCase):
                     "overtake_attempt_count": 1,
                     "overtake_success_count": 1,
                     "unsafe_lane_change_reject_count": 1,
-                    "scenario_validation": {"valid": True, "errors": []},
                     "manifest_path": str(empty_manifest),
                     "rejoin_wait_after_target_passed_s": 0.5,
                 }
@@ -75,13 +74,8 @@ class StoppedObstacleSuiteAssertionsTest(unittest.TestCase):
                     payload["manifest_path"] = str(separated_manifest)
                 if scenario_name == "double_stopped_clustered":
                     payload["manifest_path"] = str(clustered_manifest)
-                if scenario_name == "near_junction_preflight_reject":
-                    payload["success"] = False
-                    payload["failure_reason"] = "scenario_preflight_invalid"
-                    payload["scenario_validation"] = {"valid": False, "errors": ["junction_nearby"]}
                 summary_path.write_text(json.dumps(payload), encoding="utf-8")
                 summary_paths.append(summary_path)
 
             summaries = load_stopped_obstacle_summaries(summary_paths)
             assert_stopped_obstacle_suite(summaries)
-

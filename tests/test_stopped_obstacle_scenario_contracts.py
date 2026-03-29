@@ -9,14 +9,17 @@ from ad_stack.overtake import (
     OvertakeLeadSnapshot,
     OvertakeContext,
     OvertakeMemory,
-    PreflightValidationInput,
     choose_overtake_action,
     should_begin_rejoin,
-    validate_preflight,
 )
 from libs.project import PROJECT_ROOT
 from simulation.environment_config import load_environment_config
 from simulation.pipelines.route_loop_run_config import load_route_loop_run_config, resolve_user_path
+from tests.integration.ad_stack._shared.overtake_scenario_contract import (
+    PreflightValidationInput,
+    parse_overtake_scenario_config,
+    validate_preflight,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,28 +248,29 @@ class StoppedObstacleScenarioContractTests(unittest.TestCase):
                 self.assertEqual(environment.name, Path(case.environment_path).stem)
                 self.assertEqual(len(environment.npc_vehicles), case.expected_npc_count)
                 self.assertIsNotNone(environment.overtake_scenario)
-                assert environment.overtake_scenario is not None
-                self.assertEqual(environment.overtake_scenario.scenario_kind, case.scenario_kind)
-                blocker_present = environment.overtake_scenario.blocker_npc_index is not None
+                scenario_config = parse_overtake_scenario_config(environment.overtake_scenario)
+                assert scenario_config is not None
+                self.assertEqual(scenario_config.scenario_kind, case.scenario_kind)
+                blocker_present = scenario_config.blocker_npc_index is not None
                 self.assertEqual(blocker_present, case.expected_blocker_present)
                 blocker_speed = None
                 if blocker_present:
-                    assert environment.overtake_scenario.blocker_npc_index is not None
+                    assert scenario_config.blocker_npc_index is not None
                     blocker_spec = environment.npc_vehicles[
-                        environment.overtake_scenario.blocker_npc_index
+                        scenario_config.blocker_npc_index
                     ]
                     blocker_speed = blocker_spec.target_speed_kmh
                 self.assertEqual(blocker_speed, case.expected_blocker_target_speed_kmh)
                 self.assertEqual(
-                    environment.overtake_scenario.route_aligned_adjacent_lane_available,
+                    scenario_config.route_aligned_adjacent_lane_available,
                     case.expected_route_aligned_adjacent_lane_available,
                 )
                 self.assertEqual(
-                    environment.overtake_scenario.nearest_signal_distance_m,
+                    scenario_config.nearest_signal_distance_m,
                     case.expected_nearest_signal_distance_m,
                 )
                 self.assertEqual(
-                    environment.overtake_scenario.nearest_junction_distance_m,
+                    scenario_config.nearest_junction_distance_m,
                     case.expected_nearest_junction_distance_m,
                 )
 

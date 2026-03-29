@@ -385,13 +385,10 @@ integration test 後は summary / manifest / MCAP から次を確認する。
 - `overtake_abort_count`
 - `collision_count`
 - `failure_reason`
-- `scenario_validation`
 - `first_target_passed_s`
 - `first_rejoin_started_s`
 
 ### summary / manifest contract
-
-#### `test_summary_contains_scenario_validation_fields`
 
 #### `test_manifest_contains_overtake_target_actor_and_pass_distance_fields`
 
