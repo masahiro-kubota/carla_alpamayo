@@ -36,11 +36,26 @@ wait_for_carla() {
   return 1
 }
 
+wait_for_carla_exit() {
+  local timeout_s=30
+  local elapsed=0
+  while (( elapsed < timeout_s )); do
+    if ! ss -ltnp | rg -q ':2000|:2001|:2002'; then
+      return 0
+    fi
+    sleep 1
+    ((elapsed+=1))
+  done
+  return 1
+}
+
 stop_carla() {
   if [[ -n "${CARLA_PID}" ]] && kill -0 "${CARLA_PID}" 2>/dev/null; then
     kill "${CARLA_PID}" 2>/dev/null || true
     wait "${CARLA_PID}" 2>/dev/null || true
   fi
+  pkill -f 'CarlaUE4-Linux-Shipping|CarlaUE4.sh' 2>/dev/null || true
+  wait_for_carla_exit || true
   CARLA_PID=""
 }
 
