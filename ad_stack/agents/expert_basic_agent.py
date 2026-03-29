@@ -984,9 +984,15 @@ class ExpertBasicAgent:
             same_lane_stopped_targets if same_lane_stopped_targets else route_aligned_stopped_targets
         )
         active_overtake_target = stopped_targets[0] if stopped_targets else None
-        lead_distance_m = (
+        same_lane_lead_distance_m = (
             float(lead_vehicle.longitudinal_distance_m)
             if lead_vehicle and lead_vehicle.longitudinal_distance_m is not None
+            else None
+        )
+        same_lane_lead_speed_mps = float(lead_vehicle.speed_mps) if lead_vehicle is not None else 0.0
+        lead_distance_m = (
+            same_lane_lead_distance_m
+            if same_lane_lead_distance_m is not None
             else (
                 float(active_overtake_target.entry_distance_m)
                 if active_overtake_target is not None
@@ -994,8 +1000,8 @@ class ExpertBasicAgent:
             )
         )
         lead_speed_mps = (
-            float(lead_vehicle.speed_mps)
-            if lead_vehicle is not None
+            same_lane_lead_speed_mps
+            if same_lane_lead_distance_m is not None
             else (
                 float(active_overtake_target.speed_mps)
                 if active_overtake_target is not None
@@ -1007,6 +1013,14 @@ class ExpertBasicAgent:
         min_ttc = float("inf")
         if lead_distance_m is not None and closing_speed_mps > 1e-3:
             min_ttc = lead_distance_m / closing_speed_mps
+        same_lane_min_ttc = float("inf")
+        same_lane_closing_speed_mps = (
+            current_speed_mps - same_lane_lead_speed_mps
+            if same_lane_lead_distance_m is not None
+            else 0.0
+        )
+        if same_lane_lead_distance_m is not None and same_lane_closing_speed_mps > 1e-3:
+            same_lane_min_ttc = same_lane_lead_distance_m / same_lane_closing_speed_mps
         follow_target_speed_kmh = self.config.target_speed_kmh
         if lead_distance_m is not None:
             distance_limited_speed_kmh = max(
@@ -1376,10 +1390,13 @@ class ExpertBasicAgent:
 
         emergency_stop = (
             not self.config.ignore_vehicles
-            and lead_distance_m is not None
+            and same_lane_lead_distance_m is not None
             and (
-                lead_distance_m <= self.config.lead_brake_distance_m
-                or (math.isfinite(min_ttc) and min_ttc <= self.config.ttc_emergency_threshold_s)
+                same_lane_lead_distance_m <= self.config.lead_brake_distance_m
+                or (
+                    math.isfinite(same_lane_min_ttc)
+                    and same_lane_min_ttc <= self.config.ttc_emergency_threshold_s
+                )
             )
         )
         if planner_state == "traffic_light_stop":
