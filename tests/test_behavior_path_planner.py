@@ -11,12 +11,13 @@ class BehaviorPathPlannerTests(unittest.TestCase):
     def test_lane_follow_returns_behavior_plan_and_trajectory(self) -> None:
         planner = BehaviorPathPlanner()
         plan, trajectory = planner.plan(
-            route_backbone=make_straight_route_backbone(road_option="straight"),
+            route_backbone=make_straight_route_backbone(road_option="left"),
             scene=make_scene(),
         )
 
         self.assertEqual(plan.state, "lane_follow")
-        self.assertEqual(plan.route_command, "straight")
+        self.assertEqual(plan.route_command, "left")
+        self.assertIsNone(plan.reject_reason)
         self.assertEqual(trajectory.trajectory_id, "lane_follow")
 
     def test_car_follow_rejects_overtake_when_adjacent_lane_closed(self) -> None:
@@ -63,7 +64,31 @@ class BehaviorPathPlannerTests(unittest.TestCase):
         self.assertEqual(plan.state, "lane_change_out")
         self.assertEqual(plan.active_target_kind, "cluster")
         self.assertEqual(plan.origin_lane_id, "15:-1")
+        self.assertIsNone(plan.reject_reason)
         self.assertIsNotNone(plan.target_lane_id)
+        self.assertEqual(trajectory.trajectory_id, "lane_change_out")
+
+    def test_moving_target_keeps_behavior_plan_and_trajectory_shape(self) -> None:
+        planner = BehaviorPathPlanner()
+        plan, trajectory = planner.plan(
+            route_backbone=make_straight_route_backbone(),
+            scene=make_scene(
+                tracked_targets=(
+                    TrackedTarget(
+                        actor_id=21,
+                        lane_id="15:-1",
+                        longitudinal_distance_m=10.0,
+                        speed_mps=4.0,
+                        target_kind="single_actor",
+                    ),
+                ),
+                left_open=True,
+            ),
+        )
+
+        self.assertEqual(plan.state, "lane_change_out")
+        self.assertEqual(plan.active_target_id, 21)
+        self.assertEqual(plan.active_target_kind, "single_actor")
         self.assertEqual(trajectory.trajectory_id, "lane_change_out")
 
     def test_previous_lane_change_out_advances_to_pass_vehicle(self) -> None:
