@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
+from ad_stack.overtake.application import BehaviorPathPlanner, BehaviorPathPlannerConfig
 from ad_stack.overtake.application.pure_pursuit_controller import PurePursuitController
 from ad_stack.overtake.domain.planning_models import BehaviorPlan, Trajectory
 from ad_stack.overtake import (
@@ -23,14 +24,13 @@ from ad_stack.overtake.policies import TargetAcceptancePolicy, TargetPolicy
 from ad_stack.overtake.infrastructure.carla import (
     OvertakeExecutionManager,
     build_route_backbone,
-    build_route_backbone_trajectory,
     build_target_candidates,
-    build_waypoint_trajectory,
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
     build_overtake_planning_debug,
     lane_gaps_for_lane_id,
     run_tracking_control,
+    waypoints_to_pose_samples,
 )
 from ad_stack.overtake.domain.planning_models import RouteBackbone
 
@@ -93,6 +93,14 @@ class ExpertBasicAgent:
         self._world = vehicle.get_world()
         self._map = world_map
         self._controller = PurePursuitController()
+        self._planner = BehaviorPathPlanner(
+            config=BehaviorPathPlannerConfig(
+                cruise_speed_mps=self.config.target_speed_kmh / 3.6,
+                car_follow_speed_mps=(10.0 / 3.6),
+                overtake_speed_mps=self.config.overtake_target_speed_kmh / 3.6,
+                signal_stop_distance_m=self.config.overtake_signal_suppression_distance_m,
+            )
+        )
         self._base_trace: list[tuple[Any, Any]] = []
         self._route_backbone: RouteBackbone | None = None
         self._route_point_to_trace_index: list[int] = []
@@ -490,16 +498,40 @@ class ExpertBasicAgent:
         if self._overtake.state != "idle":
             self._execution.advance(vehicle_location=self._vehicle.get_location())
             active_waypoints = self._execution.remaining_waypoints()
-        trajectory = self._build_tracking_trajectory(
-            route_index=route_index,
-            target_speed_kmh=target_speed_kmh,
-            planner_state=planner_state,
-            active_waypoints=active_waypoints,
+        local_path_samples = (
+            waypoints_to_pose_samples(active_waypoints)
+            if active_waypoints
+            else ()
         )
-        behavior_plan = self._build_behavior_plan(
+        behavior_plan, trajectory = self._planner.plan_runtime(
+            route_backbone=self._require_route_backbone(),
+            route_index=max(0, route_index or 0),
+            route_command=self._current_route_command,
             planner_state=planner_state,
-            active_target=active_overtake_target,
-            overtake_reject_reason=overtake_reject_reason,
+            desired_speed_mps=max(0.0, target_speed_kmh) / 3.6,
+            active_target_id=(
+                active_overtake_target.primary_actor_id
+                if planner_state == "car_follow" and active_overtake_target is not None
+                else self._overtake.target_actor_id
+            ),
+            active_target_kind=(
+                active_overtake_target.kind
+                if planner_state == "car_follow" and active_overtake_target is not None
+                else (
+                    self._overtake.memory.target_kind
+                    if self._overtake.target_actor_id is not None
+                    else None
+                )
+            ),
+            origin_lane_id=self._overtake.origin_lane_id or self._overtake.memory.origin_lane_id,
+            target_lane_id=(
+                self._execution.target_lane_id
+                if planner_state != "car_follow"
+                else None
+            ) or self._overtake.origin_lane_id,
+            reject_reason=overtake_reject_reason,
+            signal_stop_distance_m=stop_target_distance_m,
+            local_path_samples=local_path_samples,
         )
         self._current_behavior_plan = behavior_plan
         self._current_trajectory = trajectory
@@ -613,71 +645,7 @@ class ExpertBasicAgent:
             debug=planning_debug,
         )
 
-    def _build_behavior_plan(
-        self,
-        *,
-        planner_state: str,
-        active_target: Any | None,
-        overtake_reject_reason: str | None,
-    ) -> BehaviorPlan:
-        behavior_state = _behavior_state_from_planner_state(planner_state)
-        if behavior_state in {"lane_follow", "signal_stop"}:
-            return BehaviorPlan(
-                state=behavior_state,
-                route_command=self._current_route_command,  # type: ignore[arg-type]
-            )
-        if behavior_state == "car_follow":
-            return BehaviorPlan(
-                state=behavior_state,
-                route_command=self._current_route_command,  # type: ignore[arg-type]
-                active_target_id=active_target.primary_actor_id if active_target is not None else None,
-                active_target_kind=active_target.kind if active_target is not None else None,
-                origin_lane_id=self._overtake.origin_lane_id or self._overtake.memory.origin_lane_id,
-                target_lane_id=self._execution.target_lane_id,
-                reject_reason=overtake_reject_reason,
-            )
-        return BehaviorPlan(
-            state=behavior_state,
-            route_command=self._current_route_command,  # type: ignore[arg-type]
-            active_target_id=self._overtake.target_actor_id,
-            active_target_kind=self._overtake.memory.target_kind if self._overtake.target_actor_id is not None else None,
-            origin_lane_id=self._overtake.origin_lane_id or self._overtake.memory.origin_lane_id,
-            target_lane_id=self._execution.target_lane_id or self._overtake.origin_lane_id,
-            reject_reason=overtake_reject_reason,
-        )
-
-    def _build_tracking_trajectory(
-        self,
-        *,
-        route_index: int | None,
-        target_speed_kmh: float,
-        planner_state: str,
-        active_waypoints: list[Any],
-    ):
-        desired_speed_mps = max(0.0, target_speed_kmh) / 3.6
-        if active_waypoints:
-            return build_waypoint_trajectory(
-                waypoints=active_waypoints,
-                desired_speed_mps=desired_speed_mps,
-                trajectory_id=planner_state,
-                origin_lane_id=self._overtake.origin_lane_id,
-                target_lane_id=self._execution.target_lane_id,
-            )
+    def _require_route_backbone(self) -> RouteBackbone:
         if self._route_backbone is None:
             raise RuntimeError("global plan must be set before running the expert agent")
-        return build_route_backbone_trajectory(
-            route_backbone=self._route_backbone,
-            start_route_index=max(0, route_index or 0),
-            desired_speed_mps=desired_speed_mps,
-            trajectory_id=planner_state,
-            origin_lane_id=self._overtake.origin_lane_id,
-            target_lane_id=self._execution.target_lane_id,
-        )
-
-
-def _behavior_state_from_planner_state(planner_state: str) -> str:
-    if planner_state == "nominal_cruise":
-        return "lane_follow"
-    if planner_state == "traffic_light_stop":
-        return "signal_stop"
-    return planner_state
+        return self._route_backbone

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 from ad_stack.overtake.domain.planning_models import (
+    BehaviorState,
     ActiveTargetKind,
     BehaviorPlan,
+    Pose3D,
     PlanningScene,
     RouteBackbone,
-    RouteTracePoint,
     Trajectory,
-    TrajectoryPoint,
     TrackedTarget,
+)
+from .trajectory_generation import (
+    build_pose_trajectory,
+    build_route_backbone_trajectory,
+    build_signal_stop_trajectory,
 )
 
 
@@ -61,9 +65,9 @@ class BehaviorPathPlanner:
                 target_lane_id=previous_behavior_plan.origin_lane_id,
                 reject_reason="signal_stop",
             )
-            return plan, _build_constant_speed_trajectory(
-                route_backbone,
+            return plan, build_route_backbone_trajectory(
                 start_route_index=scene.route_index,
+                route_backbone=route_backbone,
                 desired_speed_mps=self.config.car_follow_speed_mps,
                 trajectory_id="abort_return",
                 origin_lane_id=plan.origin_lane_id,
@@ -80,8 +84,8 @@ class BehaviorPathPlanner:
                 state="signal_stop",
                 route_command=route_command,
             )
-            return plan, _build_signal_stop_trajectory(
-                route_backbone,
+            return plan, build_signal_stop_trajectory(
+                route_backbone=route_backbone,
                 start_route_index=scene.route_index,
                 desired_speed_mps=self.config.cruise_speed_mps,
                 stop_line_distance_m=stop_distance_m,
@@ -107,8 +111,8 @@ class BehaviorPathPlanner:
                 state="lane_follow",
                 route_command=route_command,
             )
-            return plan, _build_constant_speed_trajectory(
-                route_backbone,
+            return plan, build_route_backbone_trajectory(
+                route_backbone=route_backbone,
                 start_route_index=scene.route_index,
                 desired_speed_mps=self.config.cruise_speed_mps,
                 trajectory_id="lane_follow",
@@ -134,8 +138,8 @@ class BehaviorPathPlanner:
                 origin_lane_id=scene.current_lane_id,
                 target_lane_id=target_lane_id,
             )
-            return plan, _build_constant_speed_trajectory(
-                route_backbone,
+            return plan, build_route_backbone_trajectory(
+                route_backbone=route_backbone,
                 start_route_index=scene.route_index,
                 desired_speed_mps=self.config.overtake_speed_mps,
                 trajectory_id="lane_change_out",
@@ -154,8 +158,8 @@ class BehaviorPathPlanner:
             origin_lane_id=scene.current_lane_id,
             reject_reason="adjacent_lane_closed",
         )
-        return plan, _build_constant_speed_trajectory(
-            route_backbone,
+        return plan, build_route_backbone_trajectory(
+            route_backbone=route_backbone,
             start_route_index=scene.route_index,
             desired_speed_mps=min(self.config.car_follow_speed_mps, lead_target.speed_mps),
             trajectory_id="car_follow",
@@ -164,6 +168,70 @@ class BehaviorPathPlanner:
             minimum_horizon_m=self.config.minimum_horizon_m,
             resample_interval_m=self.config.resample_interval_m,
         )
+
+    def plan_runtime(
+        self,
+        *,
+        route_backbone: RouteBackbone,
+        route_index: int,
+        route_command: str,
+        planner_state: str,
+        desired_speed_mps: float,
+        active_target_id: int | None,
+        active_target_kind: ActiveTargetKind | None,
+        origin_lane_id: str | None,
+        target_lane_id: str | None,
+        reject_reason: str | None,
+        signal_stop_distance_m: float | None = None,
+        local_path_samples: tuple[Pose3D, ...] = (),
+    ) -> tuple[BehaviorPlan, Trajectory]:
+        behavior_state = _behavior_state_from_planner_state(planner_state)
+        plan = BehaviorPlan(
+            state=behavior_state,
+            route_command=route_command,  # type: ignore[arg-type]
+            active_target_id=active_target_id,
+            active_target_kind=active_target_kind,
+            origin_lane_id=origin_lane_id,
+            target_lane_id=target_lane_id,
+            reject_reason=reject_reason,
+        )
+        trajectory_id = behavior_state
+        if behavior_state == "signal_stop" and signal_stop_distance_m is not None:
+            trajectory = build_signal_stop_trajectory(
+                route_backbone=route_backbone,
+                start_route_index=route_index,
+                desired_speed_mps=desired_speed_mps,
+                stop_line_distance_m=signal_stop_distance_m,
+                trajectory_id=trajectory_id,
+                horizon_m=self.config.trajectory_horizon_m,
+                minimum_horizon_m=self.config.minimum_horizon_m,
+                resample_interval_m=self.config.resample_interval_m,
+                origin_lane_id=origin_lane_id,
+                target_lane_id=target_lane_id,
+            )
+            return plan, trajectory
+        if local_path_samples:
+            trajectory = build_pose_trajectory(
+                pose_samples=local_path_samples,
+                desired_speed_mps=desired_speed_mps,
+                trajectory_id=trajectory_id,
+                origin_lane_id=origin_lane_id,
+                target_lane_id=target_lane_id,
+                resample_interval_m=self.config.resample_interval_m,
+            )
+            return plan, trajectory
+        trajectory = build_route_backbone_trajectory(
+            route_backbone=route_backbone,
+            start_route_index=route_index,
+            desired_speed_mps=desired_speed_mps,
+            trajectory_id=trajectory_id,
+            horizon_m=self.config.trajectory_horizon_m,
+            minimum_horizon_m=self.config.minimum_horizon_m,
+            resample_interval_m=self.config.resample_interval_m,
+            origin_lane_id=origin_lane_id,
+            target_lane_id=target_lane_id,
+        )
+        return plan, trajectory
 
     def _continue_previous_plan(
         self,
@@ -184,8 +252,8 @@ class BehaviorPathPlanner:
                     origin_lane_id=previous_behavior_plan.origin_lane_id,
                     target_lane_id=previous_behavior_plan.target_lane_id,
                 )
-                return plan, _build_constant_speed_trajectory(
-                    route_backbone,
+                return plan, build_route_backbone_trajectory(
+                    route_backbone=route_backbone,
                     start_route_index=scene.route_index,
                     desired_speed_mps=self.config.overtake_speed_mps,
                     trajectory_id="pass_vehicle",
@@ -206,8 +274,8 @@ class BehaviorPathPlanner:
                     origin_lane_id=previous_behavior_plan.origin_lane_id,
                     target_lane_id=previous_behavior_plan.origin_lane_id,
                 )
-                return plan, _build_constant_speed_trajectory(
-                    route_backbone,
+                return plan, build_route_backbone_trajectory(
+                    route_backbone=route_backbone,
                     start_route_index=scene.route_index,
                     desired_speed_mps=self.config.overtake_speed_mps,
                     trajectory_id="lane_change_back",
@@ -225,8 +293,8 @@ class BehaviorPathPlanner:
                 origin_lane_id=previous_behavior_plan.origin_lane_id,
                 target_lane_id=previous_behavior_plan.target_lane_id,
             )
-            return plan, _build_constant_speed_trajectory(
-                route_backbone,
+            return plan, build_route_backbone_trajectory(
+                route_backbone=route_backbone,
                 start_route_index=scene.route_index,
                 desired_speed_mps=self.config.overtake_speed_mps,
                 trajectory_id="pass_vehicle",
@@ -243,8 +311,8 @@ class BehaviorPathPlanner:
                     state="lane_follow",
                     route_command=route_command,  # type: ignore[arg-type]
                 )
-                return plan, _build_constant_speed_trajectory(
-                    route_backbone,
+                return plan, build_route_backbone_trajectory(
+                    route_backbone=route_backbone,
                     start_route_index=scene.route_index,
                     desired_speed_mps=self.config.cruise_speed_mps,
                     trajectory_id="lane_follow",
@@ -254,6 +322,14 @@ class BehaviorPathPlanner:
                 )
 
         return None
+
+
+def _behavior_state_from_planner_state(planner_state: str) -> BehaviorState:
+    if planner_state == "nominal_cruise":
+        return "lane_follow"
+    if planner_state == "traffic_light_stop":
+        return "signal_stop"
+    return planner_state  # type: ignore[return-value]
 
 
 def _select_stop_light(
@@ -286,157 +362,3 @@ def _select_lead_target(scene: PlanningScene) -> TrackedTarget | None:
         return None
     return min(candidates, key=lambda target: target.longitudinal_distance_m)
 
-
-def _build_constant_speed_trajectory(
-    route_backbone: RouteBackbone,
-    *,
-    start_route_index: int,
-    desired_speed_mps: float,
-    trajectory_id: str,
-    horizon_m: float,
-    minimum_horizon_m: float,
-    resample_interval_m: float,
-    origin_lane_id: str | None = None,
-    target_lane_id: str | None = None,
-) -> Trajectory:
-    points, end_route_index = _sample_backbone_points(
-        route_backbone,
-        start_route_index=start_route_index,
-        horizon_m=horizon_m,
-        minimum_horizon_m=minimum_horizon_m,
-        resample_interval_m=resample_interval_m,
-    )
-    return Trajectory(
-        points=tuple(
-            TrajectoryPoint(
-                x=point.x,
-                y=point.y,
-                z=point.z,
-                yaw_deg=point.yaw_deg,
-                longitudinal_velocity_mps=desired_speed_mps,
-            )
-            for point in points
-        ),
-        trajectory_id=trajectory_id,
-        origin_lane_id=origin_lane_id,
-        target_lane_id=target_lane_id,
-        source_route_start_index=start_route_index,
-        source_route_end_index=end_route_index,
-    )
-
-
-def _build_signal_stop_trajectory(
-    route_backbone: RouteBackbone,
-    *,
-    start_route_index: int,
-    desired_speed_mps: float,
-    stop_line_distance_m: float,
-    trajectory_id: str,
-    horizon_m: float,
-    minimum_horizon_m: float,
-    resample_interval_m: float,
-) -> Trajectory:
-    points, end_route_index = _sample_backbone_points(
-        route_backbone,
-        start_route_index=start_route_index,
-        horizon_m=horizon_m,
-        minimum_horizon_m=minimum_horizon_m,
-        resample_interval_m=resample_interval_m,
-    )
-    speed_points: list[TrajectoryPoint] = []
-    for index, point in enumerate(points):
-        distance_from_start = index * resample_interval_m
-        if distance_from_start >= stop_line_distance_m:
-            speed_mps = 0.0
-        else:
-            remaining_ratio = max(0.0, (stop_line_distance_m - distance_from_start) / max(stop_line_distance_m, 1e-3))
-            speed_mps = desired_speed_mps * remaining_ratio
-        speed_points.append(
-            TrajectoryPoint(
-                x=point.x,
-                y=point.y,
-                z=point.z,
-                yaw_deg=point.yaw_deg,
-                longitudinal_velocity_mps=speed_mps,
-            )
-        )
-    return Trajectory(
-        points=tuple(speed_points),
-        trajectory_id=trajectory_id,
-        source_route_start_index=start_route_index,
-        source_route_end_index=end_route_index,
-    )
-
-
-def _sample_backbone_points(
-    route_backbone: RouteBackbone,
-    *,
-    start_route_index: int,
-    horizon_m: float,
-    minimum_horizon_m: float,
-    resample_interval_m: float,
-) -> tuple[list[RouteTracePoint], int]:
-    start_trace_index = route_backbone.trace_index_for_route_index(start_route_index)
-    start_progress = route_backbone.progress_m[start_trace_index]
-    remaining_horizon = route_backbone.progress_m[-1] - start_progress
-    target_horizon = min(horizon_m, remaining_horizon)
-    if target_horizon < minimum_horizon_m and remaining_horizon >= minimum_horizon_m:
-        target_horizon = minimum_horizon_m
-    end_progress = min(route_backbone.progress_m[-1], start_progress + target_horizon)
-    sampled_points: list[RouteTracePoint] = []
-    sample_progress = start_progress
-    while sample_progress <= end_progress + 1e-6:
-        sampled_points.append(_interpolate_route_trace(route_backbone, sample_progress))
-        sample_progress += resample_interval_m
-    if len(sampled_points) < 2:
-        sampled_points.append(route_backbone.trace[min(start_trace_index + 1, len(route_backbone.trace) - 1)])
-    end_trace_index = _find_trace_index_at_progress(route_backbone, end_progress)
-    end_route_index = start_route_index
-    for route_index, trace_index in enumerate(route_backbone.route_index_to_trace_index):
-        if trace_index <= end_trace_index:
-            end_route_index = route_index
-    return sampled_points, end_route_index
-
-
-def _interpolate_route_trace(route_backbone: RouteBackbone, progress_m: float) -> RouteTracePoint:
-    trace = route_backbone.trace
-    progress = route_backbone.progress_m
-    if progress_m <= progress[0]:
-        return trace[0]
-    if progress_m >= progress[-1]:
-        return trace[-1]
-    for index in range(len(progress) - 1):
-        start_progress = progress[index]
-        end_progress = progress[index + 1]
-        if start_progress <= progress_m <= end_progress:
-            span = max(end_progress - start_progress, 1e-6)
-            ratio = (progress_m - start_progress) / span
-            start = trace[index]
-            end = trace[index + 1]
-            return RouteTracePoint(
-                x=_lerp(start.x, end.x, ratio),
-                y=_lerp(start.y, end.y, ratio),
-                z=_lerp(start.z, end.z, ratio),
-                yaw_deg=_interpolate_yaw(start.yaw_deg, end.yaw_deg, ratio),
-                lane_id=start.lane_id,
-                road_option=start.road_option,
-            )
-    return trace[-1]
-
-
-def _find_trace_index_at_progress(route_backbone: RouteBackbone, progress_m: float) -> int:
-    for index, value in enumerate(route_backbone.progress_m):
-        if value >= progress_m:
-            return index
-    return len(route_backbone.progress_m) - 1
-
-
-def _lerp(a: float, b: float, ratio: float) -> float:
-    return a + (b - a) * ratio
-
-
-def _interpolate_yaw(a_deg: float, b_deg: float, ratio: float) -> float:
-    a_rad = math.radians(a_deg)
-    b_rad = math.radians(b_deg)
-    delta = (b_rad - a_rad + math.pi) % (2.0 * math.pi) - math.pi
-    return math.degrees(a_rad + delta * ratio)

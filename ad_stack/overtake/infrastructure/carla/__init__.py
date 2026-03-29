@@ -10,7 +10,11 @@ from .route_alignment import (
     build_rejoin_waypoint_execution_plan,
     lane_id,
 )
-from .trajectory_materializer import build_route_backbone_trajectory, build_waypoint_trajectory
+from .trajectory_materializer import (
+    build_route_backbone_trajectory,
+    build_waypoint_trajectory,
+    waypoints_to_pose_samples,
+)
 from .candidate_extractor import (
     TargetCandidateBuilder,
     build_same_lane_target_candidates,
@@ -81,5 +85,6 @@ __all__ = [
     "run_tracking_control",
     "TrajectoryTrackingResult",
     "build_waypoint_trajectory",
+    "waypoints_to_pose_samples",
     "visible_overtake_target_actors",
 ]
