@@ -328,6 +328,44 @@ class StoppedObstacleScenarioContractTests(unittest.TestCase):
         self.assertEqual(decision.planner_state, "car_follow")
         self.assertEqual(decision.reject_reason, "adjacent_lane_closed")
 
+    def test_blocked_static_near_preflight_contract_is_valid(self) -> None:
+        result = validate_preflight(
+            PreflightValidationInput(
+                scenario_kind="blocked_static",
+                ego_lane_id="15:-1",
+                obstacle_lane_id="15:-1",
+                obstacle_route_lane_id="15:-1",
+                blocker_lane_id="15:1",
+                ego_to_obstacle_longitudinal_distance_m=34.0,
+                ego_to_blocker_longitudinal_distance_m=12.0,
+                left_lane_is_driving=True,
+                right_lane_is_driving=False,
+                route_target_lane_id="15:-1",
+                route_aligned_adjacent_lane_available=True,
+            )
+        )
+        self.assertTrue(result.is_valid)
+        self.assertEqual(tuple(result.errors), ())
+        self.assertEqual(tuple(result.warnings), ())
+
+    def test_blocked_static_near_rejects_due_to_gap_not_target_range(self) -> None:
+        decision = choose_overtake_action(
+            _context(
+                lead_distance_m=34.0,
+                left_front_gap_m=10.0,
+                left_rear_gap_m=20.0,
+                right_lane_open=False,
+            ),
+            overtake_trigger_distance_m=40.0,
+            overtake_speed_delta_kmh=8.0,
+            overtake_min_front_gap_m=35.0,
+            overtake_min_rear_gap_m=15.0,
+            signal_suppression_distance_m=35.0,
+            target_acceptance_policy=accept_stopped_overtake_target,
+        )
+        self.assertEqual(decision.planner_state, "car_follow")
+        self.assertEqual(decision.reject_reason, "adjacent_front_gap_insufficient")
+
 
 if __name__ == "__main__":
     unittest.main()

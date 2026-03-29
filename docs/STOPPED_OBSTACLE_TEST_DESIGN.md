@@ -54,6 +54,7 @@
 
 - `clear`
 - `blocked_static`
+- `blocked_static_near`
 - `blocked_oncoming`
 - `double_stopped_separated`
 - `double_stopped_clustered`
@@ -61,6 +62,7 @@
 ただし gate は段階化する。
 
 - baseline は `clear / blocked_static / blocked_oncoming`
+- `blocked_static_near` は自然な近距離 negative case としてその後に追加する
 - 複数停止車両はその後に `separated -> clustered` の順で追加する
 
 ## 2. pure unit test で必ず持つケース
@@ -338,8 +340,24 @@ run-config:
 - overtake attempt 0
 - reject reason が `adjacent_front_gap_insufficient` か `adjacent_lane_closed`
 - collision 0
+- same-lane 停止障害物は far placement でも blocker 優先の negative baseline として機能する
 
-### 6.3 `blocked_oncoming`
+### 6.3 `blocked_static_near`
+
+planned run-config:
+
+- `tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_blocked_near_long_expert.json`
+
+見ること:
+
+- same-lane の停止障害物は `30-40m` 前方にある
+- adjacent lane の static blocker が corridor を塞ぐ
+- overtake attempt 0
+- reject reason は `adjacent_front_gap_insufficient` か `adjacent_lane_closed`
+- 停止車両の手前で安全に減速して停止する
+- collision 0
+
+### 6.4 `blocked_oncoming`
 
 run-config:
 
@@ -350,7 +368,7 @@ run-config:
 - moving oncoming actor に対して reject
 - blocker 通過前は出ない
 
-### 6.4 `double_stopped_separated`
+### 6.5 `double_stopped_separated`
 
 run-config:
 
@@ -362,7 +380,7 @@ run-config:
 - その後 2 台目が `lead_vehicle_id` / `overtake_target_actor_id` として再取得される
 - collision 0
 
-### 6.5 `double_stopped_clustered`
+### 6.6 `double_stopped_clustered`
 
 run-config:
 
@@ -436,13 +454,17 @@ integration test 後は summary / manifest / MCAP から次を確認する。
 
 ### Gate 5
 
-- `blocked_oncoming` integration 緑
+- `blocked_static_near` integration 緑
 
 ### Gate 6
 
-- `double_stopped_separated` integration 緑
+- `blocked_oncoming` integration 緑
 
 ### Gate 7
+
+- `double_stopped_separated` integration 緑
+
+### Gate 8
 
 - `double_stopped_clustered` integration 緑
 

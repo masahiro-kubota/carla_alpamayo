@@ -95,6 +95,8 @@
 
 - `blocked_static`
   - `static_blocking`
+- `blocked_static_near`
+  - `static_blocking` をより自然な近距離停止障害物配置で見る候補
 - `blocked_oncoming`
   - `moving_oncoming`
 - `adjacent_lane_closed`
@@ -110,6 +112,8 @@
 
 - `irrelevant_far_static`
   - 反対車線に車はいるが、追い越しを抑制しないこと
+- `near static blocking`
+  - same-lane の停止障害物が近距離でも、blocked corridor なら無理に出ず停止できること
 - `curve + static_blocking`
   - geometry が曲がっていても static blocker を正しく blocker とみなすこと
 - `double stopped + occupied opposite lane`
@@ -119,7 +123,22 @@
 
 ## 5. 追加すべき integration scenario
 
-### 5.1 `clear_with_far_opposite_static`
+### 5.1 `blocked_static_near`
+
+狙い:
+
+- same-lane の停止障害物が `30-40m` 前方にある自然な blocked case を持つ
+- far placement に依存せず、`static_blocking` の negative baseline を確認する
+
+期待:
+
+- `overtake_attempt_count = 0`
+- `failure_reason = stalled`
+- `collision_count = 0`
+- 停止車両の手前で減速停止する
+- reject は `adjacent_front_gap_insufficient` か `adjacent_lane_closed`
+
+### 5.2 `clear_with_far_opposite_static`
 
 狙い:
 
@@ -133,7 +152,7 @@
 - `collision_count = 0`
 - reject は `adjacent_front_gap_insufficient` にならない
 
-### 5.2 `curve_clear_with_opposite_static_blocked`
+### 5.3 `curve_clear_with_opposite_static_blocked`
 
 狙い:
 
@@ -145,7 +164,7 @@
 - reject は `adjacent_front_gap_insufficient` か `adjacent_lane_closed`
 - collision しない
 
-### 5.3 `double_stopped_clustered_with_oncoming_block`
+### 5.4 `double_stopped_clustered_with_oncoming_block`
 
 狙い:
 
@@ -157,7 +176,7 @@
 - corridor 解放後に `target_kind = cluster` で 1 回の overtake
 - cluster member actor ids を保持する
 
-### 5.4 `double_stopped_separated_with_far_opposite_static`
+### 5.5 `double_stopped_separated_with_far_opposite_static`
 
 狙い:
 
@@ -178,6 +197,12 @@
 - opposite lane の actor はいる
 - ただし required clear distance 外
 - 期待: reject しない
+
+#### `test_overtake_rejects_for_near_static_blocking_even_when_same_lane_obstacle_is_close`
+
+- same-lane 停止障害物は trigger 距離内
+- opposite lane static blocker が required clear distance 内
+- 期待: reject
 
 #### `test_curve_route_marks_opposite_static_actor_as_blocker_when_route_aligned_gap_is_insufficient`
 
@@ -215,15 +240,17 @@
 
 追加するなら順は次です。
 
-1. `clear_with_far_opposite_static`
-2. `curve_clear_with_opposite_static_blocked`
-3. `double_stopped_clustered_with_oncoming_block`
-4. `double_stopped_separated_with_far_opposite_static`
+1. `blocked_static_near`
+2. `clear_with_far_opposite_static`
+3. `curve_clear_with_opposite_static_blocked`
+4. `double_stopped_clustered_with_oncoming_block`
+5. `double_stopped_separated_with_far_opposite_static`
 
 理由:
 
-- まず false positive reject を抑える
-- 次に geometry 依存の blocker 検出を詰める
+- まず自然な近距離 blocked case を持つ
+- 次に false positive reject を抑える
+- その後に geometry 依存の blocker 検出を詰める
 - 最後に multi-target との組み合わせへ広げる
 
 ## 8. done の定義

@@ -41,6 +41,7 @@
 
 ## Deferred / Exploratory Scenarios
 
+- [blocked_static_near.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/exploratory/blocked_static_near.md)
 - [right_first_clear.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/exploratory/right_first_clear.md)
 - [temporary_target_occlusion.md](/media/masa/ssd_data/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/exploratory/temporary_target_occlusion.md)
 
