@@ -6,7 +6,6 @@ import random
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from math import inf
 from pathlib import Path
 from typing import Any, Literal
 
@@ -40,13 +39,16 @@ from libs.carla_utils.traffic_light_phasing import (
 )
 from libs.project import PROJECT_ROOT, build_versioned_run_id, ensure_clean_git_worktree
 from libs.schemas import (
-    EgoStateSample,
-    EpisodeRecord,
     NPCVehicleStateSample,
     RotatingRouteLoopMcapWriter,
     TrackedVehicleStateSample,
     TrafficLightObservationSample,
     append_jsonl,
+)
+from ad_stack.overtake.infrastructure.carla import (
+    RouteLoopTelemetryAccumulator,
+    build_ego_state_sample,
+    build_episode_record,
 )
 from libs.utils import render_png_sequence_to_mp4
 from simulation.environment_config import (
@@ -893,21 +895,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
     video_error: str | None = None
     mcap_error: str | None = None
     mcap_writer: RotatingRouteLoopMcapWriter | None = None
-    traffic_light_stop_count = 0
-    traffic_light_resume_count = 0
-    traffic_light_violation_count = 0
-    car_follow_event_count = 0
-    overtake_attempt_count = 0
-    overtake_success_count = 0
-    overtake_abort_count = 0
-    unsafe_lane_change_reject_count = 0
-    min_ttc = float("inf")
-    min_lead_distance_m = float("inf")
-    first_target_passed_s: float | None = None
-    first_rejoin_started_s: float | None = None
-    first_rejoin_front_gap_m: float | None = None
-    first_rejoin_rear_gap_m: float | None = None
-    _traffic_light_violation_active = False
+    telemetry_accumulator = RouteLoopTelemetryAccumulator()
     npc_actors_summary: list[dict[str, Any]] = []
     npc_actor_refs: list[Any] = []
     traffic_light_phase_indices: dict[int, int] = {}
@@ -1181,40 +1169,10 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 planning_debug = dict(planning_decision.debug or {})
                 should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
 
-                traffic_light_stop_count += int(bool(planning_debug.get("event_traffic_light_stop")))
-                traffic_light_resume_count += int(
-                    bool(planning_debug.get("event_traffic_light_resume"))
+                telemetry_accumulator.observe(
+                    planning_debug=planning_debug,
+                    elapsed_seconds=elapsed_seconds,
                 )
-                car_follow_event_count += int(bool(planning_debug.get("event_car_follow_start")))
-                overtake_attempt_count += int(bool(planning_debug.get("event_overtake_attempt")))
-                overtake_success_count += int(bool(planning_debug.get("event_overtake_success")))
-                overtake_abort_count += int(bool(planning_debug.get("event_overtake_abort")))
-                unsafe_lane_change_reject_count += int(
-                    bool(planning_debug.get("event_unsafe_lane_change_reject"))
-                )
-                if (
-                    bool(planning_debug.get("traffic_light_violation"))
-                    and not _traffic_light_violation_active
-                ):
-                    traffic_light_violation_count += 1
-                    _traffic_light_violation_active = True
-                elif not bool(planning_debug.get("traffic_light_violation")):
-                    _traffic_light_violation_active = False
-                if planning_debug.get("min_ttc") is not None:
-                    min_ttc = min(min_ttc, float(planning_debug["min_ttc"]))
-                if planning_debug.get("lead_vehicle_distance_m") is not None:
-                    min_lead_distance_m = min(
-                        min_lead_distance_m, float(planning_debug["lead_vehicle_distance_m"])
-                    )
-                if first_target_passed_s is None and planning_debug.get("target_passed") is True:
-                    first_target_passed_s = elapsed_seconds
-                if (
-                    first_rejoin_started_s is None
-                    and planning_debug.get("overtake_state") == "lane_change_back"
-                ):
-                    first_rejoin_started_s = elapsed_seconds
-                    first_rejoin_front_gap_m = planning_debug.get("rejoin_front_gap_m")
-                    first_rejoin_rear_gap_m = planning_debug.get("rejoin_rear_gap_m")
 
                 if should_record:
                     if current_rgb is None:
@@ -1240,130 +1198,80 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                         traffic_light_states = _collect_traffic_light_states(
                             scene_state=step_result.scene_state
                         )
-                        planning_debug_mcap = {
-                            key: value
-                            for key, value in planning_debug.items()
-                            if key
-                            not in {
-                                "planner_state",
-                                "traffic_light_state",
-                                "overtake_state",
-                                "target_lane_id",
-                                "min_ttc",
-                            }
-                        }
                         mcap_segment = mcap_writer.write_frame(
-                        current_rgb=current_rgb,
-                        ego_state=EgoStateSample(
-                            episode_id=episode_id,
-                            frame_id=frame_index - 1,
-                            timestamp_s=current_image.timestamp,
-                            elapsed_seconds=elapsed_seconds,
-                            speed_mps=current_speed,
-                            behavior=behavior,
-                            route_completion_ratio=current_completion_ratio,
-                            distance_to_goal_m=distance_to_goal_m,
-                            planner_state=planning_decision.planner_state,
-                            traffic_light_state=planning_debug.get("traffic_light_state"),
-                            lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
-                            overtake_state=planning_debug.get("overtake_state"),
-                            target_lane_id=planning_debug.get("target_lane_id"),
-                            min_ttc=planning_debug.get("min_ttc"),
-                            pose={
-                                "x": float(vehicle_location.x),
-                                "y": float(vehicle_location.y),
-                                "z": float(vehicle_location.z),
-                                "yaw_deg": float(vehicle_transform.rotation.yaw),
-                                "pitch_deg": float(vehicle_transform.rotation.pitch),
-                                "roll_deg": float(vehicle_transform.rotation.roll),
-                            },
-                            control={
-                                "steer": float(decision.command.steer),
-                                "throttle": float(decision.command.throttle),
-                                "brake": float(decision.command.brake),
-                            },
-                            planning_debug=planning_debug_mcap,
-                        ),
-                        npc_vehicle_states=npc_vehicle_states,
-                        tracked_vehicle_states=tracked_vehicle_states,
-                        traffic_light_states=traffic_light_states,
-                    )
+                            current_rgb=current_rgb,
+                            ego_state=build_ego_state_sample(
+                                episode_id=episode_id,
+                                frame_id=frame_index - 1,
+                                timestamp_s=current_image.timestamp,
+                                elapsed_seconds=elapsed_seconds,
+                                speed_mps=current_speed,
+                                behavior=behavior,
+                                route_completion_ratio=current_completion_ratio,
+                                distance_to_goal_m=distance_to_goal_m,
+                                planner_state=planning_decision.planner_state,
+                                traffic_light_state=planning_debug.get("traffic_light_state"),
+                                lead_vehicle_distance_m=planning_debug.get(
+                                    "lead_vehicle_distance_m"
+                                ),
+                                overtake_state=planning_debug.get("overtake_state"),
+                                target_lane_id=planning_debug.get("target_lane_id"),
+                                min_ttc=planning_debug.get("min_ttc"),
+                                pose={
+                                    "x": float(vehicle_location.x),
+                                    "y": float(vehicle_location.y),
+                                    "z": float(vehicle_location.z),
+                                    "yaw_deg": float(vehicle_transform.rotation.yaw),
+                                    "pitch_deg": float(vehicle_transform.rotation.pitch),
+                                    "roll_deg": float(vehicle_transform.rotation.roll),
+                                },
+                                control={
+                                    "steer": float(decision.command.steer),
+                                    "throttle": float(decision.command.throttle),
+                                    "brake": float(decision.command.brake),
+                                },
+                                planning_debug=planning_debug,
+                            ),
+                            npc_vehicle_states=npc_vehicle_states,
+                            tracked_vehicle_states=tracked_vehicle_states,
+                            traffic_light_states=traffic_light_states,
+                        )
                         mcap_segment_index = mcap_segment.segment_index
                         mcap_segment_path = relative_to_project(mcap_segment.path)
 
-                    record = EpisodeRecord(
-                    episode_id=episode_id,
-                    frame_id=frame_index - 1,
-                    town_id=route_config.town,
-                    route_id=route_config.name,
-                    weather_id=scenario.weather,
-                    timestamp=current_image.timestamp,
-                    front_rgb_path=None,
-                    speed=current_speed,
-                    command=behavior,
-                    steer=decision.command.steer,
-                    throttle=decision.command.throttle,
-                    brake=decision.command.brake,
-                    collision=collision,
-                    lane_invasion=lane_invasion,
-                    success=not collision and not failure_reason,
-                    vehicle_x=vehicle_location.x,
-                    vehicle_y=vehicle_location.y,
-                    vehicle_z=vehicle_location.z,
-                    vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                    route_completion_ratio=current_completion_ratio,
-                    distance_to_goal_m=distance_to_goal_m,
-                    expert_steer=(
-                        step_result.expert_decision.command.steer
-                        if step_result.expert_decision is not None
-                        else None
-                    ),
-                    route_target_x=route_point[0] if route_point is not None else None,
-                    route_target_y=route_point[1] if route_point is not None else None,
-                    planner_state=planning_decision.planner_state,
-                    traffic_light_state=planning_debug.get("traffic_light_state"),
-                    traffic_light_actor_id=planning_debug.get("traffic_light_actor_id"),
-                    traffic_light_distance_m=planning_debug.get("traffic_light_distance_m"),
-                    traffic_light_stop_line_distance_m=planning_debug.get(
-                        "traffic_light_stop_line_distance_m"
-                    ),
-                    traffic_light_violation=planning_debug.get("traffic_light_violation"),
-                    lead_vehicle_distance_m=planning_debug.get("lead_vehicle_distance_m"),
-                    lead_vehicle_id=planning_debug.get("lead_vehicle_id"),
-                    lead_vehicle_speed_mps=planning_debug.get("lead_vehicle_speed_mps"),
-                    lead_vehicle_relative_speed_mps=planning_debug.get(
-                        "lead_vehicle_relative_speed_mps"
-                    ),
-                    lead_vehicle_lane_id=planning_debug.get("lead_vehicle_lane_id"),
-                    left_lane_front_gap_m=planning_debug.get("left_lane_front_gap_m"),
-                    left_lane_rear_gap_m=planning_debug.get("left_lane_rear_gap_m"),
-                    right_lane_front_gap_m=planning_debug.get("right_lane_front_gap_m"),
-                    right_lane_rear_gap_m=planning_debug.get("right_lane_rear_gap_m"),
-                    rejoin_front_gap_m=planning_debug.get("rejoin_front_gap_m"),
-                    rejoin_rear_gap_m=planning_debug.get("rejoin_rear_gap_m"),
-                    overtake_state=planning_debug.get("overtake_state"),
-                    overtake_considered=planning_debug.get("overtake_considered"),
-                    overtake_direction=planning_debug.get("overtake_direction"),
-                    overtake_reject_reason=planning_debug.get("overtake_reject_reason"),
-                    overtake_target_actor_id=planning_debug.get("overtake_target_actor_id"),
-                    overtake_target_kind=planning_debug.get("overtake_target_kind"),
-                    overtake_target_member_actor_ids=planning_debug.get(
-                        "overtake_target_member_actor_ids"
-                    ),
-                    overtake_target_lane_id=planning_debug.get("overtake_target_lane_id"),
-                    target_passed=planning_debug.get("target_passed"),
-                    distance_past_target_m=planning_debug.get("distance_past_target_m"),
-                    target_actor_visible=planning_debug.get("target_actor_visible"),
-                    target_actor_last_seen_s=planning_debug.get("target_actor_last_seen_s"),
-                    current_lane_id=planning_debug.get("current_lane_id"),
-                    route_target_lane_id=planning_debug.get("route_target_lane_id"),
-                    target_lane_id=planning_debug.get("target_lane_id"),
-                    target_speed_kmh=planning_debug.get("target_speed_kmh"),
-                    emergency_stop=planning_debug.get("emergency_stop"),
-                    min_ttc=planning_debug.get("min_ttc"),
-                    mcap_segment_index=mcap_segment_index,
-                    mcap_segment_path=mcap_segment_path,
-                )
+                    record = build_episode_record(
+                        episode_id=episode_id,
+                        frame_id=frame_index - 1,
+                        town_id=route_config.town,
+                        route_id=route_config.name,
+                        weather_id=scenario.weather,
+                        timestamp=current_image.timestamp,
+                        speed=current_speed,
+                        command=behavior,
+                        steer=decision.command.steer,
+                        throttle=decision.command.throttle,
+                        brake=decision.command.brake,
+                        collision=collision,
+                        lane_invasion=lane_invasion,
+                        success=not collision and not failure_reason,
+                        vehicle_x=vehicle_location.x,
+                        vehicle_y=vehicle_location.y,
+                        vehicle_z=vehicle_location.z,
+                        vehicle_yaw_deg=vehicle_transform.rotation.yaw,
+                        route_completion_ratio=current_completion_ratio,
+                        distance_to_goal_m=distance_to_goal_m,
+                        expert_steer=(
+                            step_result.expert_decision.command.steer
+                            if step_result.expert_decision is not None
+                            else None
+                        ),
+                        route_target_x=route_point[0] if route_point is not None else None,
+                        route_target_y=route_point[1] if route_point is not None else None,
+                        planner_state=planning_decision.planner_state,
+                        planning_debug=planning_debug,
+                        mcap_segment_index=mcap_segment_index,
+                        mcap_segment_path=mcap_segment_path,
+                    )
                     append_jsonl(manifest_path, record)
 
                     recorded_frame_index += 1
@@ -1414,7 +1322,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             not failure_reason
             and max_completion_ratio >= success_criteria["route_completion_ratio_min"]
             and frame_events.collision_count <= success_criteria["collision_count_max"]
-            and traffic_light_violation_count
+            and telemetry_accumulator.traffic_light_violation_count
             <= success_criteria["traffic_light_violation_count_max"]
             and max_stationary_seconds < success_criteria["max_stationary_seconds_max"]
             and distance_to_goal_m <= success_criteria["goal_tolerance_m_max"]
@@ -1423,7 +1331,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
             if max_completion_ratio < success_criteria["route_completion_ratio_min"]:
                 failure_reason = "route_incomplete"
             elif (
-                traffic_light_violation_count
+                telemetry_accumulator.traffic_light_violation_count
                 > success_criteria["traffic_light_violation_count_max"]
             ):
                 failure_reason = "traffic_light_violation"
@@ -1515,35 +1423,7 @@ def _run_route_loop(request: RunRequest) -> RunResult:
         "last_collision_actor_id": frame_events.last_collision_actor_id,
         "last_collision_actor_type_id": frame_events.last_collision_actor_type_id,
         "lane_invasion_count": frame_events.lane_invasion_count,
-        "traffic_light_stop_count": traffic_light_stop_count,
-        "traffic_light_resume_count": traffic_light_resume_count,
-        "traffic_light_violation_count": traffic_light_violation_count,
-        "car_follow_event_count": car_follow_event_count,
-        "overtake_attempt_count": overtake_attempt_count,
-        "overtake_success_count": overtake_success_count,
-        "overtake_abort_count": overtake_abort_count,
-        "unsafe_lane_change_reject_count": unsafe_lane_change_reject_count,
-        "min_ttc": None if not min_ttc < float("inf") else round(min_ttc, 3),
-        "min_lead_distance_m": None
-        if not min_lead_distance_m < float("inf")
-        else round(min_lead_distance_m, 3),
-        "first_target_passed_s": (
-            None if first_target_passed_s is None else round(first_target_passed_s, 3)
-        ),
-        "first_rejoin_started_s": (
-            None if first_rejoin_started_s is None else round(first_rejoin_started_s, 3)
-        ),
-        "rejoin_wait_after_target_passed_s": (
-            None
-            if first_target_passed_s is None or first_rejoin_started_s is None
-            else round(first_rejoin_started_s - first_target_passed_s, 3)
-        ),
-        "first_rejoin_front_gap_m": (
-            None if first_rejoin_front_gap_m is None else round(first_rejoin_front_gap_m, 3)
-        ),
-        "first_rejoin_rear_gap_m": (
-            None if first_rejoin_rear_gap_m is None else round(first_rejoin_rear_gap_m, 3)
-        ),
+        **telemetry_accumulator.summary_fields(),
         "allow_overtake": allow_overtake,
         "scenario_validation": scenario_validation,
         "max_stationary_seconds": round(max_stationary_seconds, 2),
