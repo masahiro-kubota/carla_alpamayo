@@ -16,9 +16,9 @@
     {
       "npc_profile_id": "stopped_obstacle_profile_v1",
       "spawn_transform": {
-        "x": -2.053,
-        "y": 68.7,
-        "z": 0.3,
+        "x": -1.536,
+        "y": 33.658,
+        "z": 0.534,
         "yaw_deg": 90.022
       },
       "lane_behavior": "keep_lane"
