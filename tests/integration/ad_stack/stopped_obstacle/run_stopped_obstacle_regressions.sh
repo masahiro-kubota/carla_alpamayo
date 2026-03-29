@@ -78,12 +78,10 @@ for run_config in "${RUN_CONFIGS[@]}"; do
   echo "${output}"
   stop_carla
   summary_path="$(RUN_OUTPUT="${output}" python - <<'PY'
-import json
 import os
-from pathlib import Path
+from tests.integration.ad_stack._shared import summary_path_from_run_output
 
-payload = json.loads(os.environ["RUN_OUTPUT"])
-print(Path("outputs/evaluate") / payload["episode_id"] / "summary.json")
+print(summary_path_from_run_output(os.environ["RUN_OUTPUT"]))
 PY
 )"
   SUMMARY_PATHS+=("${summary_path}")
@@ -91,11 +89,10 @@ PY
 done
 
 python - "${SUMMARY_PATHS[@]}" <<'PY'
-import json
 import sys
-from pathlib import Path
+from tests.integration.ad_stack._shared import load_manifest, load_summary, require
 
-summary_paths = [Path(item) for item in sys.argv[1:]]
+summary_paths = sys.argv[1:]
 if len(summary_paths) != 10:
     raise SystemExit(f"expected 10 summary paths, got {len(summary_paths)}")
 
@@ -111,19 +108,8 @@ if len(summary_paths) != 10:
     curve_clear_summary,
     rejoin_blocked_then_release_summary,
 ) = [
-    json.loads(path.read_text()) for path in summary_paths
+    load_summary(path) for path in summary_paths
 ]
-
-def require(condition: bool, message: str) -> None:
-    if not condition:
-        raise SystemExit(message)
-
-def load_manifest(summary: dict) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in Path(summary["manifest_path"]).read_text().splitlines()
-        if line.strip()
-    ]
 
 require(bool(clear_summary["success"]), "clear scenario did not succeed")
 require(clear_summary["collision_count"] == 0, "clear scenario collided")
