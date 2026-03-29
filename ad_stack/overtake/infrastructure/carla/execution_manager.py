@@ -49,6 +49,7 @@ class OvertakeExecutionManager:
         route_point_to_trace_index: list[int],
         distance_same_lane_m: float,
         lane_change_distance_m: float,
+        lane_change_lateral_ratio: float,
         overtake_hold_distance_m: float,
     ) -> ExecutionActivationResult:
         plan = build_overtake_waypoint_execution_plan(
@@ -59,6 +60,7 @@ class OvertakeExecutionManager:
             route_point_to_trace_index=route_point_to_trace_index,
             distance_same_lane_m=distance_same_lane_m,
             lane_change_distance_m=lane_change_distance_m,
+            lane_change_lateral_ratio=lane_change_lateral_ratio,
             overtake_hold_distance_m=overtake_hold_distance_m,
         )
         if not plan.lane_change_path.available:
@@ -85,6 +87,7 @@ class OvertakeExecutionManager:
         origin_lane_id: str | None,
         target_lane_id: str | None,
         lane_change_distance_m: float,
+        lane_change_lateral_ratio: float,
     ) -> ExecutionActivationResult:
         plan = build_rejoin_waypoint_execution_plan(
             carla_module=carla_module,
@@ -95,6 +98,7 @@ class OvertakeExecutionManager:
             origin_lane_id=origin_lane_id,
             target_lane_id=target_lane_id,
             lane_change_distance_m=lane_change_distance_m,
+            lane_change_lateral_ratio=lane_change_lateral_ratio,
             sampling_resolution_m=self.sampling_resolution_m,
         )
         if not plan.lane_change_path.available:
@@ -121,6 +125,7 @@ class OvertakeExecutionManager:
         origin_lane_id: str | None,
         target_lane_id: str | None,
         lane_change_distance_m: float,
+        lane_change_lateral_ratio: float,
     ) -> ExecutionActivationResult:
         rejoin_activation = self.try_activate_rejoin_plan(
             carla_module=carla_module,
@@ -131,6 +136,7 @@ class OvertakeExecutionManager:
             origin_lane_id=origin_lane_id,
             target_lane_id=target_lane_id,
             lane_change_distance_m=lane_change_distance_m,
+            lane_change_lateral_ratio=lane_change_lateral_ratio,
         )
         if rejoin_activation.activated:
             return rejoin_activation

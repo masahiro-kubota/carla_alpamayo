@@ -87,6 +87,21 @@ def _interpolate_waypoint(
     return RouteAlignedWaypoint(transform=transform)
 
 
+def _blend_waypoint_toward_adjacent_lane(
+    *,
+    carla_module: Any,
+    origin_waypoint: Any,
+    adjacent_waypoint: Any,
+    lateral_ratio: float,
+) -> Any:
+    return _interpolate_waypoint(
+        carla_module,
+        origin_waypoint,
+        adjacent_waypoint,
+        max(0.0, min(1.0, lateral_ratio)),
+    )
+
+
 def _build_route_aligned_lane_samples(
     *,
     carla_module: Any,
@@ -94,6 +109,7 @@ def _build_route_aligned_lane_samples(
     route_index: int | None,
     base_trace: list[tuple[Any, Any]],
     route_point_to_trace_index: list[int],
+    lateral_ratio: float,
 ) -> tuple[list[LaneChangePlanPoint], list[LaneChangePlanPoint], dict[tuple[int, str], Any], str | None]:
     origin_samples: list[LaneChangePlanPoint] = []
     target_samples: list[LaneChangePlanPoint] = []
@@ -141,8 +157,11 @@ def _build_route_aligned_lane_samples(
                 progress_m=progress_m,
             )
         )
-        waypoint_lookup[(point_index, adjacent_lane)] = _route_aligned_waypoint(
-            carla_module, adjacent_waypoint, origin_waypoint
+        waypoint_lookup[(point_index, adjacent_lane)] = _blend_waypoint_toward_adjacent_lane(
+            carla_module=carla_module,
+            origin_waypoint=origin_waypoint,
+            adjacent_waypoint=adjacent_waypoint,
+            lateral_ratio=lateral_ratio,
         )
 
     return origin_samples, target_samples, waypoint_lookup, target_lane_id
@@ -242,6 +261,7 @@ def build_overtake_waypoint_execution_plan(
     route_point_to_trace_index: list[int],
     distance_same_lane_m: float,
     lane_change_distance_m: float,
+    lane_change_lateral_ratio: float,
     overtake_hold_distance_m: float,
 ) -> WaypointExecutionPlan:
     if not base_trace:
@@ -264,6 +284,7 @@ def build_overtake_waypoint_execution_plan(
         route_index=route_index,
         base_trace=base_trace,
         route_point_to_trace_index=route_point_to_trace_index,
+        lateral_ratio=lane_change_lateral_ratio,
     )
     if not origin_samples or not target_samples or target_lane_id is None:
         return WaypointExecutionPlan(
@@ -332,6 +353,7 @@ def build_rejoin_waypoint_execution_plan(
     origin_lane_id: str | None,
     target_lane_id: str | None,
     lane_change_distance_m: float,
+    lane_change_lateral_ratio: float,
     sampling_resolution_m: float,
 ) -> WaypointExecutionPlan:
     if (
@@ -359,6 +381,7 @@ def build_rejoin_waypoint_execution_plan(
         route_index=route_index,
         base_trace=base_trace,
         route_point_to_trace_index=route_point_to_trace_index,
+        lateral_ratio=lane_change_lateral_ratio,
     )
     if not origin_samples or not destination_samples:
         return WaypointExecutionPlan(

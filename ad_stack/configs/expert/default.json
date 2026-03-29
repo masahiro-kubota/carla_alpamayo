@@ -18,6 +18,7 @@
   "preferred_overtake_direction": "left_first",
   "lane_change_same_lane_distance_m": 6.0,
   "lane_change_distance_m": 14.0,
+  "overtake_lane_change_lateral_ratio": 0.6,
   "lane_change_other_lane_distance_m": 22.0,
   "overtake_hold_distance_m": 30.0
 }

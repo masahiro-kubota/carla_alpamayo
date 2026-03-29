@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import queue
 import random
 import tempfile
@@ -210,6 +211,41 @@ def _resolved_npc_speed_kmh(
         return 20.0
     jitter = profile.speed_jitter_kmh
     return max(0.0, profile.default_target_speed_kmh + rng.uniform(-jitter, jitter))
+
+
+def _apply_lateral_offset_to_transform(
+    carla_module: Any,
+    transform: Any,
+    lateral_offset_m: float,
+) -> Any:
+    if abs(lateral_offset_m) <= 1e-6:
+        return carla_module.Transform(
+            carla_module.Location(
+                x=float(transform.location.x),
+                y=float(transform.location.y),
+                z=float(transform.location.z),
+            ),
+            carla_module.Rotation(
+                pitch=float(transform.rotation.pitch),
+                yaw=float(transform.rotation.yaw),
+                roll=float(transform.rotation.roll),
+            ),
+        )
+    yaw_rad = math.radians(float(transform.rotation.yaw))
+    right_x = math.sin(yaw_rad)
+    right_y = -math.cos(yaw_rad)
+    return carla_module.Transform(
+        carla_module.Location(
+            x=float(transform.location.x) + (lateral_offset_m * right_x),
+            y=float(transform.location.y) + (lateral_offset_m * right_y),
+            z=float(transform.location.z),
+        ),
+        carla_module.Rotation(
+            pitch=float(transform.rotation.pitch),
+            yaw=float(transform.rotation.yaw),
+            roll=float(transform.rotation.roll),
+        ),
+    )
 
 
 def _update_spectator(
@@ -446,6 +482,11 @@ def _spawn_npc_vehicles(
             )
         else:
             spawn_transform = spawn_points[int(npc_spec.spawn_index)]
+        spawn_transform = _apply_lateral_offset_to_transform(
+            carla_module,
+            spawn_transform,
+            float(npc_spec.lateral_offset_m),
+        )
         actor = world.try_spawn_actor(blueprint, spawn_transform)
         if actor is None:
             if npc_spec.spawn_index is not None:
@@ -477,14 +518,14 @@ def _spawn_npc_vehicles(
                 "spawn_index": npc_spec.spawn_index,
                 "spawn_transform": (
                     {
-                        "x": round(float(npc_spec.spawn_transform.x), 3),
-                        "y": round(float(npc_spec.spawn_transform.y), 3),
-                        "z": round(float(npc_spec.spawn_transform.z), 3),
-                        "yaw_deg": round(float(npc_spec.spawn_transform.yaw_deg), 3),
-                        "pitch_deg": round(float(npc_spec.spawn_transform.pitch_deg), 3),
-                        "roll_deg": round(float(npc_spec.spawn_transform.roll_deg), 3),
+                        "x": round(float(spawn_transform.location.x), 3),
+                        "y": round(float(spawn_transform.location.y), 3),
+                        "z": round(float(spawn_transform.location.z), 3),
+                        "yaw_deg": round(float(spawn_transform.rotation.yaw), 3),
+                        "pitch_deg": round(float(spawn_transform.rotation.pitch), 3),
+                        "roll_deg": round(float(spawn_transform.rotation.roll), 3),
                     }
-                    if npc_spec.spawn_transform is not None
+                    if spawn_transform is not None
                     else None
                 ),
                 "target_speed_kmh": round(desired_speed_kmh, 2),

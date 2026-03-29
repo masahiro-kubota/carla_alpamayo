@@ -30,6 +30,7 @@ class NPCSpawnTransformSpec:
 class NPCVehicleSpec:
     spawn_index: int | None = None
     spawn_transform: NPCSpawnTransformSpec | None = None
+    lateral_offset_m: float = 0.0
     npc_profile_id: str | None = None
     target_speed_kmh: float | None = None
     lane_behavior: str = "keep_lane"
@@ -142,6 +143,7 @@ def load_environment_config(path: Path) -> EnvironmentConfigSpec:
                     if item.get("spawn_transform") is not None
                     else None
                 ),
+                lateral_offset_m=float(item.get("lateral_offset_m", 0.0)),
                 npc_profile_id=str(item["npc_profile_id"]) if item.get("npc_profile_id") else None,
                 target_speed_kmh=float(item["target_speed_kmh"])
                 if item.get("target_speed_kmh") is not None

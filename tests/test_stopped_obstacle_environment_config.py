@@ -25,6 +25,7 @@ class StoppedObstacleEnvironmentConfigTests(unittest.TestCase):
                         "z": 0.5,
                         "yaw_deg": 90.0,
                     },
+                    "lateral_offset_m": 1.0,
                     "npc_profile_id": "stopped_obstacle_profile_v1",
                     "lane_behavior": "keep_lane",
                 }
@@ -51,6 +52,7 @@ class StoppedObstacleEnvironmentConfigTests(unittest.TestCase):
         assert npc.spawn_transform is not None
         self.assertEqual(npc.spawn_transform.x, 1.0)
         self.assertEqual(npc.spawn_transform.yaw_deg, 90.0)
+        self.assertEqual(npc.lateral_offset_m, 1.0)
         self.assertIsNotNone(config.overtake_scenario)
         scenario_config = parse_overtake_scenario_config(config.overtake_scenario)
         assert scenario_config is not None

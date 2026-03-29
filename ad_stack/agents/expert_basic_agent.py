@@ -67,6 +67,7 @@ class ExpertBasicAgentConfig:
     preferred_overtake_direction: Literal["left_first", "right_first"] = "left_first"
     lane_change_same_lane_distance_m: float = 6.0
     lane_change_distance_m: float = 14.0
+    overtake_lane_change_lateral_ratio: float = 0.6
     lane_change_other_lane_distance_m: float = 22.0
     overtake_hold_distance_m: float = 30.0
     overtake_cluster_merge_gap_m: float = 10.0
@@ -340,6 +341,7 @@ class ExpertBasicAgent:
                 origin_lane_id=self._overtake.origin_lane_id,
                 target_lane_id=self._execution.target_lane_id,
                 lane_change_distance_m=self.config.lane_change_distance_m,
+                lane_change_lateral_ratio=self.config.overtake_lane_change_lateral_ratio,
             )
         if step_decision.completed:
             self._overtake.reset()
@@ -359,6 +361,7 @@ class ExpertBasicAgent:
                 route_point_to_trace_index=self._route_point_to_trace_index,
                 distance_same_lane_m=self.config.lane_change_same_lane_distance_m,
                 lane_change_distance_m=self.config.lane_change_distance_m,
+                lane_change_lateral_ratio=self.config.overtake_lane_change_lateral_ratio,
                 overtake_hold_distance_m=self.config.overtake_hold_distance_m,
             )
             if activation.activated:
@@ -457,6 +460,7 @@ class ExpertBasicAgent:
                     origin_lane_id=self._overtake.origin_lane_id,
                     target_lane_id=self._execution.target_lane_id,
                     lane_change_distance_m=self.config.lane_change_distance_m,
+                    lane_change_lateral_ratio=self.config.overtake_lane_change_lateral_ratio,
                 )
                 if rejoin_activation.activated:
                     self._overtake.state = "lane_change_back"
