@@ -14,7 +14,23 @@
       "lane_behavior": "keep_lane"
     }
   ],
-  "traffic_light_overrides": [],
+  "traffic_light_overrides": [
+    {
+      "actor_id": 31,
+      "state": "Green",
+      "freeze": true
+    },
+    {
+      "actor_id": 32,
+      "state": "Green",
+      "freeze": true
+    },
+    {
+      "actor_id": 33,
+      "state": "Green",
+      "freeze": true
+    }
+  ],
   "stopped_obstacle_scenario": {
     "scenario_kind": "adjacent_lane_closed",
     "obstacle_npc_index": 0,
