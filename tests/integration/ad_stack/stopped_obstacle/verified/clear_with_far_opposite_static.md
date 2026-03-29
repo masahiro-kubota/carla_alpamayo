@@ -47,7 +47,7 @@
 ### Manifest Acceptance
 
 - no manifest row has `overtake_reject_reason = adjacent_front_gap_insufficient`
-- some manifest row with `overtake_state = lane_change_out` has `target_speed_kmh >= 15.0`
+- some manifest row with `overtake_state = lane_change_out` has `target_speed_kmh >= 12.0`
 
 ## Source Of Truth
 

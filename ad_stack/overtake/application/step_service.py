@@ -23,7 +23,7 @@ def _active_motion_profile(context: OvertakeContext) -> str | None:
 
 
 def _stopped_target_lane_change_floor_kmh(target_speed_kmh: float) -> float:
-    return max(0.0, target_speed_kmh * 0.5)
+    return max(0.0, target_speed_kmh * 0.4)
 
 
 @dataclass(frozen=True, slots=True)

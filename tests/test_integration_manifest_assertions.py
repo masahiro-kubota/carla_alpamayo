@@ -79,7 +79,7 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
             field="target_speed_kmh",
             filter_field="overtake_state",
             filter_equals="lane_change_out",
-            min_value=15.0,
+            min_value=12.0,
             message="lane_change_out target speed collapsed below floor",
         )
 
@@ -97,7 +97,7 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
             },
             {
                 "overtake_state": "lane_change_out",
-                "target_speed_kmh": 15.0,
+                "target_speed_kmh": 12.0,
             },
         ]
 
@@ -133,7 +133,7 @@ class IntegrationManifestAssertionsTest(unittest.TestCase):
                     kind="min_numeric_where_equals",
                     filter_field="overtake_state",
                     filter_equals="lane_change_out",
-                    min_value=15.0,
+                    min_value=12.0,
                     message="expected lane_change_out target speed floor",
                 ),
             ),

@@ -66,7 +66,7 @@ ROUTE_LOOP_SCENARIOS: tuple[StoppedObstacleRouteLoopScenario, ...] = (
                 kind="min_numeric_where_equals",
                 filter_field="overtake_state",
                 filter_equals="lane_change_out",
-                min_value=15.0,
+                min_value=12.0,
                 message="clear_with_far_opposite_static slowed lane_change_out target speed too much",
             ),
         ),
