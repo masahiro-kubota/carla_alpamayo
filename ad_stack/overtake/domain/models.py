@@ -171,8 +171,6 @@ class OvertakeTargetTelemetry:
     distance_past_target_m: float | None
     target_actor_visible: bool
     target_actor_last_seen_s: float | None
-    lane_change_path_available: bool
-    lane_change_path_failed_reason: str | None
 
 
 @dataclass(slots=True)

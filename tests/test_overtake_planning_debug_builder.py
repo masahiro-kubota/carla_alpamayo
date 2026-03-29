@@ -54,8 +54,6 @@ class OvertakePlanningDebugBuilderTests(unittest.TestCase):
             distance_past_target_m=None,
             target_actor_visible=False,
             target_actor_last_seen_s=None,
-            lane_change_path_available=True,
-            lane_change_path_failed_reason=None,
             target_lane_id="15:-1",
             min_ttc=float("inf"),
             event_flags={},
@@ -68,3 +66,4 @@ class OvertakePlanningDebugBuilderTests(unittest.TestCase):
         self.assertEqual(planning_debug.core.lookahead_distance_m, 4.2)
         self.assertEqual(planning_debug.core.controller_steer_raw, 0.15)
         self.assertEqual(planning_debug.core.controller_steer_applied, 0.1)
+        self.assertFalse(hasattr(planning_debug.target, "lane_change_path_available"))

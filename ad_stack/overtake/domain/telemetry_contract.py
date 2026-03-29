@@ -137,12 +137,6 @@ OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS: tuple[TelemetryFieldSpec, ...] = (
     TelemetryFieldSpec("distance_past_target_m", ("distance_past_target_m",), ("number", "null")),
     TelemetryFieldSpec("target_actor_visible", ("target_actor_visible",), ("boolean",)),
     TelemetryFieldSpec("target_actor_last_seen_s", ("target_actor_last_seen_s",), ("number", "null")),
-    TelemetryFieldSpec("lane_change_path_available", ("lane_change_path_available",), ("boolean",)),
-    TelemetryFieldSpec(
-        "lane_change_path_failed_reason",
-        ("lane_change_path_failed_reason",),
-        ("string", "null"),
-    ),
 )
 
 OVERTAKE_PLANNING_DEBUG_SECTIONS: tuple[TelemetrySectionSpec, ...] = (

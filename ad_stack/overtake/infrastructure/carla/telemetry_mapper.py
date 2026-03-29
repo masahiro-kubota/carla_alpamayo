@@ -210,8 +210,6 @@ def build_overtake_planning_debug(
     distance_past_target_m: float | None,
     target_actor_visible: bool,
     target_actor_last_seen_s: float | None,
-    lane_change_path_available: bool,
-    lane_change_path_failed_reason: str | None,
     target_lane_id: str | None,
     min_ttc: float,
     event_flags: dict[str, Any],
@@ -306,8 +304,6 @@ def build_overtake_planning_debug(
             distance_past_target_m=distance_past_target_m,
             target_actor_visible=target_actor_visible,
             target_actor_last_seen_s=target_actor_last_seen_s,
-            lane_change_path_available=lane_change_path_available,
-            lane_change_path_failed_reason=lane_change_path_failed_reason,
         ),
     )
 

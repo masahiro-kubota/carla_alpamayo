@@ -609,8 +609,6 @@ class ExpertBasicAgent:
             distance_past_target_m=self._overtake.memory.target_pass_distance_m,
             target_actor_visible=target_actor_visible,
             target_actor_last_seen_s=self._overtake.memory.target_actor_last_seen_s,
-            lane_change_path_available=self._execution.lane_change_path.available,
-            lane_change_path_failed_reason=self._execution.lane_change_path.failure_reason,
             target_lane_id=target_lane_id,
             min_ttc=min_ttc,
             event_flags=event_flags,
