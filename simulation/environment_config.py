@@ -4,6 +4,10 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ad_stack.overtake.validation import (
+    StoppedObstacleScenarioConfig,
+    parse_stopped_obstacle_scenario_config,
+)
 from libs.project import PROJECT_ROOT
 
 
@@ -62,16 +66,6 @@ class TrafficLightPhaseCycleSpec:
     all_red_seconds: float
     reset_groups: bool = True
     initial_offset_seconds: float = 0.0
-
-
-@dataclass(slots=True)
-class StoppedObstacleScenarioConfig:
-    scenario_kind: str
-    obstacle_npc_index: int = 0
-    blocker_npc_index: int | None = None
-    route_aligned_adjacent_lane_available: bool | None = None
-    nearest_signal_distance_m: float | None = None
-    nearest_junction_distance_m: float | None = None
 
 
 @dataclass(slots=True)
@@ -196,35 +190,6 @@ def load_environment_config(path: Path) -> EnvironmentConfigSpec:
             )
             for item in raw.get("traffic_light_schedules", [])
         ],
-        stopped_obstacle_scenario=(
-            StoppedObstacleScenarioConfig(
-                scenario_kind=str(raw_stopped_obstacle_scenario["scenario_kind"]),
-                obstacle_npc_index=int(raw_stopped_obstacle_scenario.get("obstacle_npc_index", 0)),
-                blocker_npc_index=(
-                    int(raw_stopped_obstacle_scenario["blocker_npc_index"])
-                    if raw_stopped_obstacle_scenario.get("blocker_npc_index") is not None
-                    else None
-                ),
-                route_aligned_adjacent_lane_available=(
-                    bool(raw_stopped_obstacle_scenario["route_aligned_adjacent_lane_available"])
-                    if raw_stopped_obstacle_scenario.get("route_aligned_adjacent_lane_available")
-                    is not None
-                    else None
-                ),
-                nearest_signal_distance_m=(
-                    float(raw_stopped_obstacle_scenario["nearest_signal_distance_m"])
-                    if raw_stopped_obstacle_scenario.get("nearest_signal_distance_m") is not None
-                    else None
-                ),
-                nearest_junction_distance_m=(
-                    float(raw_stopped_obstacle_scenario["nearest_junction_distance_m"])
-                    if raw_stopped_obstacle_scenario.get("nearest_junction_distance_m")
-                    is not None
-                    else None
-                ),
-            )
-            if raw_stopped_obstacle_scenario is not None
-            else None
-        ),
+        stopped_obstacle_scenario=parse_stopped_obstacle_scenario_config(raw_stopped_obstacle_scenario),
         description=str(raw.get("description", "")),
     )

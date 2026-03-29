@@ -11,7 +11,7 @@
 - regression runner:
   - [run_stopped_obstacle_regressions.sh](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/run_stopped_obstacle_regressions.sh)
 - scenario inspector:
-  - [inspect_stopped_obstacle_scenario.py](/home/masa/carla_alpamayo/simulation/pipelines/inspect_stopped_obstacle_scenario.py)
+  - [inspect_scenarios.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py)
 - next steps:
   - [NEXT_STEPS.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/NEXT_STEPS.md)
 - refactor plan:
@@ -61,4 +61,9 @@
 
 ```bash
 ./tests/integration/ad_stack/stopped_obstacle/run_stopped_obstacle_regressions.sh
+```
+
+```bash
+python tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py \
+  tests/integration/ad_stack/stopped_obstacle/run_configs/town01_stopped_obstacle_clear_long_expert.json
 ```

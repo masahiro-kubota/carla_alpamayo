@@ -69,7 +69,7 @@
   - `tests/integration/ad_stack/stopped_obstacle/*.md`
 - validation / inspector
   - [preflight_validation.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/preflight_validation.py)
-  - [inspect_stopped_obstacle_scenario.py](/home/masa/carla_alpamayo/simulation/pipelines/inspect_stopped_obstacle_scenario.py)
+  - [inspect_scenarios.py](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/inspect_scenarios.py)
 
 この分離自体は正しいが、
 
@@ -534,6 +534,7 @@ moving vehicle 追い越しでは、停止障害物よりも
   - `manifest` の field-level assertion helper 共通化
   - stopped-obstacle suite の manifest acceptance の declarative 化
   - legacy な bool accessor を execution contract へ統一
+  - feature 固有 scenario config model の `simulation` から `ad_stack/overtake/validation` への移動
 - 残り:
   - suite 固有の `manifest` acceptance をどこまで `_shared` の declarative contract に上げるかの見極めは大筋完了
   - moving suite 追加時に `_shared` で再利用できない条件が本当にあるかの確認

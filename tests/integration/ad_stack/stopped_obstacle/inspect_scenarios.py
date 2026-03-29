@@ -4,13 +4,18 @@ import argparse
 import importlib
 import json
 import random
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from ad_stack.overtake.infrastructure.carla import build_stopped_obstacle_scenario_validation
 from libs.carla_utils import build_planned_route, destroy_actors, load_route_config, require_blueprint, setup_world
-from libs.project import PROJECT_ROOT, current_git_commit_short, ensure_clean_git_worktree, relative_to_project
+from libs.project import current_git_commit_short, ensure_clean_git_worktree, relative_to_project
 from simulation.environment_config import load_environment_config
 from simulation.pipelines.route_loop_run_config import load_route_loop_run_config
 
@@ -258,7 +263,7 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
 
 def main() -> None:
     args = build_parser().parse_args()
-    ensure_clean_git_worktree(action_label="Stopped obstacle scenario inspection")
+    ensure_clean_git_worktree(action_label="Stopped obstacle suite inspection")
     results = [_inspect_single_config(Path(path)) for path in args.config_paths]
     if len(results) == 1:
         print(json.dumps(results[0], indent=2))

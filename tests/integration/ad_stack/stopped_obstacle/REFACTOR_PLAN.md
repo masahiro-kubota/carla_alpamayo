@@ -88,18 +88,17 @@
 責務:
 
 - generic runtime / environment config parsing
-- generic inspector / CLI
 
 ここに置くもの:
 
 - `environment_config.py`
-- `inspect_stopped_obstacle_scenario.py`
 - generic route-loop pipeline
 
 ここに置かないもの:
 
 - stopped-obstacle suite 固有の期待値 markdown
 - stopped-obstacle suite 固有の regression policy
+- stopped-obstacle suite 固有の inspector / CLI
 
 ### 4.3 `tests/integration/ad_stack/stopped_obstacle/`
 
@@ -109,6 +108,7 @@
 - scenario expectation
 - run-config
 - regression runner
+- suite 固有 inspector
 - refactor / next-steps tracking
 
 ここに置くもの:
@@ -116,6 +116,7 @@
 - `run_configs/`
 - scenario ごとの markdown
 - `run_stopped_obstacle_regressions.sh`
+- `inspect_scenarios.py`
 - この `REFACTOR_PLAN.md`
 
 ## 5. リファクタ方針

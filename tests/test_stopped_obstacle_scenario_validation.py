@@ -7,7 +7,8 @@ from ad_stack.overtake.infrastructure.carla import (
     build_stopped_obstacle_scenario_validation,
     warm_up_and_build_stopped_obstacle_scenario_validation,
 )
-from simulation.environment_config import EnvironmentConfigSpec, StoppedObstacleScenarioConfig
+from ad_stack.overtake.validation import StoppedObstacleScenarioConfig
+from simulation.environment_config import EnvironmentConfigSpec
 
 
 @dataclass
