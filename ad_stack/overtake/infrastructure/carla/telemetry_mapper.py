@@ -447,7 +447,7 @@ def build_frame_telemetry(
         expert_steer=request.expert_steer,
         route_target_x=request.route_target_x,
         route_target_y=request.route_target_y,
-        planner_state=request.planner_state,
+        planner_state=request.planning_debug.core.behavior_state,
         planning_debug=request.planning_debug,
         mcap_segment_index=request.mcap_segment_index,
         mcap_segment_path=request.mcap_segment_path,
