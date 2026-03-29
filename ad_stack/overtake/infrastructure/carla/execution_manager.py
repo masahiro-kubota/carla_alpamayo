@@ -15,7 +15,6 @@ from .route_alignment import (
 
 @dataclass(slots=True)
 class OvertakeExecutionManager:
-    local_agent: Any
     sampling_resolution_m: float
     _queue: OvertakeExecutionQueue = field(default_factory=OvertakeExecutionQueue)
     _lane_change_path: LaneChangePathStatus = field(
@@ -159,30 +158,22 @@ class OvertakeExecutionManager:
         base_trace: list[tuple[Any, Any]],
         route_point_to_trace_index: list[int],
     ) -> ExecutionActivationResult:
-        remaining_trace = build_base_trace_execution_plan(
-            base_trace=base_trace,
-            route_point_to_trace_index=route_point_to_trace_index,
-            route_index=route_index,
-            trace_offset=1,
-        )
-        if remaining_trace is None:
-            return ExecutionActivationResult(
-                outcome="missing_base_trace",
-                target_lane_id=self.target_lane_id,
-                lane_change_path=self._lane_change_path,
-            )
-        self._activate_trace_plan(trace=remaining_trace.trace, update_waypoints=False)
+        del route_index, base_trace, route_point_to_trace_index
+        self._queue.clear()
         return ExecutionActivationResult(
             outcome="base_route_resumed",
             target_lane_id=self.target_lane_id,
             lane_change_path=self._lane_change_path,
         )
 
-    def consume_next_waypoint(self, *, vehicle_location: Any) -> Any | None:
-        return self._queue.consume_next_waypoint(
+    def advance(self, *, vehicle_location: Any) -> None:
+        self._queue.advance(
             vehicle_location=vehicle_location,
             sampling_resolution_m=self.sampling_resolution_m,
         )
+
+    def remaining_waypoints(self) -> list[Any]:
+        return self._queue.remaining_waypoints()
 
     def _activate_waypoint_plan(
         self,
@@ -203,11 +194,7 @@ class OvertakeExecutionManager:
         )
 
     def _activate_trace_plan(self, *, trace: list[tuple[Any, Any]], update_waypoints: bool) -> None:
-        self._queue.activate_trace_plan(
-            local_agent=self.local_agent,
-            trace=trace,
-            update_waypoints=update_waypoints,
-        )
+        self._queue.activate_trace_plan(trace=trace, update_waypoints=update_waypoints)
 
     def _set_lane_change_status(self, status: LaneChangePathStatus) -> None:
         self._lane_change_path = status

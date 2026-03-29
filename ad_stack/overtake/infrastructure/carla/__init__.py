@@ -1,5 +1,7 @@
-from .controller_executor import OvertakeExecutionQueue, consume_waypoint_queue, run_tracking_control
+from .controller_adapter import TrajectoryTrackingResult, run_tracking_control
+from .controller_executor import OvertakeExecutionQueue, consume_waypoint_queue
 from .execution_manager import OvertakeExecutionManager
+from .route_backbone_builder import build_route_backbone, normalize_route_command
 from .route_alignment import (
     TraceExecutionPlan,
     WaypointExecutionPlan,
@@ -8,6 +10,7 @@ from .route_alignment import (
     build_rejoin_waypoint_execution_plan,
     lane_id,
 )
+from .trajectory_materializer import build_route_backbone_trajectory, build_waypoint_trajectory
 from .candidate_extractor import (
     TargetCandidateBuilder,
     build_same_lane_target_candidates,
@@ -42,6 +45,8 @@ from .telemetry_mapper import (
 
 __all__ = [
     "consume_waypoint_queue",
+    "build_route_backbone",
+    "build_route_backbone_trajectory",
     "OvertakeExecutionQueue",
     "OvertakeExecutionManager",
     "build_overtake_pass_snapshot",
@@ -57,6 +62,7 @@ __all__ = [
     "lane_gaps_for_lane_id",
     "lane_id",
     "nearest_lead",
+    "normalize_route_command",
     "OvertakePassSnapshot",
     "OvertakeSceneSnapshot",
     "TargetCandidateBuilder",
@@ -73,5 +79,7 @@ __all__ = [
     "build_planning_debug_mcap_payload",
     "planning_debug_to_dict",
     "run_tracking_control",
+    "TrajectoryTrackingResult",
+    "build_waypoint_trajectory",
     "visible_overtake_target_actors",
 ]

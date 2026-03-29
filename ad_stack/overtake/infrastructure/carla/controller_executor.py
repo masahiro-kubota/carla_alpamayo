@@ -21,24 +21,20 @@ class OvertakeExecutionQueue:
     def activate_trace_plan(
         self,
         *,
-        local_agent: Any,
         trace: list[tuple[Any, Any]],
         update_waypoints: bool,
     ) -> None:
-        local_agent.set_global_plan(
-            trace,
-            stop_waypoint_creation=True,
-            clean_queue=True,
-        )
         if update_waypoints:
             self._waypoints = deque(waypoint for waypoint, _option in trace)
+        else:
+            self._waypoints.clear()
 
-    def consume_next_waypoint(
+    def advance(
         self,
         *,
         vehicle_location: Any,
         sampling_resolution_m: float,
-    ) -> Any | None:
+    ) -> None:
         next_waypoint = consume_waypoint_queue(
             vehicle_location=vehicle_location,
             waypoints=self._waypoints,
@@ -46,7 +42,9 @@ class OvertakeExecutionQueue:
         )
         if next_waypoint is None:
             self.target_lane_id = None
-        return next_waypoint
+
+    def remaining_waypoints(self) -> list[Any]:
+        return list(self._waypoints)
 
 
 def consume_waypoint_queue(
@@ -65,15 +63,3 @@ def consume_waypoint_queue(
         waypoints.popleft()
     return waypoints[0]
 
-
-def run_tracking_control(
-    *,
-    local_agent: Any,
-    overtake_controller: Any,
-    target_speed_kmh: float,
-    target_waypoint: Any | None,
-) -> Any:
-    if target_waypoint is not None:
-        return overtake_controller.run_step(max(0.0, target_speed_kmh), target_waypoint)
-    local_agent.set_target_speed(max(0.0, target_speed_kmh))
-    return local_agent.run_step()

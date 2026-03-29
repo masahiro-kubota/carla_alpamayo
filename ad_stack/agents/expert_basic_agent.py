@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
+from ad_stack.overtake.application.pure_pursuit_controller import PurePursuitController
 from ad_stack.overtake import (
     OvertakeRuntimeState,
     evaluate_pass_progress,
@@ -20,14 +21,17 @@ from ad_stack.overtake import (
 from ad_stack.overtake.policies import TargetAcceptancePolicy, TargetPolicy
 from ad_stack.overtake.infrastructure.carla import (
     OvertakeExecutionManager,
+    build_route_backbone,
+    build_route_backbone_trajectory,
     build_target_candidates,
+    build_waypoint_trajectory,
     build_overtake_pass_snapshot,
     build_overtake_scene_snapshot,
     build_overtake_planning_debug,
     lane_gaps_for_lane_id,
     run_tracking_control,
 )
-from libs.carla_utils import ensure_carla_agents_on_path, road_option_name
+from ad_stack.overtake.domain.planning_models import RouteBackbone
 
 if TYPE_CHECKING:
     from ad_stack.world_model import DynamicVehicleStateView, SceneState, TrafficLightStateView
@@ -55,8 +59,6 @@ class ExpertBasicAgentConfig:
     overtake_resume_front_gap_m: float = 12.0
     preferred_deceleration_mps2: float = 4.0
     reaction_margin_m: float = 2.0
-    ttc_emergency_threshold_s: float = 0.75
-    lead_brake_distance_m: float = 4.5
     allow_overtake: bool = True
     preferred_overtake_direction: Literal["left_first", "right_first"] = "left_first"
     lane_change_same_lane_distance_m: float = 6.0
@@ -69,7 +71,7 @@ class ExpertBasicAgentConfig:
 
 
 class ExpertBasicAgent:
-    """Rule-based expert policy that reuses CARLA's local planner for low-level control."""
+    """Rule-based expert policy that drives a unified trajectory + pure-pursuit controller."""
 
     name = "expert_route_policy"
 
@@ -84,45 +86,23 @@ class ExpertBasicAgent:
     ) -> None:
         import carla
 
-        ensure_carla_agents_on_path()
-        from agents.navigation.basic_agent import BasicAgent
-        from agents.navigation.controller import VehiclePIDController
-
         self._carla = carla
         self.config = config or ExpertBasicAgentConfig()
         self._vehicle = vehicle
         self._world = vehicle.get_world()
         self._map = world_map
-        self._agent = BasicAgent(
-            vehicle,
-            target_speed=self.config.target_speed_kmh,
-            opt_dict={
-                # Hazard handling is implemented in this policy. The local planner is only reused
-                # for waypoint tracking and longitudinal/lateral PID generation.
-                "ignore_traffic_lights": True,
-                "ignore_stop_signs": True,
-                "ignore_vehicles": True,
-                "sampling_resolution": self.config.sampling_resolution_m,
-            },
-            map_inst=world_map,
-        )
-        self._overtake_controller = VehiclePIDController(
-            vehicle,
-            args_lateral={"K_P": 1.95, "K_I": 0.05, "K_D": 0.2, "dt": 1.0 / 20.0},
-            args_longitudinal={"K_P": 1.0, "K_I": 0.05, "K_D": 0.0, "dt": 1.0 / 20.0},
-            max_throttle=0.75,
-            max_brake=0.5,
-            max_steering=0.8,
-        )
+        self._controller = PurePursuitController()
         self._base_trace: list[tuple[Any, Any]] = []
+        self._route_backbone: RouteBackbone | None = None
         self._route_point_to_trace_index: list[int] = []
         self._route_point_progress_m: list[float] = []
         self._max_route_index: int = 0
+        self._current_route_index: int = 0
+        self._current_route_command: str = "lane_follow"
         self._overtake = OvertakeRuntimeState()
         self._target_policy = target_policy
         self._target_acceptance_policy = target_acceptance_policy
         self._execution = OvertakeExecutionManager(
-            local_agent=self._agent,
             sampling_resolution_m=self.config.sampling_resolution_m,
         )
         self._car_follow_active = False
@@ -134,6 +114,7 @@ class ExpertBasicAgent:
 
     def set_global_plan(self, trace: list[tuple[Any, Any]]) -> None:
         self._base_trace = list(trace)
+        self._route_backbone = build_route_backbone(self._base_trace)
         self._route_point_to_trace_index = []
         self._route_point_progress_m = []
         last_point: tuple[float, float] | None = None
@@ -153,19 +134,26 @@ class ExpertBasicAgent:
                 self._route_point_to_trace_index.append(trace_index)
                 self._route_point_progress_m.append(cumulative_progress_m)
                 last_point = point
-        self._agent.set_global_plan(trace, stop_waypoint_creation=True, clean_queue=True)
+        self._current_route_index = 0
+        if self._route_backbone is not None:
+            self._current_route_command = self._route_backbone.road_option_for_index(0)
 
     def remaining_waypoints(self) -> int:
-        return len(self._agent.get_local_planner().get_plan())
+        if self._route_backbone is None:
+            return 0
+        return max(len(self._route_backbone.route_index_to_trace_index) - 1 - self._max_route_index, 0)
 
     def current_behavior(self) -> str:
-        return road_option_name(self._agent.get_local_planner().target_road_option)
+        return self._current_route_command
 
     def done(self) -> bool:
-        return bool(self._agent.done())
+        if self._route_backbone is None:
+            return False
+        return self._max_route_index >= (len(self._route_backbone.route_index_to_trace_index) - 1)
 
     def reset(self) -> None:
         self._max_route_index = 0
+        self._current_route_index = 0
         self._overtake.reset()
         self._execution.reset()
         self._car_follow_active = False
@@ -174,12 +162,26 @@ class ExpertBasicAgent:
         self._previous_planner_state = None
         self._latched_red_light = None
         self._latched_red_until_s = -1.0
+        self._controller.previous_nearest_index = 0
+        self._controller.previous_filtered_steer = 0.0
+        self._controller.previous_applied_steer = 0.0
+        if self._route_backbone is not None:
+            self._current_route_command = self._route_backbone.road_option_for_index(0)
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
         route_index = scene_state.route.route_index
         if route_index is not None:
             self._max_route_index = max(self._max_route_index, route_index)
+            self._current_route_index = route_index
+            if self._route_backbone is not None:
+                bounded_route_index = max(
+                    0,
+                    min(route_index, len(self._route_backbone.route_index_to_road_option) - 1),
+                )
+                self._current_route_command = self._route_backbone.road_option_for_index(
+                    bounded_route_index
+                )
 
         active_light, self._latched_red_light, self._latched_red_until_s = resolve_active_light(
             traffic_lights=scene_state.traffic_lights,
@@ -468,29 +470,24 @@ class ExpertBasicAgent:
             self._longitudinal_speed_error_kmh = 0.0
         self._previous_planner_state = planner_state
 
-        target_waypoint = (
-            self._execution.consume_next_waypoint(vehicle_location=self._vehicle.get_location())
-            if self._overtake.state != "idle"
-            else None
-        )
-        control = run_tracking_control(
-            local_agent=self._agent,
-            overtake_controller=self._overtake_controller,
+        active_waypoints: list[Any] = []
+        if self._overtake.state != "idle":
+            self._execution.advance(vehicle_location=self._vehicle.get_location())
+            active_waypoints = self._execution.remaining_waypoints()
+        trajectory = self._build_tracking_trajectory(
+            route_index=route_index,
             target_speed_kmh=target_speed_kmh,
-            target_waypoint=target_waypoint,
+            planner_state=planner_state,
+            active_waypoints=active_waypoints,
         )
-
-        emergency_stop = (
-            not self.config.ignore_vehicles
-            and same_lane_follow_distance_m is not None
-            and (
-                same_lane_follow_distance_m <= self.config.lead_brake_distance_m
-                or (
-                    math.isfinite(same_lane_min_ttc)
-                    and same_lane_min_ttc <= self.config.ttc_emergency_threshold_s
-                )
-            )
+        tracking = run_tracking_control(
+            carla_module=self._carla,
+            controller=self._controller,
+            ego_transform=self._vehicle.get_transform(),
+            ego_speed_mps=current_speed_mps,
+            trajectory=trajectory,
         )
+        control = tracking.control
         if planner_state == "traffic_light_stop":
             traffic_light_throttle, traffic_light_brake, self._longitudinal_speed_error_kmh = traffic_light_stop_control(
                 current_speed_mps=current_speed_mps,
@@ -510,10 +507,6 @@ class ExpertBasicAgent:
                 max_throttle=0.75,
                 max_brake=0.8,
             )
-        if emergency_stop:
-            planner_state = "emergency_brake"
-            control.throttle = 0.0
-            control.brake = max(float(control.brake), 0.8)
 
         event_flags["traffic_light_violation"] = is_traffic_light_violation(
             light_state=active_light.state if active_light is not None else None,
@@ -525,7 +518,7 @@ class ExpertBasicAgent:
 
         behavior = self.current_behavior()
         planning_debug = build_overtake_planning_debug(
-            remaining_waypoints=len(self._agent.get_local_planner().get_plan()),
+            remaining_waypoints=self.remaining_waypoints(),
             route_index=route_index,
             max_route_index=self._max_route_index,
             current_lane_id=current_lane_id,
@@ -572,7 +565,6 @@ class ExpertBasicAgent:
             lane_change_path_failed_reason=self._execution.lane_change_path.failure_reason,
             target_lane_id=target_lane_id,
             min_ttc=min_ttc,
-            emergency_stop=emergency_stop,
             event_flags=event_flags,
         )
         return ControlDecision(
@@ -586,4 +578,32 @@ class ExpertBasicAgent:
             behavior=behavior,
             planner_state=planner_state,
             debug=planning_debug,
+        )
+
+    def _build_tracking_trajectory(
+        self,
+        *,
+        route_index: int | None,
+        target_speed_kmh: float,
+        planner_state: str,
+        active_waypoints: list[Any],
+    ):
+        desired_speed_mps = max(0.0, target_speed_kmh) / 3.6
+        if active_waypoints:
+            return build_waypoint_trajectory(
+                waypoints=active_waypoints,
+                desired_speed_mps=desired_speed_mps,
+                trajectory_id=planner_state,
+                origin_lane_id=self._overtake.origin_lane_id,
+                target_lane_id=self._execution.target_lane_id,
+            )
+        if self._route_backbone is None:
+            raise RuntimeError("global plan must be set before running the expert agent")
+        return build_route_backbone_trajectory(
+            route_backbone=self._route_backbone,
+            start_route_index=max(0, route_index or 0),
+            desired_speed_mps=desired_speed_mps,
+            trajectory_id=planner_state,
+            origin_lane_id=self._overtake.origin_lane_id,
+            target_lane_id=self._execution.target_lane_id,
         )
