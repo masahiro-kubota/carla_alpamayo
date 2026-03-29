@@ -14,6 +14,14 @@ from ad_stack.overtake.domain import OvertakeContext, OvertakeEventFlags
 from ad_stack.overtake.policies import TargetAcceptancePolicy
 
 
+def _active_motion_profile(context: OvertakeContext) -> str | None:
+    if context.active_target is not None:
+        return context.active_target.motion_profile
+    if context.lead is not None:
+        return context.lead.motion_profile
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class OvertakeStepRequest:
     runtime_state: OvertakeRuntimeState
@@ -81,6 +89,13 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
         target_speed_kmh = request.target_speed_kmh
         if transition.limited_target_speed_kmh is not None:
             target_speed_kmh = min(target_speed_kmh, transition.limited_target_speed_kmh)
+        if (
+            transition.state == "lane_change_out"
+            and _active_motion_profile(request.decision_context) == "stopped"
+        ):
+            # Once a stopped obstacle overtake has been accepted, keep cruise speed through
+            # the lane-change entry instead of collapsing to a lead-speed-based cap.
+            target_speed_kmh = request.target_speed_kmh
         request_rejoin = (
             transition.state == "pass_vehicle"
             and not transition.aborted

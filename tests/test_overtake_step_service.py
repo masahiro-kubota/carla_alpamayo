@@ -113,6 +113,37 @@ class OvertakeStepServiceTests(unittest.TestCase):
         self.assertEqual(decision.planner_state, "pass_vehicle")
         self.assertTrue(decision.request_rejoin)
 
+    def test_keeps_cruise_speed_during_lane_change_out_for_stopped_target(self) -> None:
+        runtime_state = OvertakeRuntimeState()
+        runtime_state.state = "lane_change_out"
+        runtime_state.memory.target_lane_id = "15:1"
+        active_target = OvertakeTargetSnapshot(
+            kind="single_actor",
+            primary_actor_id=101,
+            member_actor_ids=(101,),
+            lane_id="15:-1",
+            entry_distance_m=12.0,
+            exit_distance_m=12.0,
+            speed_mps=0.0,
+            motion_profile="stopped",
+        )
+
+        decision = resolve_overtake_step(
+            _request(
+                runtime_state=runtime_state,
+                decision_context=_context(active_target=active_target),
+                current_lane_id="15:-1",
+                route_target_lane_id="15:-1",
+                target_speed_kmh=30.0,
+                follow_target_speed_kmh=0.0,
+                lead_speed_mps=0.0,
+                overtake_speed_delta_kmh=8.0,
+            )
+        )
+
+        self.assertEqual(decision.planner_state, "lane_change_out")
+        self.assertEqual(decision.target_speed_kmh, 30.0)
+
     def test_marks_signal_suppressed_while_waiting_at_red(self) -> None:
         active_target = OvertakeTargetSnapshot(
             kind="single_actor",
