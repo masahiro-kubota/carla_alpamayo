@@ -241,7 +241,6 @@ def build_overtake_scene_snapshot(
         )
         follow_target_speed_kmh = min(
             target_speed_kmh,
-            (follow_speed_mps * 3.6) + 2.0,
             distance_limited_speed_kmh,
         )
 
