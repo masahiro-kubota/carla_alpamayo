@@ -4,6 +4,9 @@
 
 関連:
 
+- [PLANNING_CONTROLLER_ARCHITECTURE.md](/home/masa/carla_alpamayo/docs/PLANNING_CONTROLLER_ARCHITECTURE.md)
+- [PLANNING_CONTROLLER_TARGET_ARCHITECTURE.md](/home/masa/carla_alpamayo/docs/PLANNING_CONTROLLER_TARGET_ARCHITECTURE.md)
+- [PLANNING_CONTROLLER_REFACTOR_PLAN.md](/home/masa/carla_alpamayo/docs/PLANNING_CONTROLLER_REFACTOR_PLAN.md)
 - [OVERTAKE_ARCHITECTURE_REFACTOR_PLAN.md](/home/masa/carla_alpamayo/docs/OVERTAKE_ARCHITECTURE_REFACTOR_PLAN.md)
 - [README.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/README.md)
 
