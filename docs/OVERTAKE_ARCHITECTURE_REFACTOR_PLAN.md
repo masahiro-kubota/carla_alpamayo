@@ -486,8 +486,9 @@ moving vehicle 追い越しでは、停止障害物よりも
 - [simulation/tests](/home/masa/carla_alpamayo/simulation/tests)
   - ほぼ使っていない中途半端な場所になっている
 - [expert_basic_agent.py](/home/masa/carla_alpamayo/ad_stack/agents/expert_basic_agent.py)
-  - adapter / pure decision の混線はかなり減ったが、
-  - まだ overtake execution orchestration と lane-change control execution が同居している
+  - adapter / pure decision の混線はかなり減った
+  - overtake execution orchestration も adapter 側へ寄った
+  - 残る責務は entrypoint と CARLA world 連携の薄い orchestration が中心
 - [route_alignment.py](/home/masa/carla_alpamayo/ad_stack/overtake/infrastructure/carla/route_alignment.py)
   - lane-change plan materialization は adapter に寄ったが、
   - まだ execution policy の共通 contract までは上がっていない
@@ -524,9 +525,10 @@ moving vehicle 追い越しでは、停止障害物よりも
   - active traffic-light selection / red-latch の pure 化
   - waypoint queue consumption / controller dispatch の adapter 化
   - overtake execution queue state の adapter 化
+  - overtake execution orchestration の adapter 化
 - 残り:
-  - `expert_basic_agent.py` に残る overtake execution orchestration の境界整理
-  - CARLA adapter が返す execution contract の共通化
+  - execution contract の更なる型化
+  - planning debug / manifest / summary に流す共通 telemetry DTO への寄せ
 
 ### Phase 4: moving vehicle overtake の pure design 追加
 

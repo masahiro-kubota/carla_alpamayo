@@ -5,6 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from ad_stack.overtake.infrastructure.carla import (
+    OvertakeExecutionManager,
     OvertakeExecutionQueue,
     consume_waypoint_queue,
     run_tracking_control,
@@ -27,11 +28,67 @@ class _FakeLocation:
 @dataclass
 class _FakeTransform:
     location: _FakeLocation
+    rotation: "_FakeRotation | None" = None
+
+
+class _FakeWaypoint:
+    def __init__(
+        self,
+        location: _FakeLocation,
+        *,
+        road_id: int = 15,
+        lane_id: int = -1,
+        lane_type: str = "Driving",
+    ) -> None:
+        self.transform = _FakeTransform(location=location, rotation=_FakeRotation())
+        self.road_id = road_id
+        self.lane_id = lane_id
+        self.lane_type = lane_type
+        self._left_lane: "_FakeWaypoint | None" = None
+        self._right_lane: "_FakeWaypoint | None" = None
+
+    def set_left_lane(self, waypoint: "_FakeWaypoint | None") -> None:
+        self._left_lane = waypoint
+
+    def set_right_lane(self, waypoint: "_FakeWaypoint | None") -> None:
+        self._right_lane = waypoint
+
+    def get_left_lane(self) -> "_FakeWaypoint | None":
+        return self._left_lane
+
+    def get_right_lane(self) -> "_FakeWaypoint | None":
+        return self._right_lane
 
 
 @dataclass
-class _FakeWaypoint:
-    transform: _FakeTransform
+class _FakeRotation:
+    pitch: float = 0.0
+    yaw: float = 0.0
+    roll: float = 0.0
+
+
+class _FakeCarla:
+    class LaneType:
+        Driving = "Driving"
+
+    Location = _FakeLocation
+    Rotation = _FakeRotation
+    Transform = _FakeTransform
+
+
+def _build_trace(*, count: int = 10) -> tuple[list[tuple[_FakeWaypoint, None]], list[int]]:
+    trace: list[tuple[_FakeWaypoint, None]] = []
+    for idx in range(count):
+        waypoint = _FakeWaypoint(_FakeLocation(float(idx * 2), 0.0, 0.0), road_id=15, lane_id=-1)
+        adjacent = _FakeWaypoint(
+            _FakeLocation(float(idx * 2), 3.5, 0.0),
+            road_id=15,
+            lane_id=1,
+        )
+        waypoint.set_left_lane(adjacent)
+        adjacent.set_right_lane(waypoint)
+        trace.append((waypoint, None))
+    return trace, list(range(count))
 
 
 class _FakeController:
@@ -70,8 +127,8 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
     def test_consume_waypoint_queue_discards_close_points(self) -> None:
         waypoints = deque(
             [
-                _FakeWaypoint(_FakeTransform(_FakeLocation(0.2, 0.0, 0.0))),
-                _FakeWaypoint(_FakeTransform(_FakeLocation(3.0, 0.0, 0.0))),
+                _FakeWaypoint(_FakeLocation(0.2, 0.0, 0.0)),
+                _FakeWaypoint(_FakeLocation(3.0, 0.0, 0.0)),
             ]
         )
 
@@ -87,7 +144,7 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
     def test_run_tracking_control_uses_overtake_controller_when_target_present(self) -> None:
         agent = _FakeAgent()
         controller = _FakeController()
-        waypoint = _FakeWaypoint(_FakeTransform(_FakeLocation(5.0, 0.0, 0.0)))
+        waypoint = _FakeWaypoint(_FakeLocation(5.0, 0.0, 0.0))
 
         control = run_tracking_control(
             local_agent=agent,
@@ -121,8 +178,8 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
         queue.activate_waypoint_plan(
             target_lane_id="15:1",
             waypoints=[
-                _FakeWaypoint(_FakeTransform(_FakeLocation(0.2, 0.0, 0.0))),
-                _FakeWaypoint(_FakeTransform(_FakeLocation(3.0, 0.0, 0.0))),
+                _FakeWaypoint(_FakeLocation(0.2, 0.0, 0.0)),
+                _FakeWaypoint(_FakeLocation(3.0, 0.0, 0.0)),
             ],
         )
 
@@ -138,8 +195,8 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
         queue = OvertakeExecutionQueue()
         agent = _FakeAgent()
         trace = [
-            (_FakeWaypoint(_FakeTransform(_FakeLocation(1.0, 0.0, 0.0))), None),
-            (_FakeWaypoint(_FakeTransform(_FakeLocation(2.0, 0.0, 0.0))), None),
+            (_FakeWaypoint(_FakeLocation(1.0, 0.0, 0.0)), None),
+            (_FakeWaypoint(_FakeLocation(2.0, 0.0, 0.0)), None),
         ]
 
         queue.activate_trace_plan(
@@ -153,3 +210,49 @@ class OvertakeControllerExecutorTests(unittest.TestCase):
             vehicle_location=_FakeLocation(0.0, 0.0, 0.0),
             sampling_resolution_m=2.0,
         ).transform.location.x, 1.0)
+
+    def test_execution_manager_activates_overtake_plan(self) -> None:
+        agent = _FakeAgent()
+        manager = OvertakeExecutionManager(local_agent=agent, sampling_resolution_m=2.0)
+        base_trace, route_point_to_trace_index = _build_trace()
+
+        activated = manager.activate_overtake_plan(
+            carla_module=_FakeCarla,
+            direction="left",
+            route_index=0,
+            base_trace=base_trace,
+            route_point_to_trace_index=route_point_to_trace_index,
+            distance_same_lane_m=4.0,
+            lane_change_distance_m=4.0,
+            overtake_hold_distance_m=4.0,
+        )
+
+        self.assertTrue(activated)
+        self.assertTrue(manager.lane_change_path_available)
+        self.assertIsNone(manager.lane_change_path_failure_reason)
+        self.assertEqual(manager.target_lane_id, "15:1")
+        next_waypoint = manager.consume_next_waypoint(vehicle_location=_FakeLocation(0.0, 0.0, 0.0))
+        self.assertIsNotNone(next_waypoint)
+
+    def test_execution_manager_prepares_abort_return_with_fallback_trace(self) -> None:
+        agent = _FakeAgent()
+        manager = OvertakeExecutionManager(local_agent=agent, sampling_resolution_m=2.0)
+        base_trace, route_point_to_trace_index = _build_trace()
+
+        manager.prepare_abort_return(
+            carla_module=_FakeCarla,
+            direction=None,
+            route_index=0,
+            base_trace=base_trace,
+            route_point_to_trace_index=route_point_to_trace_index,
+            origin_lane_id="15:-1",
+            target_lane_id="15:1",
+            lane_change_distance_m=4.0,
+        )
+
+        self.assertFalse(manager.lane_change_path_available)
+        self.assertEqual(manager.lane_change_path_failure_reason, "missing_rejoin_context")
+        self.assertEqual(len(agent.plans), 1)
+        next_waypoint = manager.consume_next_waypoint(vehicle_location=_FakeLocation(0.0, 0.0, 0.0))
+        self.assertIsNotNone(next_waypoint)
+        self.assertGreaterEqual(next_waypoint.transform.location.x, 16.0)

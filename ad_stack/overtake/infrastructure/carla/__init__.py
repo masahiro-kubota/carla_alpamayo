@@ -1,4 +1,5 @@
 from .controller_executor import OvertakeExecutionQueue, consume_waypoint_queue, run_tracking_control
+from .execution_manager import OvertakeExecutionManager
 from .preflight_validation import (
     build_stopped_obstacle_scenario_validation,
     warm_up_and_build_stopped_obstacle_scenario_validation,
@@ -36,6 +37,7 @@ from .telemetry_mapper import (
 __all__ = [
     "consume_waypoint_queue",
     "OvertakeExecutionQueue",
+    "OvertakeExecutionManager",
     "build_overtake_pass_snapshot",
     "build_base_trace_execution_plan",
     "build_stopped_obstacle_scenario_validation",
