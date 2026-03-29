@@ -6,7 +6,7 @@
   "traffic_light_creep_speed_kmh": 4.0,
   "follow_headway_seconds": 1.8,
   "yellow_stop_margin_seconds": 1.0,
-  "overtake_target_speed_kmh": 24.0,
+  "overtake_target_speed_kmh": 30.0,
   "overtake_min_front_gap_m": 35.0,
   "overtake_min_rear_gap_m": 15.0,
   "overtake_signal_suppression_distance_m": 35.0,
