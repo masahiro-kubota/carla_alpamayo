@@ -25,7 +25,7 @@
 
 ### Reject / Wait
 
-- `adjacent_front_gap_insufficient` か等価な corridor reject で抑制される
+- `adjacent_rear_gap_insufficient` か等価な corridor reject で抑制される
 - `lane_change_out` に入らない
 
 ### Pass / Rejoin
@@ -46,7 +46,7 @@
 
 ### Manifest Acceptance
 
-- some manifest row has `overtake_reject_reason = adjacent_front_gap_insufficient`
+- some manifest row has `overtake_reject_reason = adjacent_rear_gap_insufficient`
 
 ## Source Of Truth
 

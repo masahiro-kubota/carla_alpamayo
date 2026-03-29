@@ -271,8 +271,8 @@ ROUTE_LOOP_SCENARIOS: tuple[StoppedObstacleRouteLoopScenario, ...] = (
             ManifestExpectation(
                 field="overtake_reject_reason",
                 kind="any_equals",
-                expected="adjacent_front_gap_insufficient",
-                message="curve_clear_with_opposite_static_blocked never reported front-gap rejection",
+                expected="adjacent_rear_gap_insufficient",
+                message="curve_clear_with_opposite_static_blocked never reported corridor-gap rejection",
             ),
         ),
     ),

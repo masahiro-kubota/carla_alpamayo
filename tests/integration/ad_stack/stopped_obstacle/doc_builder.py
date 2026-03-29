@@ -315,7 +315,7 @@ _ROUTE_LOOP_DOCS: tuple[ScenarioDocSeed, ...] = (
             "curve geometry でも opposite static actor を blocker として観測する",
         ),
         reject_wait=(
-            "`adjacent_front_gap_insufficient` か等価な corridor reject で抑制される",
+            "`adjacent_rear_gap_insufficient` か等価な corridor reject で抑制される",
             "`lane_change_out` に入らない",
         ),
         pass_rejoin=(
