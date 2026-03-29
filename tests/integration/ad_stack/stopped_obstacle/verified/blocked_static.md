@@ -16,7 +16,7 @@
 
 ### Target Actor
 
-- `lead_vehicle_id` は停止障害物 actor に収束する
+- `follow_target_id` は停止障害物 actor に収束する
 - opposite lane の static blocker を overtake target にしない
 
 baseline 実績:
@@ -68,6 +68,6 @@ baseline 実績:
 ## Verification Verdict
 
 - `PASS`
-- MCAP 上でも `lead_vehicle_id = 280` を停止障害物として見ている
+- MCAP 上でも `follow_target_id = 280` を停止障害物として見ている
 - frame `204` で same-lane obstacle `280` と left-lane blocker `281` を同時に見ている
 - 最後まで `lane_change_out` に入らない

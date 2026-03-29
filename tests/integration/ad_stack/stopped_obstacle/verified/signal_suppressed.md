@@ -24,7 +24,7 @@
 
 ### Target Actor
 
-- `lead_vehicle_id` は停止障害物 actor に収束する
+- `follow_target_id` は停止障害物 actor に収束する
 
 ### Reject / Wait
 

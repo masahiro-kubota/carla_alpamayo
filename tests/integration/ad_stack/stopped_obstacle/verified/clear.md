@@ -16,7 +16,7 @@
 
 ### Target Actor
 
-- `lead_vehicle_id` は停止障害物 actor に収束する
+- `follow_target_id` は停止障害物 actor に収束する
 - run 中に別 actor へふらつかない
 - `current_lane_id` は開始時 `15:-1`
 
@@ -65,5 +65,5 @@ baseline 実績:
 ## Verification Verdict
 
 - `PASS`
-- MCAP 上でも `lead_vehicle_id = 275` に収束
+- MCAP 上でも `follow_target_id = 275` に収束
 - state 遷移は `lane_change_out -> pass_vehicle -> lane_change_back -> idle`

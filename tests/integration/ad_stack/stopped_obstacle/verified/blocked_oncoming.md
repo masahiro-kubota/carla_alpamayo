@@ -16,7 +16,7 @@
 
 ### Target Actor
 
-- `lead_vehicle_id` は停止障害物 actor に収束する
+- `follow_target_id` は停止障害物 actor に収束する
 - oncoming actor を lead target と取り違えない
 
 baseline 実績:
@@ -70,6 +70,6 @@ baseline 実績:
 ## Verification Verdict
 
 - `PASS`
-- MCAP 上でも `lead_vehicle_id = 286` に収束し、oncoming actor `287` を target と取り違えていない
+- MCAP 上でも `follow_target_id = 286` に収束し、oncoming actor `287` を target と取り違えていない
 - frame `204` では same-lane obstacle `286` と left-lane oncoming `287` を同時に見て reject
 - frame `266` で reject が消え、`lane_change_out` に入る

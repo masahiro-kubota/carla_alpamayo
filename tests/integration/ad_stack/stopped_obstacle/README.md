@@ -15,23 +15,28 @@
 
 ## Verified Scenarios
 
-- [clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/clear.md)
-- [blocked_static.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/blocked_static.md)
-- [blocked_oncoming.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/blocked_oncoming.md)
-- [double_stopped_separated.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_separated.md)
-- [double_stopped_clustered.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/double_stopped_clustered.md)
-- [signal_suppressed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/signal_suppressed.md)
-- [near_junction_preflight_reject.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/near_junction_preflight_reject.md)
-- [adjacent_lane_closed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/adjacent_lane_closed.md)
-- [curve_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/curve_clear.md)
-- [rejoin_blocked_then_release.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/rejoin_blocked_then_release.md)
+- [clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/clear.md)
+- [blocked_static.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/blocked_static.md)
+- [blocked_oncoming.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/blocked_oncoming.md)
+- [double_stopped_separated.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/double_stopped_separated.md)
+- [double_stopped_clustered.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/double_stopped_clustered.md)
+- [signal_suppressed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/signal_suppressed.md)
+- [adjacent_lane_closed.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/adjacent_lane_closed.md)
+- [curve_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/curve_clear.md)
+- [rejoin_blocked_then_release.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/verified/rejoin_blocked_then_release.md)
 
-この 10 本が現在の verified integration set です。
+この 9 本が現在の verified route-loop integration set です。
+
+## Inspect-Only Scenarios
+
+- [near_junction_preflight_reject.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/inspect_only/near_junction_preflight_reject.md)
+
+この group は route-loop 成否ではなく inspector contract で検証します。
 
 ## Deferred / Exploratory Scenarios
 
-- [right_first_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/right_first_clear.md)
-- [temporary_target_occlusion.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/temporary_target_occlusion.md)
+- [right_first_clear.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/exploratory/right_first_clear.md)
+- [temporary_target_occlusion.md](/home/masa/carla_alpamayo/tests/integration/ad_stack/stopped_obstacle/exploratory/temporary_target_occlusion.md)
 
 ## Related Design Docs
 
