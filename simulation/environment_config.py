@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ad_stack.overtake.validation import (
-    StoppedObstacleScenarioConfig,
-    parse_stopped_obstacle_scenario_config,
+    OvertakeScenarioConfig,
+    parse_overtake_scenario_config,
 )
 from libs.project import PROJECT_ROOT
 
@@ -81,7 +81,7 @@ class EnvironmentConfigSpec:
     traffic_light_phase_cycle: TrafficLightPhaseCycleSpec | None = None
     traffic_light_overrides: list[TrafficLightOverrideSpec] = field(default_factory=list)
     traffic_light_schedules: list[TrafficLightScheduleSpec] = field(default_factory=list)
-    stopped_obstacle_scenario: StoppedObstacleScenarioConfig | None = None
+    overtake_scenario: OvertakeScenarioConfig | None = None
     description: str = ""
 
 
@@ -106,7 +106,7 @@ def load_environment_config(path: Path) -> EnvironmentConfigSpec:
     raw_cycle = raw.get("traffic_light_phase_cycle")
     if raw_cycle is None:
         raw_cycle = raw.get("traffic_light_group_cycle")
-    raw_stopped_obstacle_scenario = raw.get("stopped_obstacle_scenario")
+    raw_overtake_scenario = raw.get("overtake_scenario")
     all_red_seconds = None
     if raw_cycle is not None:
         all_red_seconds = raw_cycle.get("all_red_seconds")
@@ -190,6 +190,6 @@ def load_environment_config(path: Path) -> EnvironmentConfigSpec:
             )
             for item in raw.get("traffic_light_schedules", [])
         ],
-        stopped_obstacle_scenario=parse_stopped_obstacle_scenario_config(raw_stopped_obstacle_scenario),
+        overtake_scenario=parse_overtake_scenario_config(raw_overtake_scenario),
         description=str(raw.get("description", "")),
     )

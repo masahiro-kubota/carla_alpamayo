@@ -74,7 +74,7 @@ def _nearest_junction_distance_along_route(
     return None
 
 
-def build_stopped_obstacle_scenario_validation(
+def build_overtake_scenario_validation(
     *,
     environment_config: EnvironmentConfigSpec | None,
     world_map: Any,
@@ -84,7 +84,7 @@ def build_stopped_obstacle_scenario_validation(
     driving_lane_type: Any,
 ) -> dict[str, Any] | None:
     scenario_config = (
-        environment_config.stopped_obstacle_scenario if environment_config is not None else None
+        environment_config.overtake_scenario if environment_config is not None else None
     )
     if scenario_config is None:
         return None
@@ -213,7 +213,7 @@ def build_stopped_obstacle_scenario_validation(
     }
 
 
-def warm_up_and_build_stopped_obstacle_scenario_validation(
+def warm_up_and_build_overtake_scenario_validation(
     *,
     world: Any,
     environment_config: EnvironmentConfigSpec | None,
@@ -225,7 +225,7 @@ def warm_up_and_build_stopped_obstacle_scenario_validation(
 ) -> dict[str, Any] | None:
     for _ in range(max(0, int(warmup_ticks))):
         world.tick()
-    return build_stopped_obstacle_scenario_validation(
+    return build_overtake_scenario_validation(
         environment_config=environment_config,
         world_map=world.get_map(),
         route_trace=route_trace,

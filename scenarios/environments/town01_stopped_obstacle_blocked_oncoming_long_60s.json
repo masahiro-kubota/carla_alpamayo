@@ -24,7 +24,7 @@
       "lane_behavior": "keep_lane"
     }
   ],
-  "stopped_obstacle_scenario": {
+  "overtake_scenario": {
     "scenario_kind": "blocked_oncoming",
     "obstacle_npc_index": 0,
     "blocker_npc_index": 1,

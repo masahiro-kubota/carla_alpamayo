@@ -201,7 +201,7 @@ pure contract:
   - `tests/integration/ad_stack/stopped_obstacle/run_configs/`
   - `scenarios/environments/`
 - non-CARLA contract test:
-  - `tests/test_stopped_obstacle_scenario_contracts.py`
+  - `tests/test_overtake_scenario_contracts.py`
 
 ### 6.2 期待しないこと
 

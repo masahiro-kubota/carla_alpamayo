@@ -15,7 +15,7 @@
     }
   ],
   "traffic_light_overrides": [],
-  "stopped_obstacle_scenario": {
+  "overtake_scenario": {
     "scenario_kind": "curve_clear",
     "obstacle_npc_index": 0,
     "route_aligned_adjacent_lane_available": true,

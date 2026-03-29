@@ -25,7 +25,7 @@
     }
   ],
   "traffic_light_overrides": [],
-  "stopped_obstacle_scenario": {
+  "overtake_scenario": {
     "scenario_kind": "double_stopped_clustered",
     "obstacle_npc_index": 0,
     "blocker_npc_index": 1,

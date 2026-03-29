@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from ad_stack.overtake.infrastructure.carla import build_stopped_obstacle_scenario_validation
+from ad_stack.overtake.infrastructure.carla import build_overtake_scenario_validation
 from libs.carla_utils import build_planned_route, destroy_actors, load_route_config, require_blueprint, setup_world
 from libs.project import current_git_commit_short, ensure_clean_git_worktree, relative_to_project
 from simulation.environment_config import load_environment_config
@@ -173,9 +173,9 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
 
     environment_config_path = Path(scenario.environment_config_path).resolve()
     environment_config = load_environment_config(environment_config_path)
-    if environment_config.stopped_obstacle_scenario is None:
+    if environment_config.overtake_scenario is None:
         raise ValueError(
-            "Stopped-obstacle inspection requires environment.stopped_obstacle_scenario."
+            "Stopped-obstacle inspection requires environment.overtake_scenario."
         )
 
     route_config_path = Path(scenario.route_config_path).resolve()
@@ -212,7 +212,7 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
             world.tick()
 
         ego_waypoint = world.get_map().get_waypoint(vehicle.get_location())
-        scenario_validation = build_stopped_obstacle_scenario_validation(
+        scenario_validation = build_overtake_scenario_validation(
             environment_config=environment_config,
             world_map=world.get_map(),
             route_trace=planned_route.trace,
@@ -246,10 +246,10 @@ def _inspect_single_config(config_path: Path) -> dict[str, Any]:
         "route_name": route_config.name,
         "environment_name": environment_config.name,
         "town": route_config.town,
-        "stopped_obstacle_scenario": {
-            "scenario_kind": environment_config.stopped_obstacle_scenario.scenario_kind,
-            "obstacle_npc_index": environment_config.stopped_obstacle_scenario.obstacle_npc_index,
-            "blocker_npc_index": environment_config.stopped_obstacle_scenario.blocker_npc_index,
+        "overtake_scenario": {
+            "scenario_kind": environment_config.overtake_scenario.scenario_kind,
+            "obstacle_npc_index": environment_config.overtake_scenario.obstacle_npc_index,
+            "blocker_npc_index": environment_config.overtake_scenario.blocker_npc_index,
         },
         "npc_vehicles": npc_actors_summary,
         "scenario_validation": scenario_validation,

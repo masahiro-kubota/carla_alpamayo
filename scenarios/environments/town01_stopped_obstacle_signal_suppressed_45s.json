@@ -26,7 +26,7 @@
       "freeze": true
     }
   ],
-  "stopped_obstacle_scenario": {
+  "overtake_scenario": {
     "scenario_kind": "signal_suppressed",
     "obstacle_npc_index": 0,
     "route_aligned_adjacent_lane_available": true,

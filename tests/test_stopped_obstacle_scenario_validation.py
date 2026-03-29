@@ -4,10 +4,10 @@ import unittest
 from dataclasses import dataclass
 
 from ad_stack.overtake.infrastructure.carla import (
-    build_stopped_obstacle_scenario_validation,
-    warm_up_and_build_stopped_obstacle_scenario_validation,
+    build_overtake_scenario_validation,
+    warm_up_and_build_overtake_scenario_validation,
 )
-from ad_stack.overtake.validation import StoppedObstacleScenarioConfig
+from ad_stack.overtake.validation import OvertakeScenarioConfig
 from simulation.environment_config import EnvironmentConfigSpec
 
 
@@ -102,14 +102,14 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="test",
             town="Town01",
-            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
         )
         ego_location = _FakeLocation(0.0, 0.0, 0.0)
         ego_waypoint = _FakeWaypoint(road_id=1, lane_id=1, s=0.0, location=ego_location)
         world_map = _FakeWorldMap({(0.0, 0.0, 0.0): ego_waypoint})
         ego_vehicle = _FakeActor(1, ego_location)
 
-        result = build_stopped_obstacle_scenario_validation(
+        result = build_overtake_scenario_validation(
             environment_config=environment,
             world_map=world_map,
             route_trace=[(ego_waypoint, None)],
@@ -149,10 +149,10 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
         )
 
-        result = build_stopped_obstacle_scenario_validation(
+        result = build_overtake_scenario_validation(
             environment_config=environment,
             world_map=world_map,
             route_trace=[(ego_waypoint, None), (obstacle_waypoint, None)],
@@ -202,10 +202,10 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
         )
 
-        result = build_stopped_obstacle_scenario_validation(
+        result = build_overtake_scenario_validation(
             environment_config=environment,
             world_map=world_map,
             route_trace=[(ego_waypoint, None), (obstacle_waypoint, None)],
@@ -241,10 +241,10 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
         )
 
-        result = warm_up_and_build_stopped_obstacle_scenario_validation(
+        result = warm_up_and_build_overtake_scenario_validation(
             world=world,
             environment_config=environment,
             route_trace=[(ego_waypoint, None), (obstacle_waypoint, None)],
@@ -286,10 +286,10 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="clear_case",
             town="Town01",
-            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="clear"),
+            overtake_scenario=OvertakeScenarioConfig(scenario_kind="clear"),
         )
 
-        result = build_stopped_obstacle_scenario_validation(
+        result = build_overtake_scenario_validation(
             environment_config=environment,
             world_map=world_map,
             route_trace=[(route_future_waypoint, None), (ego_waypoint, None), (obstacle_waypoint, None)],
@@ -335,10 +335,10 @@ class StoppedObstacleScenarioValidationTest(unittest.TestCase):
         environment = EnvironmentConfigSpec(
             name="curve_case",
             town="Town01",
-            stopped_obstacle_scenario=StoppedObstacleScenarioConfig(scenario_kind="curve_clear"),
+            overtake_scenario=OvertakeScenarioConfig(scenario_kind="curve_clear"),
         )
 
-        result = build_stopped_obstacle_scenario_validation(
+        result = build_overtake_scenario_validation(
             environment_config=environment,
             world_map=world_map,
             route_trace=[(ego_waypoint, None), (route_curve_waypoint, None)],

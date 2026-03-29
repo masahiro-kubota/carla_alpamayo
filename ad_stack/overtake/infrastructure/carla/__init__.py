@@ -1,8 +1,8 @@
 from .controller_executor import OvertakeExecutionQueue, consume_waypoint_queue, run_tracking_control
 from .execution_manager import OvertakeExecutionManager
 from .preflight_validation import (
-    build_stopped_obstacle_scenario_validation,
-    warm_up_and_build_stopped_obstacle_scenario_validation,
+    build_overtake_scenario_validation,
+    warm_up_and_build_overtake_scenario_validation,
 )
 from .route_alignment import (
     TraceExecutionPlan,
@@ -41,7 +41,7 @@ __all__ = [
     "OvertakeExecutionManager",
     "build_overtake_pass_snapshot",
     "build_base_trace_execution_plan",
-    "build_stopped_obstacle_scenario_validation",
+    "build_overtake_scenario_validation",
     "build_overtake_scene_snapshot",
     "build_overtake_waypoint_execution_plan",
     "build_route_aligned_stopped_targets",
@@ -65,5 +65,5 @@ __all__ = [
     "planning_debug_to_dict",
     "run_tracking_control",
     "visible_overtake_target_actors",
-    "warm_up_and_build_stopped_obstacle_scenario_validation",
+    "warm_up_and_build_overtake_scenario_validation",
 ]

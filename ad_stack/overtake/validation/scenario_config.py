@@ -5,7 +5,7 @@ from typing import Any
 
 
 @dataclass(slots=True)
-class StoppedObstacleScenarioConfig:
+class OvertakeScenarioConfig:
     scenario_kind: str
     obstacle_npc_index: int = 0
     blocker_npc_index: int | None = None
@@ -14,12 +14,12 @@ class StoppedObstacleScenarioConfig:
     nearest_junction_distance_m: float | None = None
 
 
-def parse_stopped_obstacle_scenario_config(
+def parse_overtake_scenario_config(
     raw: dict[str, Any] | None,
-) -> StoppedObstacleScenarioConfig | None:
+) -> OvertakeScenarioConfig | None:
     if raw is None:
         return None
-    return StoppedObstacleScenarioConfig(
+    return OvertakeScenarioConfig(
         scenario_kind=str(raw["scenario_kind"]),
         obstacle_npc_index=int(raw.get("obstacle_npc_index", 0)),
         blocker_npc_index=(

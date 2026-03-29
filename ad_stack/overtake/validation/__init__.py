@@ -1,6 +1,6 @@
 from .scenario_config import (
-    StoppedObstacleScenarioConfig,
-    parse_stopped_obstacle_scenario_config,
+    OvertakeScenarioConfig,
+    parse_overtake_scenario_config,
 )
 from .scenario_validation import (
     PreflightValidationInput,
@@ -11,7 +11,7 @@ from .scenario_validation import (
 __all__ = [
     "PreflightValidationInput",
     "ScenarioValidationResult",
-    "StoppedObstacleScenarioConfig",
-    "parse_stopped_obstacle_scenario_config",
+    "OvertakeScenarioConfig",
+    "parse_overtake_scenario_config",
     "validate_preflight",
 ]

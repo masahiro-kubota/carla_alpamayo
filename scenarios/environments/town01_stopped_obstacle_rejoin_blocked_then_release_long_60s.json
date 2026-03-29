@@ -16,7 +16,7 @@
     }
   ],
   "traffic_light_overrides": [],
-  "stopped_obstacle_scenario": {
+  "overtake_scenario": {
     "scenario_kind": "rejoin_blocked_then_release",
     "obstacle_npc_index": 0,
     "blocker_npc_index": 1,

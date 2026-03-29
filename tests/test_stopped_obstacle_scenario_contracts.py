@@ -244,29 +244,29 @@ class StoppedObstacleScenarioContractTests(unittest.TestCase):
                 )
                 self.assertEqual(environment.name, Path(case.environment_path).stem)
                 self.assertEqual(len(environment.npc_vehicles), case.expected_npc_count)
-                self.assertIsNotNone(environment.stopped_obstacle_scenario)
-                assert environment.stopped_obstacle_scenario is not None
-                self.assertEqual(environment.stopped_obstacle_scenario.scenario_kind, case.scenario_kind)
-                blocker_present = environment.stopped_obstacle_scenario.blocker_npc_index is not None
+                self.assertIsNotNone(environment.overtake_scenario)
+                assert environment.overtake_scenario is not None
+                self.assertEqual(environment.overtake_scenario.scenario_kind, case.scenario_kind)
+                blocker_present = environment.overtake_scenario.blocker_npc_index is not None
                 self.assertEqual(blocker_present, case.expected_blocker_present)
                 blocker_speed = None
                 if blocker_present:
-                    assert environment.stopped_obstacle_scenario.blocker_npc_index is not None
+                    assert environment.overtake_scenario.blocker_npc_index is not None
                     blocker_spec = environment.npc_vehicles[
-                        environment.stopped_obstacle_scenario.blocker_npc_index
+                        environment.overtake_scenario.blocker_npc_index
                     ]
                     blocker_speed = blocker_spec.target_speed_kmh
                 self.assertEqual(blocker_speed, case.expected_blocker_target_speed_kmh)
                 self.assertEqual(
-                    environment.stopped_obstacle_scenario.route_aligned_adjacent_lane_available,
+                    environment.overtake_scenario.route_aligned_adjacent_lane_available,
                     case.expected_route_aligned_adjacent_lane_available,
                 )
                 self.assertEqual(
-                    environment.stopped_obstacle_scenario.nearest_signal_distance_m,
+                    environment.overtake_scenario.nearest_signal_distance_m,
                     case.expected_nearest_signal_distance_m,
                 )
                 self.assertEqual(
-                    environment.stopped_obstacle_scenario.nearest_junction_distance_m,
+                    environment.overtake_scenario.nearest_junction_distance_m,
                     case.expected_nearest_junction_distance_m,
                 )
 

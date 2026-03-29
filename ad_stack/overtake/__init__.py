@@ -42,8 +42,8 @@ from .policies import (
 from .validation import (
     PreflightValidationInput,
     ScenarioValidationResult,
-    StoppedObstacleScenarioConfig,
-    parse_stopped_obstacle_scenario_config,
+    OvertakeScenarioConfig,
+    parse_overtake_scenario_config,
     validate_preflight,
 )
 
@@ -67,7 +67,7 @@ __all__ = [
     "PreferredDirection",
     "ScenarioKind",
     "ScenarioValidationResult",
-    "StoppedObstacleScenarioConfig",
+    "OvertakeScenarioConfig",
     "TargetKind",
     "build_stopped_obstacle_targets",
     "build_route_aligned_lane_change_plan",
@@ -86,6 +86,6 @@ __all__ = [
     "traffic_light_stop_control",
     "traffic_light_stop_target_distance_m",
     "traffic_light_stop_target_speed_kmh",
-    "parse_stopped_obstacle_scenario_config",
+    "parse_overtake_scenario_config",
     "validate_preflight",
 ]

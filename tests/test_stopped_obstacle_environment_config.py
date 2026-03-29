@@ -26,7 +26,7 @@ class StoppedObstacleEnvironmentConfigTests(unittest.TestCase):
                     "lane_behavior": "keep_lane",
                 }
             ],
-            "stopped_obstacle_scenario": {
+            "overtake_scenario": {
                 "scenario_kind": "curve_clear",
                 "obstacle_npc_index": 0,
                 "route_aligned_adjacent_lane_available": True,
@@ -48,12 +48,12 @@ class StoppedObstacleEnvironmentConfigTests(unittest.TestCase):
         assert npc.spawn_transform is not None
         self.assertEqual(npc.spawn_transform.x, 1.0)
         self.assertEqual(npc.spawn_transform.yaw_deg, 90.0)
-        self.assertIsNotNone(config.stopped_obstacle_scenario)
-        assert config.stopped_obstacle_scenario is not None
-        self.assertEqual(config.stopped_obstacle_scenario.scenario_kind, "curve_clear")
-        self.assertEqual(config.stopped_obstacle_scenario.obstacle_npc_index, 0)
-        self.assertTrue(config.stopped_obstacle_scenario.route_aligned_adjacent_lane_available)
-        self.assertEqual(config.stopped_obstacle_scenario.nearest_junction_distance_m, 42.0)
+        self.assertIsNotNone(config.overtake_scenario)
+        assert config.overtake_scenario is not None
+        self.assertEqual(config.overtake_scenario.scenario_kind, "curve_clear")
+        self.assertEqual(config.overtake_scenario.obstacle_npc_index, 0)
+        self.assertTrue(config.overtake_scenario.route_aligned_adjacent_lane_available)
+        self.assertEqual(config.overtake_scenario.nearest_junction_distance_m, 42.0)
 
 
 if __name__ == "__main__":
