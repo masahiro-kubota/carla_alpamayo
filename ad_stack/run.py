@@ -233,7 +233,7 @@ def _apply_lateral_offset_to_transform(
             ),
         )
     waypoint = world_map.get_waypoint(transform.location)
-    offset_sign = 1.0
+    adjacent_location: Any | None = None
     if waypoint is not None:
         left_lane = waypoint.get_left_lane()
         right_lane = waypoint.get_right_lane()
@@ -244,16 +244,33 @@ def _apply_lateral_offset_to_transform(
             right_lane is not None and right_lane.lane_type == carla_module.LaneType.Driving
         )
         if left_is_driving and not right_is_driving:
-            offset_sign = 1.0
+            adjacent_location = left_lane.transform.location
         elif right_is_driving and not left_is_driving:
-            offset_sign = -1.0
+            adjacent_location = right_lane.transform.location
+    if adjacent_location is not None:
+        delta_x = float(adjacent_location.x) - float(transform.location.x)
+        delta_y = float(adjacent_location.y) - float(transform.location.y)
+        delta_norm = math.hypot(delta_x, delta_y)
+        if delta_norm > 1e-6:
+            return carla_module.Transform(
+                carla_module.Location(
+                    x=float(transform.location.x) - (lateral_offset_m * delta_x / delta_norm),
+                    y=float(transform.location.y) - (lateral_offset_m * delta_y / delta_norm),
+                    z=float(transform.location.z),
+                ),
+                carla_module.Rotation(
+                    pitch=float(transform.rotation.pitch),
+                    yaw=float(transform.rotation.yaw),
+                    roll=float(transform.rotation.roll),
+                ),
+            )
     yaw_rad = math.radians(float(transform.rotation.yaw))
     right_x = math.sin(yaw_rad)
     right_y = -math.cos(yaw_rad)
     return carla_module.Transform(
         carla_module.Location(
-            x=float(transform.location.x) + (offset_sign * lateral_offset_m * right_x),
-            y=float(transform.location.y) + (offset_sign * lateral_offset_m * right_y),
+            x=float(transform.location.x) + (lateral_offset_m * right_x),
+            y=float(transform.location.y) + (lateral_offset_m * right_y),
             z=float(transform.location.z),
         ),
         carla_module.Rotation(
