@@ -7,12 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake import (
-    AdjacentLaneGapSnapshot,
     LaneChangePlanPoint,
-    OvertakeLeadSnapshot,
-    OvertakeContext,
     OvertakeMemory,
-    OvertakeTargetSnapshot,
     build_route_aligned_lane_change_plan,
     choose_overtake_action,
     evaluate_pass_progress,
@@ -20,14 +16,10 @@ from ad_stack.overtake import (
 )
 from ad_stack.overtake.infrastructure.carla import (
     adjacent_lane_waypoint,
+    build_overtake_scene_snapshot,
     build_route_aligned_lane_samples,
-    build_route_aligned_stopped_targets,
-    build_same_lane_stopped_targets,
-    enrich_targets_with_adjacent_lane_availability,
     interpolate_waypoint,
-    lane_gaps,
     lane_gaps_for_lane_id,
-    lane_id as route_lane_id,
     materialize_lane_change_waypoints,
     route_aligned_waypoint,
     route_relative_progress_to_actor,
@@ -379,35 +371,6 @@ class ExpertBasicAgent:
         self._lane_change_path_failure_reason = None
         return True
 
-    @staticmethod
-    def _nearest_lead(
-        tracked_objects: tuple[DynamicVehicleStateView, ...],
-        *,
-        relation: str = "same_lane",
-    ) -> DynamicVehicleStateView | None:
-        candidates = [
-            actor
-            for actor in tracked_objects
-            if actor.relation == relation
-            and actor.is_ahead
-            and actor.longitudinal_distance_m is not None
-            and actor.longitudinal_distance_m > 0.0
-        ]
-        if not candidates:
-            return None
-        return min(candidates, key=lambda actor: float(actor.longitudinal_distance_m))
-
-    def _same_lane_stopped_targets(
-        self,
-        tracked_objects: tuple[DynamicVehicleStateView, ...],
-    ) -> list[OvertakeTargetSnapshot]:
-        return build_same_lane_stopped_targets(
-            tracked_objects,
-            stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
-            cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
-            cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
-        )
-
     def _route_relative_progress_to_actor(
         self,
         *,
@@ -424,39 +387,6 @@ class ExpertBasicAgent:
             route_point_progress_m=self._route_point_progress_m,
             search_back_points=search_back_points,
             search_forward_points=search_forward_points,
-        )
-
-    def _route_aligned_stopped_targets(
-        self,
-        tracked_objects: tuple[DynamicVehicleStateView, ...],
-        *,
-        route_index: int | None,
-    ) -> list[OvertakeTargetSnapshot]:
-        targets = build_route_aligned_stopped_targets(
-            tracked_objects,
-            route_index=route_index,
-            base_trace=self._base_trace,
-            route_point_to_trace_index=self._route_point_to_trace_index,
-            route_point_progress_m=self._route_point_progress_m,
-            stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
-            cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
-            cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
-        )
-        return enrich_targets_with_adjacent_lane_availability(
-            targets,
-            tracked_objects=tracked_objects,
-            world_map=self._map,
-            carla_module=self._carla,
-        )
-
-    def _visible_overtake_target_actors(
-        self,
-        tracked_objects: tuple[DynamicVehicleStateView, ...],
-    ) -> tuple[DynamicVehicleStateView | None, tuple[DynamicVehicleStateView, ...]]:
-        return visible_overtake_target_actors(
-            tracked_objects,
-            target_actor_id=self._overtake_target_actor_id,
-            target_member_actor_ids=self._overtake_target_member_actor_ids,
         )
 
     @staticmethod
@@ -499,20 +429,6 @@ class ExpertBasicAgent:
         self._latched_red_light = None
         self._latched_red_until_s = -1.0
         return None
-
-    @staticmethod
-    def _lane_gaps(
-        tracked_objects: tuple[DynamicVehicleStateView, ...],
-        relation: str,
-    ) -> tuple[float, float]:
-        return lane_gaps(tracked_objects, relation)
-
-    @staticmethod
-    def _lane_gaps_for_lane_id(
-        tracked_objects: tuple[DynamicVehicleStateView, ...],
-        lane_id: str | None,
-    ) -> tuple[float, float]:
-        return lane_gaps_for_lane_id(tracked_objects, lane_id)
 
     def _start_rejoin(self, route_index: int | None) -> bool:
         if (
@@ -578,49 +494,6 @@ class ExpertBasicAgent:
         self._lane_change_path_available = True
         self._lane_change_path_failure_reason = None
         return True
-
-    def _choose_overtake_direction(
-        self,
-        scene_state: SceneState,
-        active_light: TrafficLightStateView | None,
-    ) -> tuple[Literal["left", "right"] | None, bool, str | None]:
-        if not self.config.allow_overtake:
-            return None, False, "overtake_disabled"
-        if self.config.ignore_vehicles:
-            return None, False, "ignore_vehicles_enabled"
-        if active_light is not None and active_light.state in {"red", "yellow"}:
-            stop_distance = active_light.stop_line_distance_m or active_light.distance_m
-            if stop_distance <= self.config.overtake_signal_suppression_distance_m:
-                return None, False, "signal_suppressed"
-
-        ordered_directions: tuple[Literal["left", "right"], Literal["left", "right"]]
-        if self.config.preferred_overtake_direction == "left_first":
-            ordered_directions = ("left", "right")
-        else:
-            ordered_directions = ("right", "left")
-
-        any_lane_open = False
-        reject_reason: str | None = None
-        for direction in ordered_directions:
-            if not scene_state.ego.adjacent_lanes_open.get(direction, False):
-                continue
-            any_lane_open = True
-            relation = "left_lane" if direction == "left" else "right_lane"
-            front_gap_m, rear_gap_m = self._lane_gaps(scene_state.tracked_objects, relation)
-            if (
-                front_gap_m >= self.config.overtake_min_front_gap_m
-                and rear_gap_m >= self.config.overtake_min_rear_gap_m
-            ):
-                return direction, True, None
-            if front_gap_m < self.config.overtake_min_front_gap_m:
-                reject_reason = "adjacent_front_gap_insufficient"
-            elif rear_gap_m < self.config.overtake_min_rear_gap_m:
-                reject_reason = "adjacent_rear_gap_insufficient"
-            else:
-                reject_reason = "adjacent_lane_gap_insufficient"
-        if not any_lane_open:
-            reject_reason = "adjacent_lane_closed"
-        return None, any_lane_open, reject_reason
 
     def _should_stop_for_light(
         self,
@@ -733,65 +606,6 @@ class ExpertBasicAgent:
             scene_state.traffic_lights,
             timestamp_s=scene_state.timestamp_s,
         )
-        lead_vehicle = self._nearest_lead(scene_state.tracked_objects, relation="same_lane")
-        same_lane_stopped_targets = self._same_lane_stopped_targets(scene_state.tracked_objects)
-        route_aligned_stopped_targets = self._route_aligned_stopped_targets(
-            scene_state.tracked_objects,
-            route_index=route_index,
-        )
-        stopped_targets = (
-            same_lane_stopped_targets if same_lane_stopped_targets else route_aligned_stopped_targets
-        )
-        active_overtake_target = stopped_targets[0] if stopped_targets else None
-        same_lane_lead_distance_m = (
-            float(lead_vehicle.longitudinal_distance_m)
-            if lead_vehicle and lead_vehicle.longitudinal_distance_m is not None
-            else None
-        )
-        same_lane_lead_speed_mps = float(lead_vehicle.speed_mps) if lead_vehicle is not None else 0.0
-        lead_distance_m = (
-            same_lane_lead_distance_m
-            if same_lane_lead_distance_m is not None
-            else (
-                float(active_overtake_target.entry_distance_m)
-                if active_overtake_target is not None
-                else None
-            )
-        )
-        lead_speed_mps = (
-            same_lane_lead_speed_mps
-            if same_lane_lead_distance_m is not None
-            else (
-                float(active_overtake_target.speed_mps)
-                if active_overtake_target is not None
-                else 0.0
-            )
-        )
-        lead_speed_kmh = _speed_kmh(lead_speed_mps) if lead_distance_m is not None else 0.0
-        closing_speed_mps = current_speed_mps - lead_speed_mps if lead_distance_m is not None else 0.0
-        min_ttc = float("inf")
-        if lead_distance_m is not None and closing_speed_mps > 1e-3:
-            min_ttc = lead_distance_m / closing_speed_mps
-        same_lane_min_ttc = float("inf")
-        same_lane_closing_speed_mps = (
-            current_speed_mps - same_lane_lead_speed_mps
-            if same_lane_lead_distance_m is not None
-            else 0.0
-        )
-        if same_lane_lead_distance_m is not None and same_lane_closing_speed_mps > 1e-3:
-            same_lane_min_ttc = same_lane_lead_distance_m / same_lane_closing_speed_mps
-        follow_target_speed_kmh = self.config.target_speed_kmh
-        if lead_distance_m is not None:
-            distance_limited_speed_kmh = max(
-                0.0,
-                (lead_distance_m / max(self.config.follow_headway_seconds, 0.25)) * 3.6,
-            )
-            follow_target_speed_kmh = min(
-                self.config.target_speed_kmh,
-                lead_speed_kmh + 2.0,
-                distance_limited_speed_kmh,
-            )
-
         planner_state = "nominal_cruise"
         target_speed_kmh = self.config.target_speed_kmh
         target_lane_id = scene_state.route.target_lane_id or scene_state.ego.lane_id
@@ -802,10 +616,46 @@ class ExpertBasicAgent:
             if ego_waypoint is not None
             else None
         )
-        left_front_gap_m, left_rear_gap_m = self._lane_gaps(scene_state.tracked_objects, "left_lane")
-        right_front_gap_m, right_rear_gap_m = self._lane_gaps(
-            scene_state.tracked_objects, "right_lane"
+        overtake_scene = build_overtake_scene_snapshot(
+            tracked_objects=scene_state.tracked_objects,
+            timestamp_s=scene_state.timestamp_s,
+            current_speed_mps=current_speed_mps,
+            current_lane_id=current_lane_id,
+            route_target_lane_id=scene_state.route.target_lane_id,
+            route_index=route_index,
+            ego_waypoint=ego_waypoint,
+            adjacent_lanes_open=scene_state.ego.adjacent_lanes_open,
+            target_speed_kmh=self.config.target_speed_kmh,
+            follow_headway_seconds=self.config.follow_headway_seconds,
+            stopped_speed_threshold_mps=self.config.stopped_speed_threshold_mps,
+            cluster_merge_gap_m=self.config.overtake_cluster_merge_gap_m,
+            cluster_max_member_speed_mps=self.config.overtake_cluster_max_member_speed_mps,
+            active_signal_state=active_light.state if active_light is not None else None,
+            signal_stop_distance_m=(
+                active_light.stop_line_distance_m if active_light is not None else None
+            ),
+            allow_overtake=self.config.allow_overtake,
+            preferred_direction=self.config.preferred_overtake_direction,
+            world_map=self._map,
+            carla_module=self._carla,
+            base_trace=self._base_trace,
+            route_point_to_trace_index=self._route_point_to_trace_index,
+            route_point_progress_m=self._route_point_progress_m,
         )
+        lead_vehicle = overtake_scene.lead_vehicle
+        active_overtake_target = overtake_scene.active_target
+        lead_distance_m = overtake_scene.lead_distance_m
+        lead_speed_mps = overtake_scene.lead_speed_mps
+        same_lane_lead_distance_m = overtake_scene.same_lane_lead_distance_m
+        same_lane_lead_speed_mps = overtake_scene.same_lane_lead_speed_mps
+        closing_speed_mps = overtake_scene.closing_speed_mps
+        min_ttc = overtake_scene.min_ttc
+        same_lane_min_ttc = overtake_scene.same_lane_min_ttc
+        follow_target_speed_kmh = overtake_scene.follow_target_speed_kmh
+        left_front_gap_m = overtake_scene.left_front_gap_m
+        left_rear_gap_m = overtake_scene.left_rear_gap_m
+        right_front_gap_m = overtake_scene.right_front_gap_m
+        right_rear_gap_m = overtake_scene.right_rear_gap_m
         rejoin_front_gap_m = float("inf")
         rejoin_rear_gap_m = float("inf")
         overtake_reject_reason: str | None = None
@@ -917,61 +767,9 @@ class ExpertBasicAgent:
             and not self.config.ignore_vehicles
             and self._overtake_state == "idle"
         ):
-            left_lane_waypoint = ego_waypoint.get_left_lane() if ego_waypoint is not None else None
-            right_lane_waypoint = ego_waypoint.get_right_lane() if ego_waypoint is not None else None
-            left_lane_snapshot = AdjacentLaneGapSnapshot(
-                lane_id=route_lane_id(left_lane_waypoint),
-                front_gap_m=None if not math.isfinite(left_front_gap_m) else float(left_front_gap_m),
-                rear_gap_m=None if not math.isfinite(left_rear_gap_m) else float(left_rear_gap_m),
-                lane_open=bool(scene_state.ego.adjacent_lanes_open.get("left", False)),
-            )
-            right_lane_snapshot = AdjacentLaneGapSnapshot(
-                lane_id=route_lane_id(right_lane_waypoint),
-                front_gap_m=None
-                if not math.isfinite(right_front_gap_m)
-                else float(right_front_gap_m),
-                rear_gap_m=None if not math.isfinite(right_rear_gap_m) else float(right_rear_gap_m),
-                lane_open=bool(scene_state.ego.adjacent_lanes_open.get("right", False)),
-            )
             overtake_considered = True
             overtake_decision = choose_overtake_action(
-                OvertakeContext(
-                    timestamp_s=scene_state.timestamp_s,
-                    current_lane_id=current_lane_id,
-                    origin_lane_id=current_lane_id,
-                    route_target_lane_id=scene_state.route.target_lane_id,
-                    target_speed_kmh=self.config.target_speed_kmh,
-                    stopped_speed_threshold_mps=0.3,
-                    lead=OvertakeLeadSnapshot(
-                        actor_id=(
-                            lead_vehicle.actor_id
-                            if lead_vehicle is not None
-                            else active_overtake_target.primary_actor_id
-                            if active_overtake_target is not None
-                            else None
-                        ),
-                        lane_id=(
-                            lead_vehicle.lane_id
-                            if lead_vehicle is not None
-                            else active_overtake_target.lane_id
-                            if active_overtake_target is not None
-                            else None
-                        ),
-                        distance_m=lead_distance_m,
-                        speed_mps=lead_speed_mps,
-                        relative_speed_mps=closing_speed_mps,
-                        is_stopped=lead_speed_mps <= 0.3,
-                    ),
-                    active_target=active_overtake_target,
-                    left_lane=left_lane_snapshot,
-                    right_lane=right_lane_snapshot,
-                    active_signal_state=active_light.state if active_light is not None else None,
-                    signal_stop_distance_m=(
-                        active_light.stop_line_distance_m if active_light is not None else None
-                    ),
-                    allow_overtake=self.config.allow_overtake,
-                    preferred_direction=self.config.preferred_overtake_direction,
-                ),
+                overtake_scene.decision_context,
                 overtake_trigger_distance_m=self.config.overtake_trigger_distance_m,
                 overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
                 overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
@@ -1055,8 +853,10 @@ class ExpertBasicAgent:
         target_actor = None
         target_actor_visible = False
         if self._overtake_target_actor_id is not None:
-            target_actor, visible_target_actors = self._visible_overtake_target_actors(
-                scene_state.tracked_objects
+            target_actor, visible_target_actors = visible_overtake_target_actors(
+                scene_state.tracked_objects,
+                target_actor_id=self._overtake_target_actor_id,
+                target_member_actor_ids=self._overtake_target_member_actor_ids,
             )
             target_actor_visible = bool(visible_target_actors)
             target_longitudinal_distance_m = None
@@ -1106,7 +906,7 @@ class ExpertBasicAgent:
                 target_exit_longitudinal_distance_m=target_exit_longitudinal_distance_m,
             )
             if self._overtake_origin_lane_id is not None:
-                rejoin_front_gap_m, rejoin_rear_gap_m = self._lane_gaps_for_lane_id(
+                rejoin_front_gap_m, rejoin_rear_gap_m = lane_gaps_for_lane_id(
                     scene_state.tracked_objects,
                     self._overtake_origin_lane_id,
                 )

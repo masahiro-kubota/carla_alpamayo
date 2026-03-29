@@ -12,11 +12,14 @@ from .route_alignment import (
     route_aligned_waypoint,
 )
 from .snapshot_builder import (
+    OvertakeSceneSnapshot,
+    build_overtake_scene_snapshot,
     build_route_aligned_stopped_targets,
     build_same_lane_stopped_targets,
     enrich_targets_with_adjacent_lane_availability,
     lane_gaps,
     lane_gaps_for_lane_id,
+    nearest_lead,
     route_relative_progress_to_actor,
     visible_overtake_target_actors,
 )
@@ -32,6 +35,7 @@ __all__ = [
     "adjacent_lane_waypoint",
     "build_stopped_obstacle_scenario_validation",
     "build_route_aligned_lane_samples",
+    "build_overtake_scene_snapshot",
     "build_route_aligned_stopped_targets",
     "build_same_lane_stopped_targets",
     "enrich_targets_with_adjacent_lane_availability",
@@ -40,6 +44,8 @@ __all__ = [
     "lane_gaps_for_lane_id",
     "lane_id",
     "materialize_lane_change_waypoints",
+    "nearest_lead",
+    "OvertakeSceneSnapshot",
     "route_aligned_waypoint",
     "route_relative_progress_to_actor",
     "RouteLoopTelemetryAccumulator",
