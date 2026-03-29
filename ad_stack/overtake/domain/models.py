@@ -106,6 +106,68 @@ class OvertakeDecision:
 
 
 @dataclass(slots=True)
+class OvertakeEventFlags:
+    traffic_light_stop: bool = False
+    traffic_light_resume: bool = False
+    car_follow_start: bool = False
+    overtake_attempt: bool = False
+    overtake_success: bool = False
+    overtake_abort: bool = False
+    unsafe_lane_change_reject: bool = False
+    traffic_light_violation: bool = False
+
+
+@dataclass(slots=True)
+class OvertakePlanningDebug:
+    remaining_waypoints: int
+    route_progress_index: int | None
+    max_route_index: int
+    current_lane_id: str | None
+    lane_center_offset_m: float | None
+    route_target_lane_id: str | None
+    left_lane_open: bool
+    right_lane_open: bool
+    traffic_light_actor_id: int | None
+    traffic_light_state: str | None
+    traffic_light_distance_m: float | None
+    traffic_light_stop_line_distance_m: float | None
+    traffic_light_red_latched: bool
+    traffic_light_stop_buffer_m: float
+    traffic_light_stop_target_distance_m: float | None
+    target_speed_kmh: float
+    lead_vehicle_id: int | None
+    lead_vehicle_distance_m: float | None
+    lead_vehicle_speed_mps: float | None
+    lead_vehicle_relative_speed_mps: float | None
+    lead_vehicle_lane_id: str | None
+    left_lane_front_gap_m: float | None
+    left_lane_rear_gap_m: float | None
+    right_lane_front_gap_m: float | None
+    right_lane_rear_gap_m: float | None
+    rejoin_front_gap_m: float | None
+    rejoin_rear_gap_m: float | None
+    overtake_considered: bool
+    overtake_reject_reason: str | None
+    overtake_state: str
+    overtake_direction: str | None
+    overtake_origin_lane_id: str | None
+    overtake_target_actor_id: int | None
+    overtake_target_kind: str
+    overtake_target_member_actor_ids: tuple[int, ...]
+    overtake_target_lane_id: str | None
+    target_passed: bool
+    distance_past_target_m: float | None
+    target_actor_visible: bool
+    target_actor_last_seen_s: float | None
+    lane_change_path_available: bool
+    lane_change_path_failed_reason: str | None
+    target_lane_id: str | None
+    min_ttc: float | None
+    emergency_stop: bool
+    event_flags: OvertakeEventFlags
+
+
+@dataclass(slots=True)
 class LaneChangePlanPoint:
     route_index: int
     lane_id: str

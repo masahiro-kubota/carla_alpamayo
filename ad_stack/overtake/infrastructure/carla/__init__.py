@@ -32,6 +32,7 @@ from .telemetry_mapper import (
     build_episode_record,
     build_overtake_planning_debug,
     build_planning_debug_mcap_payload,
+    planning_debug_to_dict,
 )
 
 __all__ = [
@@ -61,6 +62,7 @@ __all__ = [
     "build_episode_record",
     "build_overtake_planning_debug",
     "build_planning_debug_mcap_payload",
+    "planning_debug_to_dict",
     "run_tracking_control",
     "visible_overtake_target_actors",
     "warm_up_and_build_stopped_obstacle_scenario_validation",

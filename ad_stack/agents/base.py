@@ -30,7 +30,7 @@ class ControlDecision:
     command: VehicleCommand
     behavior: str
     planner_state: str = "nominal"
-    debug: dict[str, Any] = field(default_factory=dict)
+    debug: Any | None = None
 
 
 class AutonomyAgent(Protocol):

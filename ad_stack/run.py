@@ -1161,7 +1161,9 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                 route_point = step_result.route_point
                 behavior = step_result.behavior or decision.behavior
                 planning_decision = step_result.expert_decision or decision
-                planning_debug = dict(planning_decision.debug or {})
+                planning_debug = planning_decision.debug
+                if planning_debug is None:
+                    raise RuntimeError("Expert planning debug payload is required")
                 should_record = elapsed_seconds + 1e-9 >= next_record_elapsed_s
 
                 telemetry_accumulator.observe(
@@ -1205,13 +1207,11 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                                 route_completion_ratio=current_completion_ratio,
                                 distance_to_goal_m=distance_to_goal_m,
                                 planner_state=planning_decision.planner_state,
-                                traffic_light_state=planning_debug.get("traffic_light_state"),
-                                lead_vehicle_distance_m=planning_debug.get(
-                                    "lead_vehicle_distance_m"
-                                ),
-                                overtake_state=planning_debug.get("overtake_state"),
-                                target_lane_id=planning_debug.get("target_lane_id"),
-                                min_ttc=planning_debug.get("min_ttc"),
+                                traffic_light_state=planning_debug.traffic_light_state,
+                                lead_vehicle_distance_m=planning_debug.lead_vehicle_distance_m,
+                                overtake_state=planning_debug.overtake_state,
+                                target_lane_id=planning_debug.target_lane_id,
+                                min_ttc=planning_debug.min_ttc,
                                 pose={
                                     "x": float(vehicle_location.x),
                                     "y": float(vehicle_location.y),
