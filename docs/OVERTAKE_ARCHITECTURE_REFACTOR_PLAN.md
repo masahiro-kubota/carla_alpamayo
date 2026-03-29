@@ -522,6 +522,7 @@ moving vehicle 追い越しでは、停止障害物よりも
   - overtake runtime transition の pure 化
   - longitudinal / traffic-light control profile の pure 化
   - waypoint queue consumption / controller dispatch の adapter 化
+  - overtake execution queue state の adapter 化
 - 残り:
   - `expert_basic_agent.py` に残る overtake execution orchestration の境界整理
   - CARLA adapter が返す execution contract の共通化
