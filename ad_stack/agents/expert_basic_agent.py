@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class ExpertBasicAgentConfig:
-    target_speed_kmh: float = 30.0
+    target_speed_kmh: float = 20.0
     ignore_traffic_lights: bool = False
     ignore_stop_signs: bool = True
     ignore_vehicles: bool = False
@@ -47,7 +47,7 @@ class ExpertBasicAgentConfig:
     traffic_light_creep_resume_distance_m: float = 1.0
     traffic_light_creep_speed_kmh: float = 4.0
     traffic_light_red_latch_seconds: float = 0.5
-    overtake_target_speed_kmh: float = 30.0
+    overtake_target_speed_kmh: float = 20.0
     overtake_min_front_gap_m: float = 20.0
     overtake_min_rear_gap_m: float = 15.0
     overtake_signal_suppression_distance_m: float = 35.0

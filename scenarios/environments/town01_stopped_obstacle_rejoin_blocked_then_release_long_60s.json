@@ -11,7 +11,7 @@
     {
       "npc_profile_id": "rejoin_release_profile_v1",
       "spawn_index": 224,
-      "target_speed_kmh": 40.0,
+      "target_speed_kmh": 10.0,
       "lane_behavior": "keep_lane"
     }
   ],

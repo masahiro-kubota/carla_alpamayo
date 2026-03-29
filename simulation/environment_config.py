@@ -11,7 +11,7 @@ from libs.project import PROJECT_ROOT
 @dataclass(slots=True)
 class NPCProfileSpec:
     name: str
-    default_target_speed_kmh: float = 20.0
+    default_target_speed_kmh: float = 10.0
     speed_jitter_kmh: float = 0.0
     enable_autopilot: bool = True
 
@@ -92,7 +92,7 @@ def load_npc_profile(profile_id: str) -> NPCProfileSpec:
     raw = _load_json(profile_path)
     return NPCProfileSpec(
         name=str(raw["name"]),
-        default_target_speed_kmh=float(raw.get("default_target_speed_kmh", 20.0)),
+        default_target_speed_kmh=float(raw.get("default_target_speed_kmh", 10.0)),
         speed_jitter_kmh=float(raw.get("speed_jitter_kmh", 0.0)),
         enable_autopilot=bool(raw.get("enable_autopilot", True)),
     )

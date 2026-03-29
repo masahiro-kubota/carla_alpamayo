@@ -1,5 +1,5 @@
 {
-  "target_speed_kmh": 30.0,
+  "target_speed_kmh": 20.0,
   "traffic_light_stop_buffer_m": 0.0,
   "traffic_light_brake_start_distance_m": 10.0,
   "traffic_light_creep_resume_distance_m": 1.0,

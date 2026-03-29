@@ -6,19 +6,6 @@ from typing import Literal
 from ad_stack.overtake.domain import PlannerState
 
 
-def _lane_change_entry_target_speed_kmh(
-    *,
-    overtake_target_speed_kmh: float,
-    follow_target_speed_kmh: float,
-    lead_speed_kmh: float,
-) -> float:
-    entry_floor_kmh = max(0.0, overtake_target_speed_kmh * 0.4)
-    return min(
-        overtake_target_speed_kmh,
-        max(follow_target_speed_kmh, lead_speed_kmh + entry_floor_kmh),
-    )
-
-
 @dataclass(slots=True)
 class OvertakeRuntimeTransition:
     state: PlannerState | Literal["idle"]
@@ -65,21 +52,8 @@ def resolve_overtake_runtime_transition(
         planner_state = "abort_return" if aborted else "lane_change_back"
 
     phase_target_speed_kmh: float | None = None
-    if next_state in {"lane_change_out", "pass_vehicle", "lane_change_back"}:
-        if next_state == "lane_change_out":
-            phase_target_speed_kmh = _lane_change_entry_target_speed_kmh(
-                overtake_target_speed_kmh=overtake_target_speed_kmh,
-                follow_target_speed_kmh=follow_target_speed_kmh,
-                lead_speed_kmh=lead_speed_kmh,
-            )
-        else:
-            phase_target_speed_kmh = overtake_target_speed_kmh
-    elif next_state == "abort_return":
-        phase_target_speed_kmh = _lane_change_entry_target_speed_kmh(
-            overtake_target_speed_kmh=overtake_target_speed_kmh,
-            follow_target_speed_kmh=follow_target_speed_kmh,
-            lead_speed_kmh=lead_speed_kmh,
-        )
+    if next_state in {"lane_change_out", "pass_vehicle", "lane_change_back", "abort_return"}:
+        phase_target_speed_kmh = overtake_target_speed_kmh
 
     should_prepare_abort_return = False
     event_overtake_abort = False

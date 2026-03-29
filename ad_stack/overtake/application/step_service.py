@@ -10,7 +10,6 @@ from ad_stack.overtake.application.decision_service import (
 )
 from ad_stack.overtake.application.runtime_state import OvertakeRuntimeState
 from ad_stack.overtake.application.runtime_transition import (
-    _lane_change_entry_target_speed_kmh,
     resolve_overtake_runtime_transition,
 )
 from ad_stack.overtake.domain import OvertakeContext, OvertakeEventFlags
@@ -163,11 +162,7 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
         ):
             return OvertakeStepDecision(
                 planner_state="lane_change_out",
-                target_speed_kmh=_lane_change_entry_target_speed_kmh(
-                    overtake_target_speed_kmh=request.overtake_target_speed_kmh,
-                    follow_target_speed_kmh=request.follow_target_speed_kmh,
-                    lead_speed_kmh=request.lead_speed_mps * 3.6,
-                ),
+                target_speed_kmh=request.overtake_target_speed_kmh,
                 overtake_considered=True,
                 request_overtake_direction=overtake_decision.direction,
             )
