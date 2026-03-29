@@ -5,7 +5,7 @@ import queue
 import random
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -47,8 +47,8 @@ from libs.schemas import (
 )
 from ad_stack.overtake.infrastructure.carla import (
     RouteLoopTelemetryAccumulator,
-    build_ego_state_sample,
-    build_episode_record,
+    RouteLoopFrameTelemetryRequest,
+    build_frame_telemetry,
 )
 from libs.utils import render_png_sequence_to_mp4
 from simulation.environment_config import (
@@ -1159,6 +1159,51 @@ def _run_route_loop(request: RunRequest) -> RunResult:
 
                 mcap_segment_index: int | None = None
                 mcap_segment_path: str | None = None
+                frame_telemetry_request = RouteLoopFrameTelemetryRequest(
+                    episode_id=episode_id,
+                    frame_id=frame_index - 1,
+                    town_id=route_config.town,
+                    route_id=route_config.name,
+                    weather_id=scenario.weather,
+                    timestamp_s=current_image.timestamp,
+                    elapsed_seconds=elapsed_seconds,
+                    speed_mps=current_speed,
+                    behavior=behavior,
+                    route_completion_ratio=current_completion_ratio,
+                    distance_to_goal_m=distance_to_goal_m,
+                    planner_state=planning_decision.planner_state,
+                    follow_target_distance_m=planning_debug.target.follow_target_distance_m,
+                    overtake_state=planning_debug.target.overtake_state,
+                    target_lane_id=planning_debug.core.target_lane_id,
+                    min_ttc=planning_debug.core.min_ttc,
+                    pose={
+                        "x": float(vehicle_location.x),
+                        "y": float(vehicle_location.y),
+                        "z": float(vehicle_location.z),
+                        "yaw_deg": float(vehicle_transform.rotation.yaw),
+                        "pitch_deg": float(vehicle_transform.rotation.pitch),
+                        "roll_deg": float(vehicle_transform.rotation.roll),
+                    },
+                    control={
+                        "steer": float(decision.command.steer),
+                        "throttle": float(decision.command.throttle),
+                        "brake": float(decision.command.brake),
+                    },
+                    collision=collision,
+                    lane_invasion=lane_invasion,
+                    success=not collision and not failure_reason,
+                    expert_steer=(
+                        step_result.expert_decision.command.steer
+                        if step_result.expert_decision is not None
+                        else None
+                    ),
+                    route_target_x=route_point[0] if route_point is not None else None,
+                    route_target_y=route_point[1] if route_point is not None else None,
+                    planning_debug=planning_debug,
+                    mcap_segment_index=None,
+                    mcap_segment_path=None,
+                )
+                frame_telemetry = build_frame_telemetry(frame_telemetry_request)
 
                 if mcap_writer is not None:
                     npc_vehicle_states = _collect_npc_vehicle_states(
@@ -1174,77 +1219,21 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     )
                     mcap_segment = mcap_writer.write_frame(
                         current_rgb=current_rgb,
-                        ego_state=build_ego_state_sample(
-                            episode_id=episode_id,
-                            frame_id=frame_index - 1,
-                            timestamp_s=current_image.timestamp,
-                            elapsed_seconds=elapsed_seconds,
-                            speed_mps=current_speed,
-                            behavior=behavior,
-                            route_completion_ratio=current_completion_ratio,
-                            distance_to_goal_m=distance_to_goal_m,
-                            planner_state=planning_decision.planner_state,
-                            traffic_light_state=planning_debug.traffic_light_state,
-                            lead_vehicle_distance_m=planning_debug.lead_vehicle_distance_m,
-                            overtake_state=planning_debug.overtake_state,
-                            target_lane_id=planning_debug.target_lane_id,
-                            min_ttc=planning_debug.min_ttc,
-                            pose={
-                                "x": float(vehicle_location.x),
-                                "y": float(vehicle_location.y),
-                                "z": float(vehicle_location.z),
-                                "yaw_deg": float(vehicle_transform.rotation.yaw),
-                                "pitch_deg": float(vehicle_transform.rotation.pitch),
-                                "roll_deg": float(vehicle_transform.rotation.roll),
-                            },
-                            control={
-                                "steer": float(decision.command.steer),
-                                "throttle": float(decision.command.throttle),
-                                "brake": float(decision.command.brake),
-                            },
-                            planning_debug=planning_debug,
-                        ),
+                        ego_state=frame_telemetry.ego_state,
                         npc_vehicle_states=npc_vehicle_states,
                         tracked_vehicle_states=tracked_vehicle_states,
                         traffic_light_states=traffic_light_states,
                     )
                     mcap_segment_index = mcap_segment.segment_index
                     mcap_segment_path = relative_to_project(mcap_segment.path)
-
-                record = build_episode_record(
-                    episode_id=episode_id,
-                    frame_id=frame_index - 1,
-                    town_id=route_config.town,
-                    route_id=route_config.name,
-                    weather_id=scenario.weather,
-                    timestamp=current_image.timestamp,
-                    speed=current_speed,
-                    command=behavior,
-                    steer=decision.command.steer,
-                    throttle=decision.command.throttle,
-                    brake=decision.command.brake,
-                    collision=collision,
-                    lane_invasion=lane_invasion,
-                    success=not collision and not failure_reason,
-                    vehicle_x=vehicle_location.x,
-                    vehicle_y=vehicle_location.y,
-                    vehicle_z=vehicle_location.z,
-                    vehicle_yaw_deg=vehicle_transform.rotation.yaw,
-                    route_completion_ratio=current_completion_ratio,
-                    distance_to_goal_m=distance_to_goal_m,
-                    expert_steer=(
-                        step_result.expert_decision.command.steer
-                        if step_result.expert_decision is not None
-                        else None
-                    ),
-                    route_target_x=route_point[0] if route_point is not None else None,
-                    route_target_y=route_point[1] if route_point is not None else None,
-                    planner_state=planning_decision.planner_state,
-                    planning_debug=planning_debug,
-                    mcap_segment_index=mcap_segment_index,
-                    mcap_segment_path=mcap_segment_path,
-                )
-                append_jsonl(manifest_path, record)
+                    frame_telemetry = build_frame_telemetry(
+                        replace(
+                            frame_telemetry_request,
+                            mcap_segment_index=mcap_segment_index,
+                            mcap_segment_path=mcap_segment_path,
+                        )
+                    )
+                append_jsonl(manifest_path, frame_telemetry.episode_record)
 
                 recorded_frame_index += 1
                 while next_record_elapsed_s <= elapsed_seconds + 1e-9:

@@ -189,11 +189,11 @@ _EGO_PLANNING_DEBUG_JSON_SCHEMA = {
         "left_lane_open": {"type": ["boolean", "null"]},
         "right_lane_open": {"type": ["boolean", "null"]},
         "target_speed_kmh": {"type": ["number", "null"]},
-        "lead_vehicle_id": {"type": ["integer", "null"]},
-        "lead_vehicle_distance_m": {"type": ["number", "null"]},
-        "lead_vehicle_speed_mps": {"type": ["number", "null"]},
-        "lead_vehicle_relative_speed_mps": {"type": ["number", "null"]},
-        "lead_vehicle_lane_id": {"type": ["string", "null"]},
+        "follow_target_id": {"type": ["integer", "null"]},
+        "follow_target_distance_m": {"type": ["number", "null"]},
+        "follow_target_speed_mps": {"type": ["number", "null"]},
+        "follow_target_relative_speed_mps": {"type": ["number", "null"]},
+        "follow_target_lane_id": {"type": ["string", "null"]},
         "traffic_light_actor_id": {"type": ["integer", "null"]},
         "traffic_light_distance_m": {"type": ["number", "null"]},
         "traffic_light_stop_line_distance_m": {"type": ["number", "null"]},
@@ -629,7 +629,7 @@ class EgoStateSample:
     distance_to_goal_m: float
     planner_state: str | None
     traffic_light_state: str | None
-    lead_vehicle_distance_m: float | None
+    follow_target_distance_m: float | None
     overtake_state: str | None
     target_lane_id: str | None
     min_ttc: float | None

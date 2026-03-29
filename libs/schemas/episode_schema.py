@@ -40,11 +40,11 @@ class EpisodeRecord:
     traffic_light_distance_m: float | None = None
     traffic_light_stop_line_distance_m: float | None = None
     traffic_light_violation: bool | None = None
-    lead_vehicle_distance_m: float | None = None
-    lead_vehicle_id: int | None = None
-    lead_vehicle_speed_mps: float | None = None
-    lead_vehicle_relative_speed_mps: float | None = None
-    lead_vehicle_lane_id: str | None = None
+    follow_target_distance_m: float | None = None
+    follow_target_id: int | None = None
+    follow_target_speed_mps: float | None = None
+    follow_target_relative_speed_mps: float | None = None
+    follow_target_lane_id: str | None = None
     left_lane_front_gap_m: float | None = None
     left_lane_rear_gap_m: float | None = None
     right_lane_front_gap_m: float | None = None

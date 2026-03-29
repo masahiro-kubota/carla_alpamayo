@@ -27,10 +27,10 @@ def _planning_debug(**overrides):
         traffic_light_stop_buffer_m=3.0,
         traffic_light_stop_target_distance_m=None,
         target_speed_kmh=30.0,
-        lead_vehicle=None,
+        follow_actor=None,
         active_target=None,
-        lead_distance_m=None,
-        lead_speed_mps=None,
+        follow_distance_m=None,
+        follow_speed_mps=None,
         closing_speed_mps=None,
         left_lane_front_gap_m=float("inf"),
         left_lane_rear_gap_m=float("inf"),
@@ -68,7 +68,7 @@ class RouteLoopTelemetryAccumulatorTests(unittest.TestCase):
 
         accumulator.observe(
             planning_debug=_planning_debug(
-                lead_distance_m=19.5,
+                follow_distance_m=19.5,
                 overtake_considered=True,
                 overtake_state="pass_vehicle",
                 target_passed=True,
@@ -113,7 +113,7 @@ class RouteLoopTelemetryAccumulatorTests(unittest.TestCase):
         self.assertEqual(summary["overtake_success_count"], 1)
         self.assertEqual(summary["unsafe_lane_change_reject_count"], 1)
         self.assertEqual(summary["min_ttc"], 4.8)
-        self.assertEqual(summary["min_lead_distance_m"], 19.5)
+        self.assertEqual(summary["min_follow_target_distance_m"], 19.5)
         self.assertEqual(summary["first_target_passed_s"], 12.0)
         self.assertEqual(summary["first_rejoin_started_s"], 12.6)
         self.assertEqual(summary["rejoin_wait_after_target_passed_s"], 0.6)
@@ -151,10 +151,10 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             traffic_light_stop_buffer_m=3.0,
             traffic_light_stop_target_distance_m=12.5,
             target_speed_kmh=24.0,
-            lead_vehicle=_Lead(),
+            follow_actor=_Lead(),
             active_target=_Target(),
-            lead_distance_m=16.0,
-            lead_speed_mps=0.0,
+            follow_distance_m=16.0,
+            follow_speed_mps=0.0,
             closing_speed_mps=5.0,
             left_lane_front_gap_m=float("inf"),
             left_lane_rear_gap_m=18.0,
@@ -183,15 +183,15 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             event_flags={"event_overtake_attempt": True},
         )
 
-        self.assertEqual(payload.remaining_waypoints, 12)
-        self.assertEqual(payload.traffic_light_actor_id, 31)
-        self.assertTrue(payload.traffic_light_red_latched)
-        self.assertEqual(payload.lead_vehicle_id, 101)
-        self.assertIsNone(payload.left_lane_front_gap_m)
-        self.assertEqual(payload.right_lane_front_gap_m, 9.0)
-        self.assertEqual(payload.overtake_target_actor_id, 201)
-        self.assertTrue(payload.event_flags.overtake_attempt)
-        self.assertIsNone(payload.min_ttc)
+        self.assertEqual(payload.core.remaining_waypoints, 12)
+        self.assertEqual(payload.core.traffic_light_actor_id, 31)
+        self.assertTrue(payload.core.traffic_light_red_latched)
+        self.assertEqual(payload.target.follow_target_id, 101)
+        self.assertIsNone(payload.target.left_lane_front_gap_m)
+        self.assertEqual(payload.target.right_lane_front_gap_m, 9.0)
+        self.assertEqual(payload.target.overtake_target_actor_id, 201)
+        self.assertTrue(payload.core.event_flags.overtake_attempt)
+        self.assertIsNone(payload.core.min_ttc)
 
     def test_planning_debug_payload_omits_top_level_planning_fields(self) -> None:
         payload = build_planning_debug_mcap_payload(
@@ -203,10 +203,10 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(payload["target_passed"], False)
-        self.assertNotIn("min_ttc", payload)
-        self.assertNotIn("overtake_state", payload)
-        self.assertNotIn("target_lane_id", payload)
+        self.assertEqual(payload["target"]["target_passed"], False)
+        self.assertNotIn("min_ttc", payload["core"])
+        self.assertNotIn("overtake_state", payload["target"])
+        self.assertNotIn("target_lane_id", payload["core"])
 
     def test_build_ego_state_sample_filters_planning_debug(self) -> None:
         ego_state = build_ego_state_sample(
@@ -220,17 +220,17 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             distance_to_goal_m=11.0,
             planner_state="car_follow",
             traffic_light_state="red",
-            lead_vehicle_distance_m=9.0,
+            follow_target_distance_m=9.0,
             overtake_state="idle",
             target_lane_id="15:-1",
             min_ttc=4.2,
             pose={"x": 1.0, "y": 2.0, "z": 0.0, "yaw_deg": 0.0, "pitch_deg": 0.0, "roll_deg": 0.0},
             control={"steer": 0.1, "throttle": 0.2, "brake": 0.0},
-            planning_debug=_planning_debug(lead_vehicle=None, active_target=None),
+            planning_debug=_planning_debug(follow_actor=None, active_target=None),
         )
 
-        self.assertEqual(ego_state.planning_debug["lead_vehicle_id"], None)
-        self.assertNotIn("overtake_state", ego_state.planning_debug)
+        self.assertEqual(ego_state.planning_debug["target"]["follow_target_id"], None)
+        self.assertNotIn("overtake_state", ego_state.planning_debug["target"])
 
     def test_build_episode_record_maps_overtake_fields(self) -> None:
         record = build_episode_record(
@@ -289,8 +289,8 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
 
         as_dict = planning_debug_to_dict(payload)
 
-        self.assertEqual(as_dict["remaining_waypoints"], 2)
-        self.assertTrue(as_dict["event_overtake_attempt"])
+        self.assertEqual(as_dict["core"]["remaining_waypoints"], 2)
+        self.assertTrue(as_dict["core"]["event_overtake_attempt"])
 
 
 if __name__ == "__main__":
