@@ -19,7 +19,7 @@ def choose_overtake_action(
     context: OvertakeContext,
     *,
     overtake_trigger_distance_m: float,
-    overtake_speed_delta_kmh: float,
+    overtake_target_speed_kmh: float,
     overtake_min_front_gap_m: float,
     overtake_min_rear_gap_m: float,
     signal_suppression_distance_m: float,
@@ -41,7 +41,7 @@ def choose_overtake_action(
             target_distance_m=target_distance_m,
             target_speed_mps=target_speed_mps,
             overtake_trigger_distance_m=overtake_trigger_distance_m,
-            overtake_speed_delta_kmh=overtake_speed_delta_kmh,
+            overtake_target_speed_kmh=overtake_target_speed_kmh,
         )
     )
     if not target_acceptance.accepted:

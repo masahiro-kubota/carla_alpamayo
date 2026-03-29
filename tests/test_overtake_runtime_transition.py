@@ -19,7 +19,7 @@ class OvertakeRuntimeTransitionTests(unittest.TestCase):
             target_speed_kmh=30.0,
             follow_target_speed_kmh=12.0,
             lead_speed_kmh=0.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
         )
 
         self.assertEqual(transition.state, "pass_vehicle")
@@ -38,7 +38,7 @@ class OvertakeRuntimeTransitionTests(unittest.TestCase):
             target_speed_kmh=30.0,
             follow_target_speed_kmh=10.0,
             lead_speed_kmh=0.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
         )
 
         self.assertEqual(transition.state, "abort_return")
@@ -60,7 +60,7 @@ class OvertakeRuntimeTransitionTests(unittest.TestCase):
             target_speed_kmh=30.0,
             follow_target_speed_kmh=12.0,
             lead_speed_kmh=0.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
         )
 
         self.assertEqual(transition.state, "idle")
@@ -80,10 +80,9 @@ class OvertakeRuntimeTransitionTests(unittest.TestCase):
             target_speed_kmh=30.0,
             follow_target_speed_kmh=12.0,
             lead_speed_kmh=0.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
         )
 
         self.assertEqual(transition.state, "idle")
         self.assertTrue(transition.completed)
         self.assertFalse(transition.event_overtake_success)
-

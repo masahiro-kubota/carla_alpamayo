@@ -14,18 +14,6 @@ from ad_stack.overtake.domain import OvertakeContext, OvertakeEventFlags
 from ad_stack.overtake.policies import TargetAcceptancePolicy
 
 
-def _active_motion_profile(context: OvertakeContext) -> str | None:
-    if context.active_target is not None:
-        return context.active_target.motion_profile
-    if context.lead is not None:
-        return context.lead.motion_profile
-    return None
-
-
-def _stopped_target_lane_change_floor_kmh(target_speed_kmh: float) -> float:
-    return max(0.0, target_speed_kmh * 0.4)
-
-
 @dataclass(frozen=True, slots=True)
 class OvertakeStepRequest:
     runtime_state: OvertakeRuntimeState
@@ -49,7 +37,7 @@ class OvertakeStepRequest:
     traffic_light_brake_start_distance_m: float
     traffic_light_creep_resume_distance_m: float
     traffic_light_creep_speed_kmh: float
-    overtake_speed_delta_kmh: float
+    overtake_target_speed_kmh: float
     overtake_trigger_distance_m: float
     overtake_min_front_gap_m: float
     overtake_min_rear_gap_m: float
@@ -88,21 +76,11 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
             target_speed_kmh=request.target_speed_kmh,
             follow_target_speed_kmh=request.follow_target_speed_kmh,
             lead_speed_kmh=request.lead_speed_mps * 3.6,
-            overtake_speed_delta_kmh=request.overtake_speed_delta_kmh,
+            overtake_target_speed_kmh=request.overtake_target_speed_kmh,
         )
         target_speed_kmh = request.target_speed_kmh
-        if transition.limited_target_speed_kmh is not None:
-            target_speed_kmh = min(target_speed_kmh, transition.limited_target_speed_kmh)
-        if (
-            transition.state == "lane_change_out"
-            and _active_motion_profile(request.decision_context) == "stopped"
-        ):
-            # Keep a meaningful lane-change entry speed for stopped-obstacle overtakes
-            # without forcing full cruise speed through a tight lateral maneuver.
-            target_speed_kmh = max(
-                target_speed_kmh,
-                _stopped_target_lane_change_floor_kmh(request.target_speed_kmh),
-            )
+        if transition.phase_target_speed_kmh is not None:
+            target_speed_kmh = transition.phase_target_speed_kmh
         request_rejoin = (
             transition.state == "pass_vehicle"
             and not transition.aborted
@@ -170,7 +148,7 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
         overtake_decision = choose_overtake_action(
             request.decision_context,
             overtake_trigger_distance_m=request.overtake_trigger_distance_m,
-            overtake_speed_delta_kmh=request.overtake_speed_delta_kmh,
+            overtake_target_speed_kmh=request.overtake_target_speed_kmh,
             overtake_min_front_gap_m=request.overtake_min_front_gap_m,
             overtake_min_rear_gap_m=request.overtake_min_rear_gap_m,
             signal_suppression_distance_m=request.overtake_signal_suppression_distance_m,
@@ -182,7 +160,7 @@ def resolve_overtake_step(request: OvertakeStepRequest) -> OvertakeStepDecision:
         ):
             return OvertakeStepDecision(
                 planner_state="lane_change_out",
-                target_speed_kmh=request.target_speed_kmh,
+                target_speed_kmh=request.overtake_target_speed_kmh,
                 overtake_considered=True,
                 request_overtake_direction=overtake_decision.direction,
             )

@@ -11,7 +11,7 @@ class OvertakeRuntimeTransition:
     state: PlannerState | Literal["idle"]
     planner_state: PlannerState | Literal["nominal_cruise"]
     aborted: bool
-    limited_target_speed_kmh: float | None = None
+    phase_target_speed_kmh: float | None = None
     should_prepare_abort_return: bool = False
     completed: bool = False
     event_overtake_abort: bool = False
@@ -31,7 +31,7 @@ def resolve_overtake_runtime_transition(
     target_speed_kmh: float,
     follow_target_speed_kmh: float,
     lead_speed_kmh: float,
-    overtake_speed_delta_kmh: float,
+    overtake_target_speed_kmh: float,
 ) -> OvertakeRuntimeTransition:
     if state == "idle":
         return OvertakeRuntimeTransition(
@@ -51,11 +51,13 @@ def resolve_overtake_runtime_transition(
     elif next_state == "lane_change_back":
         planner_state = "abort_return" if aborted else "lane_change_back"
 
-    limited_target_speed_kmh: float | None = None
-    if next_state in {"lane_change_out", "abort_return"}:
-        limited_target_speed_kmh = min(
-            target_speed_kmh,
-            max(follow_target_speed_kmh, lead_speed_kmh + overtake_speed_delta_kmh),
+    phase_target_speed_kmh: float | None = None
+    if next_state in {"lane_change_out", "pass_vehicle", "lane_change_back"}:
+        phase_target_speed_kmh = overtake_target_speed_kmh
+    elif next_state == "abort_return":
+        phase_target_speed_kmh = min(
+            overtake_target_speed_kmh,
+            max(follow_target_speed_kmh, lead_speed_kmh),
         )
 
     should_prepare_abort_return = False
@@ -81,7 +83,7 @@ def resolve_overtake_runtime_transition(
             state="idle",
             planner_state="nominal_cruise",
             aborted=False,
-            limited_target_speed_kmh=limited_target_speed_kmh,
+            phase_target_speed_kmh=phase_target_speed_kmh,
             completed=True,
             event_overtake_abort=event_overtake_abort,
             event_overtake_success=not aborted,
@@ -91,8 +93,7 @@ def resolve_overtake_runtime_transition(
         state=next_state,
         planner_state=planner_state,
         aborted=aborted,
-        limited_target_speed_kmh=limited_target_speed_kmh,
+        phase_target_speed_kmh=phase_target_speed_kmh,
         should_prepare_abort_return=should_prepare_abort_return,
         event_overtake_abort=event_overtake_abort,
     )
-

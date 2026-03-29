@@ -47,7 +47,7 @@ class ExpertBasicAgentConfig:
     traffic_light_creep_resume_distance_m: float = 1.0
     traffic_light_creep_speed_kmh: float = 4.0
     traffic_light_red_latch_seconds: float = 0.5
-    overtake_speed_delta_kmh: float = 8.0
+    overtake_target_speed_kmh: float = 30.0
     overtake_min_front_gap_m: float = 20.0
     overtake_min_rear_gap_m: float = 15.0
     overtake_signal_suppression_distance_m: float = 35.0
@@ -300,7 +300,7 @@ class ExpertBasicAgent:
                 traffic_light_brake_start_distance_m=self.config.traffic_light_brake_start_distance_m,
                 traffic_light_creep_resume_distance_m=self.config.traffic_light_creep_resume_distance_m,
                 traffic_light_creep_speed_kmh=self.config.traffic_light_creep_speed_kmh,
-                overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
+                overtake_target_speed_kmh=self.config.overtake_target_speed_kmh,
                 overtake_trigger_distance_m=self.config.overtake_trigger_distance_m,
                 overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
                 overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,
@@ -425,7 +425,7 @@ class ExpertBasicAgent:
                     traffic_light_brake_start_distance_m=self.config.traffic_light_brake_start_distance_m,
                     traffic_light_creep_resume_distance_m=self.config.traffic_light_creep_resume_distance_m,
                     traffic_light_creep_speed_kmh=self.config.traffic_light_creep_speed_kmh,
-                    overtake_speed_delta_kmh=self.config.overtake_speed_delta_kmh,
+                    overtake_target_speed_kmh=self.config.overtake_target_speed_kmh,
                     overtake_trigger_distance_m=self.config.overtake_trigger_distance_m,
                     overtake_min_front_gap_m=self.config.overtake_min_front_gap_m,
                     overtake_min_rear_gap_m=self.config.overtake_min_rear_gap_m,

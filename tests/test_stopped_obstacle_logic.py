@@ -83,7 +83,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(lead_distance_m=50.0),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -96,7 +96,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(left_front_gap_m=10.0, right_lane_open=False),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -109,7 +109,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(left_rear_gap_m=10.0, right_lane_open=False),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -122,7 +122,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(active_signal_state="red", signal_stop_distance_m=20.0),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -135,7 +135,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -161,7 +161,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                 ),
             ),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -174,7 +174,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(preferred_direction="left_first"),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -188,7 +188,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
         decision = choose_overtake_action(
             _context(preferred_direction="right_first"),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,
@@ -610,7 +610,7 @@ class StoppedObstacleLogicTests(unittest.TestCase):
                 ),
             ),
             overtake_trigger_distance_m=40.0,
-            overtake_speed_delta_kmh=8.0,
+            overtake_target_speed_kmh=30.0,
             overtake_min_front_gap_m=35.0,
             overtake_min_rear_gap_m=15.0,
             signal_suppression_distance_m=35.0,

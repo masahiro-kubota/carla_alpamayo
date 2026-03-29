@@ -15,7 +15,7 @@ class TargetAcceptanceRequest:
     target_distance_m: float | None
     target_speed_mps: float | None
     overtake_trigger_distance_m: float
-    overtake_speed_delta_kmh: float
+    overtake_target_speed_kmh: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,4 +27,3 @@ class TargetAcceptanceResult:
 
 class TargetAcceptancePolicy(Protocol):
     def __call__(self, request: TargetAcceptanceRequest) -> TargetAcceptanceResult: ...
-

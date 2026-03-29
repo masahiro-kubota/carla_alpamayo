@@ -31,9 +31,7 @@ def accept_stopped_overtake_target(
         if request.lead is not None
         else False
     )
-    if (not target_is_stopped) and target_speed_kmh > (
-        request.context.target_speed_kmh - request.overtake_speed_delta_kmh
-    ):
+    if (not target_is_stopped) and target_speed_kmh > request.overtake_target_speed_kmh:
         return TargetAcceptanceResult(
             accepted=False,
             reject_reason="target_not_slow_enough",
