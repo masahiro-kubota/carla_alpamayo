@@ -353,7 +353,7 @@ class _RouteSceneMixin:
         timestamp_s: float,
         vehicle_transform: Any,
         speed_mps: float,
-        current_behavior: str,
+        current_route_command: str,
         metadata: dict[str, Any] | None = None,
     ) -> tuple[Any, tuple[float, float] | None, float]:
         route_point: tuple[float, float] | None = None
@@ -388,7 +388,7 @@ class _RouteSceneMixin:
             ),
             route=RouteState(
                 route_id=self.route_id,
-                maneuver=current_behavior,
+                maneuver=current_route_command,
                 progress_ratio=_completion_ratio(
                     self._max_route_index if self._route_geometry is not None else None,
                     len(self._route_geometry.points) if self._route_geometry is not None else 0,
@@ -464,12 +464,12 @@ class ExpertCollectorStack(_RouteSceneMixin):
         speed_mps: float,
         metadata: dict[str, Any] | None = None,
     ) -> StackStepResult:
-        current_behavior = self._agent.current_behavior()
+        current_route_command = self._agent.current_route_command()
         scene_state, route_point, progress_ratio = self._build_scene(
             timestamp_s=timestamp_s,
             vehicle_transform=vehicle_transform,
             speed_mps=speed_mps,
-            current_behavior=current_behavior,
+            current_route_command=current_route_command,
             metadata=metadata,
         )
         decision = self._agent.step(scene_state)
@@ -565,12 +565,12 @@ class PilotNetEvalStack(_RouteSceneMixin):
         max_steer_delta: float | None,
     ) -> StackStepResult:
         self._rgb_history.append(current_rgb)
-        current_command = self._expert_agent.current_behavior()
+        current_command = self._expert_agent.current_route_command()
         scene_state, route_point, progress_ratio = self._build_scene(
             timestamp_s=timestamp_s,
             vehicle_transform=vehicle_transform,
             speed_mps=speed_mps,
-            current_behavior=current_command,
+            current_route_command=current_command,
             metadata={
                 "front_rgb_history": list(self._rgb_history),
                 "command": current_command,

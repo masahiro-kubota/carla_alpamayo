@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake.application.pure_pursuit_controller import PurePursuitController
+from ad_stack.overtake.domain.planning_models import BehaviorPlan, Trajectory
 from ad_stack.overtake import (
     OvertakeRuntimeState,
     evaluate_pass_progress,
@@ -99,6 +100,9 @@ class ExpertBasicAgent:
         self._max_route_index: int = 0
         self._current_route_index: int = 0
         self._current_route_command: str = "lane_follow"
+        self._current_behavior_state: str = "lane_follow"
+        self._current_behavior_plan: BehaviorPlan | None = None
+        self._current_trajectory: Trajectory | None = None
         self._overtake = OvertakeRuntimeState()
         self._target_policy = target_policy
         self._target_acceptance_policy = target_acceptance_policy
@@ -144,7 +148,16 @@ class ExpertBasicAgent:
         return max(len(self._route_backbone.route_index_to_trace_index) - 1 - self._max_route_index, 0)
 
     def current_behavior(self) -> str:
+        return self._current_behavior_state
+
+    def current_route_command(self) -> str:
         return self._current_route_command
+
+    def current_behavior_plan(self) -> BehaviorPlan | None:
+        return self._current_behavior_plan
+
+    def current_trajectory(self) -> Trajectory | None:
+        return self._current_trajectory
 
     def done(self) -> bool:
         if self._route_backbone is None:
@@ -167,6 +180,9 @@ class ExpertBasicAgent:
         self._controller.previous_applied_steer = 0.0
         if self._route_backbone is not None:
             self._current_route_command = self._route_backbone.road_option_for_index(0)
+        self._current_behavior_state = "lane_follow"
+        self._current_behavior_plan = None
+        self._current_trajectory = None
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
@@ -480,6 +496,14 @@ class ExpertBasicAgent:
             planner_state=planner_state,
             active_waypoints=active_waypoints,
         )
+        behavior_plan = self._build_behavior_plan(
+            planner_state=planner_state,
+            active_target=active_overtake_target,
+            overtake_reject_reason=overtake_reject_reason,
+        )
+        self._current_behavior_plan = behavior_plan
+        self._current_trajectory = trajectory
+        self._current_behavior_state = behavior_plan.state
         tracking = run_tracking_control(
             carla_module=self._carla,
             controller=self._controller,
@@ -516,8 +540,10 @@ class ExpertBasicAgent:
             current_speed_mps=current_speed_mps,
         )
 
-        behavior = self.current_behavior()
+        behavior = behavior_plan.state
         planning_debug = build_overtake_planning_debug(
+            behavior_state=behavior_plan.state,
+            route_command=behavior_plan.route_command,
             remaining_waypoints=self.remaining_waypoints(),
             route_index=route_index,
             max_route_index=self._max_route_index,
@@ -537,6 +563,13 @@ class ExpertBasicAgent:
             traffic_light_stop_buffer_m=self.config.traffic_light_stop_buffer_m,
             traffic_light_stop_target_distance_m=stop_target_distance_m,
             target_speed_kmh=target_speed_kmh,
+            desired_speed_mps=tracking.desired_speed_mps,
+            applied_speed_mps=current_speed_mps,
+            lookahead_distance_m=tracking.lookahead_distance_m,
+            lateral_error_m=tracking.lateral_error_m,
+            heading_error_deg=tracking.heading_error_deg,
+            controller_steer_raw=tracking.controller_steer_raw,
+            controller_steer_applied=tracking.controller_steer_applied,
             follow_lead=follow_lead,
             active_target=active_overtake_target,
             follow_distance_m=follow_distance_m,
@@ -580,6 +613,39 @@ class ExpertBasicAgent:
             debug=planning_debug,
         )
 
+    def _build_behavior_plan(
+        self,
+        *,
+        planner_state: str,
+        active_target: Any | None,
+        overtake_reject_reason: str | None,
+    ) -> BehaviorPlan:
+        behavior_state = _behavior_state_from_planner_state(planner_state)
+        if behavior_state in {"lane_follow", "signal_stop"}:
+            return BehaviorPlan(
+                state=behavior_state,
+                route_command=self._current_route_command,  # type: ignore[arg-type]
+            )
+        if behavior_state == "car_follow":
+            return BehaviorPlan(
+                state=behavior_state,
+                route_command=self._current_route_command,  # type: ignore[arg-type]
+                active_target_id=active_target.primary_actor_id if active_target is not None else None,
+                active_target_kind=active_target.kind if active_target is not None else None,
+                origin_lane_id=self._overtake.origin_lane_id or self._overtake.memory.origin_lane_id,
+                target_lane_id=self._execution.target_lane_id,
+                reject_reason=overtake_reject_reason,
+            )
+        return BehaviorPlan(
+            state=behavior_state,
+            route_command=self._current_route_command,  # type: ignore[arg-type]
+            active_target_id=self._overtake.target_actor_id,
+            active_target_kind=self._overtake.memory.target_kind if self._overtake.target_actor_id is not None else None,
+            origin_lane_id=self._overtake.origin_lane_id or self._overtake.memory.origin_lane_id,
+            target_lane_id=self._execution.target_lane_id or self._overtake.origin_lane_id,
+            reject_reason=overtake_reject_reason,
+        )
+
     def _build_tracking_trajectory(
         self,
         *,
@@ -607,3 +673,11 @@ class ExpertBasicAgent:
             origin_lane_id=self._overtake.origin_lane_id,
             target_lane_id=self._execution.target_lane_id,
         )
+
+
+def _behavior_state_from_planner_state(planner_state: str) -> str:
+    if planner_state == "nominal_cruise":
+        return "lane_follow"
+    if planner_state == "traffic_light_stop":
+        return "signal_stop"
+    return planner_state

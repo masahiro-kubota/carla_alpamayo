@@ -113,6 +113,8 @@ class OvertakeEventFlags:
 
 @dataclass(slots=True)
 class OvertakeCoreTelemetry:
+    behavior_state: str
+    route_command: str
     remaining_waypoints: int
     route_progress_index: int | None
     max_route_index: int
@@ -129,6 +131,13 @@ class OvertakeCoreTelemetry:
     traffic_light_stop_buffer_m: float
     traffic_light_stop_target_distance_m: float | None
     target_speed_kmh: float
+    desired_speed_mps: float
+    applied_speed_mps: float
+    lookahead_distance_m: float
+    lateral_error_m: float | None
+    heading_error_deg: float | None
+    controller_steer_raw: float
+    controller_steer_applied: float
     target_lane_id: str | None
     min_ttc: float | None
     event_flags: OvertakeEventFlags

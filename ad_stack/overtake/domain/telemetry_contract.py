@@ -21,6 +21,8 @@ class TelemetrySectionSpec:
 
 
 OVERTAKE_PLANNING_DEBUG_CORE_FIELDS: tuple[TelemetryFieldSpec, ...] = (
+    TelemetryFieldSpec("behavior_state", ("behavior_state",), ("string",)),
+    TelemetryFieldSpec("route_command", ("route_command",), ("string",)),
     TelemetryFieldSpec("remaining_waypoints", ("remaining_waypoints",), ("integer",)),
     TelemetryFieldSpec("route_progress_index", ("route_progress_index",), ("integer", "null")),
     TelemetryFieldSpec("max_route_index", ("max_route_index",), ("integer",)),
@@ -50,6 +52,13 @@ OVERTAKE_PLANNING_DEBUG_CORE_FIELDS: tuple[TelemetryFieldSpec, ...] = (
         ("number", "null"),
     ),
     TelemetryFieldSpec("target_speed_kmh", ("target_speed_kmh",), ("number",)),
+    TelemetryFieldSpec("desired_speed_mps", ("desired_speed_mps",), ("number",)),
+    TelemetryFieldSpec("applied_speed_mps", ("applied_speed_mps",), ("number",)),
+    TelemetryFieldSpec("lookahead_distance_m", ("lookahead_distance_m",), ("number",)),
+    TelemetryFieldSpec("lateral_error_m", ("lateral_error_m",), ("number", "null")),
+    TelemetryFieldSpec("heading_error_deg", ("heading_error_deg",), ("number", "null")),
+    TelemetryFieldSpec("controller_steer_raw", ("controller_steer_raw",), ("number",)),
+    TelemetryFieldSpec("controller_steer_applied", ("controller_steer_applied",), ("number",)),
     TelemetryFieldSpec(
         "target_lane_id",
         ("target_lane_id",),
