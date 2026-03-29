@@ -1171,11 +1171,6 @@ def _run_route_loop(request: RunRequest) -> RunResult:
                     behavior=behavior,
                     route_completion_ratio=current_completion_ratio,
                     distance_to_goal_m=distance_to_goal_m,
-                    planner_state=planning_decision.planner_state,
-                    follow_target_distance_m=planning_debug.target.follow_target_distance_m,
-                    overtake_state=planning_debug.target.overtake_state,
-                    target_lane_id=planning_debug.core.target_lane_id,
-                    min_ttc=planning_debug.core.min_ttc,
                     pose={
                         "x": float(vehicle_location.x),
                         "y": float(vehicle_location.y),

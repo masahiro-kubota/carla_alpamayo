@@ -110,11 +110,6 @@ class RouteLoopFrameTelemetryRequest:
     behavior: str | None
     route_completion_ratio: float
     distance_to_goal_m: float
-    planner_state: str | None
-    follow_target_distance_m: float | None
-    overtake_state: str | None
-    target_lane_id: str | None
-    min_ttc: float | None
     pose: dict[str, float]
     control: dict[str, float]
     collision: bool
@@ -133,26 +128,8 @@ class RouteLoopFrameTelemetry:
     ego_state: EgoStateSample
     episode_record: EpisodeRecord
 
-def planning_debug_core_to_dict(core: OvertakeCoreTelemetry) -> dict[str, Any]:
-    return project_telemetry_section(core, OVERTAKE_PLANNING_DEBUG_CORE_FIELDS, include_for="all")
 
-
-def planning_debug_target_to_dict(target: OvertakeTargetTelemetry) -> dict[str, Any]:
-    return project_telemetry_section(
-        target,
-        OVERTAKE_PLANNING_DEBUG_TARGET_FIELDS,
-        include_for="all",
-    )
-
-
-def planning_debug_to_dict(planning_debug: OvertakePlanningDebug) -> dict[str, Any]:
-    return {
-        "core": planning_debug_core_to_dict(planning_debug.core),
-        "target": planning_debug_target_to_dict(planning_debug.target),
-    }
-
-
-def build_episode_record_extra_fields(
+def _build_episode_record_extra_fields(
     planning_debug: OvertakePlanningDebug,
 ) -> dict[str, Any]:
     extra_fields = project_telemetry_section(
@@ -170,7 +147,7 @@ def build_episode_record_extra_fields(
     return extra_fields
 
 
-def build_planning_debug_mcap_payload(planning_debug: OvertakePlanningDebug) -> dict[str, Any]:
+def _build_planning_debug_mcap_payload(planning_debug: OvertakePlanningDebug) -> dict[str, Any]:
     return {
         "core": project_telemetry_section(
             planning_debug.core,
@@ -345,12 +322,6 @@ def build_ego_state_sample(
     behavior: str | None,
     route_completion_ratio: float,
     distance_to_goal_m: float,
-    planner_state: str | None,
-    traffic_light_state: str | None,
-    follow_target_distance_m: float | None,
-    overtake_state: str | None,
-    target_lane_id: str | None,
-    min_ttc: float | None,
     pose: dict[str, float],
     control: dict[str, float],
     planning_debug: OvertakePlanningDebug,
@@ -364,15 +335,15 @@ def build_ego_state_sample(
         behavior=behavior,
         route_completion_ratio=route_completion_ratio,
         distance_to_goal_m=distance_to_goal_m,
-        planner_state=planner_state,
-        traffic_light_state=traffic_light_state,
-        follow_target_distance_m=follow_target_distance_m,
-        overtake_state=overtake_state,
-        target_lane_id=target_lane_id,
-        min_ttc=min_ttc,
+        planner_state=planning_debug.core.behavior_state,
+        traffic_light_state=planning_debug.core.traffic_light_state,
+        follow_target_distance_m=planning_debug.target.follow_target_distance_m,
+        overtake_state=planning_debug.target.overtake_state,
+        target_lane_id=planning_debug.core.target_lane_id,
+        min_ttc=planning_debug.core.min_ttc,
         pose=pose,
         control=control,
-        planning_debug=build_planning_debug_mcap_payload(planning_debug),
+        planning_debug=_build_planning_debug_mcap_payload(planning_debug),
     )
 
 
@@ -385,7 +356,6 @@ def build_episode_record(
     weather_id: str,
     timestamp: float,
     speed: float,
-    command: str,
     steer: float,
     throttle: float,
     brake: float,
@@ -434,7 +404,7 @@ def build_episode_record(
         planner_state=planner_state,
         mcap_segment_index=mcap_segment_index,
         mcap_segment_path=mcap_segment_path,
-        extra_fields=build_episode_record_extra_fields(planning_debug),
+        extra_fields=_build_episode_record_extra_fields(planning_debug),
     )
 
 
@@ -450,12 +420,6 @@ def build_frame_telemetry(
         behavior=request.behavior,
         route_completion_ratio=request.route_completion_ratio,
         distance_to_goal_m=request.distance_to_goal_m,
-        planner_state=request.planner_state,
-        traffic_light_state=request.planning_debug.core.traffic_light_state,
-        follow_target_distance_m=request.follow_target_distance_m,
-        overtake_state=request.overtake_state,
-        target_lane_id=request.target_lane_id,
-        min_ttc=request.min_ttc,
         pose=request.pose,
         control=request.control,
         planning_debug=request.planning_debug,
@@ -468,7 +432,6 @@ def build_frame_telemetry(
         weather_id=request.weather_id,
         timestamp=request.timestamp_s,
         speed=request.speed_mps,
-        command=request.behavior or "unknown",
         steer=request.control["steer"],
         throttle=request.control["throttle"],
         brake=request.control["brake"],

@@ -6,15 +6,13 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from ad_stack.agents.base import ControlDecision, VehicleCommand
 from ad_stack.overtake.application import BehaviorPathPlanner, BehaviorPathPlannerConfig
+from ad_stack.overtake.application.runtime_state import OvertakeRuntimeState
+from ad_stack.overtake.application.step_service import OvertakeStepRequest, resolve_overtake_step
 from ad_stack.overtake.application.pure_pursuit_controller import PurePursuitController
-from ad_stack.overtake.domain.planning_models import BehaviorPlan, Trajectory
 from ad_stack.overtake import (
-    OvertakeRuntimeState,
     evaluate_pass_progress,
     is_traffic_light_violation,
-    OvertakeStepRequest,
     resolve_active_light,
-    resolve_overtake_step,
     should_stop_for_light,
     speed_control,
     traffic_light_stop_control,
@@ -108,9 +106,6 @@ class ExpertBasicAgent:
         self._max_route_index: int = 0
         self._current_route_index: int = 0
         self._current_route_command: str = "lane_follow"
-        self._current_behavior_state: str = "lane_follow"
-        self._current_behavior_plan: BehaviorPlan | None = None
-        self._current_trajectory: Trajectory | None = None
         self._overtake = OvertakeRuntimeState()
         self._target_policy = target_policy
         self._target_acceptance_policy = target_acceptance_policy
@@ -150,22 +145,8 @@ class ExpertBasicAgent:
         if self._route_backbone is not None:
             self._current_route_command = self._route_backbone.road_option_for_index(0)
 
-    def remaining_waypoints(self) -> int:
-        if self._route_backbone is None:
-            return 0
-        return max(len(self._route_backbone.route_index_to_trace_index) - 1 - self._max_route_index, 0)
-
-    def current_behavior(self) -> str:
-        return self._current_behavior_state
-
     def current_route_command(self) -> str:
         return self._current_route_command
-
-    def current_behavior_plan(self) -> BehaviorPlan | None:
-        return self._current_behavior_plan
-
-    def current_trajectory(self) -> Trajectory | None:
-        return self._current_trajectory
 
     def done(self) -> bool:
         if self._route_backbone is None:
@@ -188,9 +169,6 @@ class ExpertBasicAgent:
         self._controller.previous_applied_steer = 0.0
         if self._route_backbone is not None:
             self._current_route_command = self._route_backbone.road_option_for_index(0)
-        self._current_behavior_state = "lane_follow"
-        self._current_behavior_plan = None
-        self._current_trajectory = None
 
     def step(self, scene_state: SceneState) -> ControlDecision:
         current_speed_mps = scene_state.ego.speed_mps
@@ -533,9 +511,6 @@ class ExpertBasicAgent:
             signal_stop_distance_m=stop_target_distance_m,
             local_path_samples=local_path_samples,
         )
-        self._current_behavior_plan = behavior_plan
-        self._current_trajectory = trajectory
-        self._current_behavior_state = behavior_plan.state
         tracking = run_tracking_control(
             carla_module=self._carla,
             controller=self._controller,
@@ -576,7 +551,10 @@ class ExpertBasicAgent:
         planning_debug = build_overtake_planning_debug(
             behavior_state=behavior_plan.state,
             route_command=behavior_plan.route_command,
-            remaining_waypoints=self.remaining_waypoints(),
+            remaining_waypoints=max(
+                len(self._require_route_backbone().route_index_to_trace_index) - 1 - self._max_route_index,
+                0,
+            ),
             route_index=route_index,
             max_route_index=self._max_route_index,
             current_lane_id=current_lane_id,

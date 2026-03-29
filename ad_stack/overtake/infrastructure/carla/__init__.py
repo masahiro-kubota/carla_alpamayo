@@ -1,5 +1,4 @@
 from .controller_adapter import TrajectoryTrackingResult, run_tracking_control
-from .controller_executor import OvertakeExecutionQueue, consume_waypoint_queue
 from .execution_manager import OvertakeExecutionManager
 from .route_backbone_builder import build_route_backbone, normalize_route_command
 from .route_alignment import (
@@ -43,15 +42,11 @@ from .telemetry_mapper import (
     build_ego_state_sample,
     build_episode_record,
     build_overtake_planning_debug,
-    build_planning_debug_mcap_payload,
-    planning_debug_to_dict,
 )
 
 __all__ = [
-    "consume_waypoint_queue",
     "build_route_backbone",
     "build_route_backbone_trajectory",
-    "OvertakeExecutionQueue",
     "OvertakeExecutionManager",
     "build_overtake_pass_snapshot",
     "build_base_trace_execution_plan",
@@ -80,8 +75,6 @@ __all__ = [
     "build_ego_state_sample",
     "build_episode_record",
     "build_overtake_planning_debug",
-    "build_planning_debug_mcap_payload",
-    "planning_debug_to_dict",
     "run_tracking_control",
     "TrajectoryTrackingResult",
     "build_waypoint_trajectory",

@@ -15,13 +15,9 @@ from .decision_service import (
     should_begin_rejoin,
 )
 from .lane_change_planner import build_route_aligned_lane_change_plan
-from .runtime_transition import (
-    OvertakeRuntimeTransition,
-    resolve_overtake_runtime_transition,
-)
 from .runtime_state import OvertakeRuntimeState
 from .traffic_light_service import resolve_active_light, select_active_light
-from .step_service import OvertakeStepDecision, OvertakeStepRequest, resolve_overtake_step
+from .step_service import OvertakeStepRequest, resolve_overtake_step
 from .trajectory_generation import (
     TrajectoryGenerationConfig,
     build_pose_trajectory,
@@ -41,7 +37,6 @@ __all__ = [
     "ExecutionActivationResult",
     "is_traffic_light_violation",
     "LaneChangePathStatus",
-    "OvertakeRuntimeTransition",
     "OvertakeRuntimeState",
     "should_stop_for_light",
     "speed_control",
@@ -49,10 +44,8 @@ __all__ = [
     "select_active_light",
     "stopping_distance_m",
     "TrajectoryGenerationConfig",
-    "OvertakeStepDecision",
     "OvertakeStepRequest",
     "resolve_overtake_step",
-    "resolve_overtake_runtime_transition",
     "should_begin_rejoin",
     "traffic_light_stop_control",
     "traffic_light_stop_target_distance_m",
