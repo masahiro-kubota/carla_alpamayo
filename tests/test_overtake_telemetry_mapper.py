@@ -271,13 +271,14 @@ class RouteLoopTelemetryMapperTests(unittest.TestCase):
             mcap_segment_path="outputs/evaluate/x/telemetry/segment_0000.mcap",
         )
 
-        self.assertEqual(record.overtake_state, "pass_vehicle")
-        self.assertEqual(record.overtake_target_actor_id, 44)
-        self.assertEqual(record.overtake_target_kind, "cluster")
-        self.assertEqual(record.overtake_target_member_actor_ids, [44, 45])
-        self.assertEqual(record.current_lane_id, "15:1")
-        self.assertEqual(record.route_target_lane_id, "15:-1")
-        self.assertEqual(record.target_lane_id, "15:1")
+        payload = record.to_dict()
+        self.assertEqual(payload["overtake_state"], "pass_vehicle")
+        self.assertEqual(payload["overtake_target_actor_id"], 44)
+        self.assertEqual(payload["overtake_target_kind"], "cluster")
+        self.assertEqual(payload["overtake_target_member_actor_ids"], [44, 45])
+        self.assertEqual(payload["current_lane_id"], "15:1")
+        self.assertEqual(payload["route_target_lane_id"], "15:-1")
+        self.assertEqual(payload["target_lane_id"], "15:1")
 
     def test_planning_debug_to_dict_flattens_event_flags(self) -> None:
         payload = _planning_debug(

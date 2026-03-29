@@ -133,6 +133,43 @@ class RouteLoopFrameTelemetry:
     episode_record: EpisodeRecord
 
 
+_EPISODE_RECORD_OVERTAKE_EXTRACTORS: tuple[tuple[str, tuple[str, str]], ...] = (
+    ("traffic_light_state", ("core", "traffic_light_state")),
+    ("traffic_light_actor_id", ("core", "traffic_light_actor_id")),
+    ("traffic_light_distance_m", ("core", "traffic_light_distance_m")),
+    ("traffic_light_stop_line_distance_m", ("core", "traffic_light_stop_line_distance_m")),
+    ("follow_target_distance_m", ("target", "follow_target_distance_m")),
+    ("follow_target_id", ("target", "follow_target_id")),
+    ("follow_target_speed_mps", ("target", "follow_target_speed_mps")),
+    ("follow_target_relative_speed_mps", ("target", "follow_target_relative_speed_mps")),
+    ("follow_target_lane_id", ("target", "follow_target_lane_id")),
+    ("left_lane_front_gap_m", ("target", "left_lane_front_gap_m")),
+    ("left_lane_rear_gap_m", ("target", "left_lane_rear_gap_m")),
+    ("right_lane_front_gap_m", ("target", "right_lane_front_gap_m")),
+    ("right_lane_rear_gap_m", ("target", "right_lane_rear_gap_m")),
+    ("rejoin_front_gap_m", ("target", "rejoin_front_gap_m")),
+    ("rejoin_rear_gap_m", ("target", "rejoin_rear_gap_m")),
+    ("overtake_state", ("target", "overtake_state")),
+    ("overtake_considered", ("target", "overtake_considered")),
+    ("overtake_direction", ("target", "overtake_direction")),
+    ("overtake_reject_reason", ("target", "overtake_reject_reason")),
+    ("overtake_target_actor_id", ("target", "overtake_target_actor_id")),
+    ("overtake_target_kind", ("target", "overtake_target_kind")),
+    ("overtake_target_member_actor_ids", ("target", "overtake_target_member_actor_ids")),
+    ("overtake_target_lane_id", ("target", "overtake_target_lane_id")),
+    ("target_passed", ("target", "target_passed")),
+    ("distance_past_target_m", ("target", "distance_past_target_m")),
+    ("target_actor_visible", ("target", "target_actor_visible")),
+    ("target_actor_last_seen_s", ("target", "target_actor_last_seen_s")),
+    ("current_lane_id", ("core", "current_lane_id")),
+    ("route_target_lane_id", ("core", "route_target_lane_id")),
+    ("target_lane_id", ("core", "target_lane_id")),
+    ("target_speed_kmh", ("core", "target_speed_kmh")),
+    ("emergency_stop", ("core", "emergency_stop")),
+    ("min_ttc", ("core", "min_ttc")),
+)
+
+
 def planning_debug_core_to_dict(core: OvertakeCoreTelemetry) -> dict[str, Any]:
     return {
         "remaining_waypoints": core.remaining_waypoints,
@@ -201,6 +238,23 @@ def planning_debug_to_dict(planning_debug: OvertakePlanningDebug) -> dict[str, A
         "core": planning_debug_core_to_dict(planning_debug.core),
         "target": planning_debug_target_to_dict(planning_debug.target),
     }
+
+
+def build_episode_record_extra_fields(
+    planning_debug: OvertakePlanningDebug,
+) -> dict[str, Any]:
+    projection = planning_debug_to_dict(planning_debug)
+    extra_fields: dict[str, Any] = {
+        "traffic_light_violation": planning_debug.core.event_flags.traffic_light_violation,
+    }
+    for field_name, path in _EPISODE_RECORD_OVERTAKE_EXTRACTORS:
+        value: Any = projection
+        for key in path:
+            value = value[key]
+        if field_name == "overtake_target_member_actor_ids":
+            value = list(value)
+        extra_fields[field_name] = value
+    return extra_fields
 
 
 def build_planning_debug_mcap_payload(planning_debug: OvertakePlanningDebug) -> dict[str, Any]:
@@ -437,42 +491,9 @@ def build_episode_record(
         route_target_x=route_target_x,
         route_target_y=route_target_y,
         planner_state=planner_state,
-        traffic_light_state=planning_debug.core.traffic_light_state,
-        traffic_light_actor_id=planning_debug.core.traffic_light_actor_id,
-        traffic_light_distance_m=planning_debug.core.traffic_light_distance_m,
-        traffic_light_stop_line_distance_m=planning_debug.core.traffic_light_stop_line_distance_m,
-        traffic_light_violation=planning_debug.core.event_flags.traffic_light_violation,
-        follow_target_distance_m=planning_debug.target.follow_target_distance_m,
-        follow_target_id=planning_debug.target.follow_target_id,
-        follow_target_speed_mps=planning_debug.target.follow_target_speed_mps,
-        follow_target_relative_speed_mps=planning_debug.target.follow_target_relative_speed_mps,
-        follow_target_lane_id=planning_debug.target.follow_target_lane_id,
-        left_lane_front_gap_m=planning_debug.target.left_lane_front_gap_m,
-        left_lane_rear_gap_m=planning_debug.target.left_lane_rear_gap_m,
-        right_lane_front_gap_m=planning_debug.target.right_lane_front_gap_m,
-        right_lane_rear_gap_m=planning_debug.target.right_lane_rear_gap_m,
-        rejoin_front_gap_m=planning_debug.target.rejoin_front_gap_m,
-        rejoin_rear_gap_m=planning_debug.target.rejoin_rear_gap_m,
-        overtake_state=planning_debug.target.overtake_state,
-        overtake_considered=planning_debug.target.overtake_considered,
-        overtake_direction=planning_debug.target.overtake_direction,
-        overtake_reject_reason=planning_debug.target.overtake_reject_reason,
-        overtake_target_actor_id=planning_debug.target.overtake_target_actor_id,
-        overtake_target_kind=planning_debug.target.overtake_target_kind,
-        overtake_target_member_actor_ids=list(planning_debug.target.overtake_target_member_actor_ids),
-        overtake_target_lane_id=planning_debug.target.overtake_target_lane_id,
-        target_passed=planning_debug.target.target_passed,
-        distance_past_target_m=planning_debug.target.distance_past_target_m,
-        target_actor_visible=planning_debug.target.target_actor_visible,
-        target_actor_last_seen_s=planning_debug.target.target_actor_last_seen_s,
-        current_lane_id=planning_debug.core.current_lane_id,
-        route_target_lane_id=planning_debug.core.route_target_lane_id,
-        target_lane_id=planning_debug.core.target_lane_id,
-        target_speed_kmh=planning_debug.core.target_speed_kmh,
-        emergency_stop=planning_debug.core.emergency_stop,
-        min_ttc=planning_debug.core.min_ttc,
         mcap_segment_index=mcap_segment_index,
         mcap_segment_path=mcap_segment_path,
+        extra_fields=build_episode_record_extra_fields(planning_debug),
     )
 
 

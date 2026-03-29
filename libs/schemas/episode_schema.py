@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -35,45 +35,42 @@ class EpisodeRecord:
     route_target_x: float | None = None
     route_target_y: float | None = None
     planner_state: str | None = None
-    traffic_light_state: str | None = None
-    traffic_light_actor_id: int | None = None
-    traffic_light_distance_m: float | None = None
-    traffic_light_stop_line_distance_m: float | None = None
-    traffic_light_violation: bool | None = None
-    follow_target_distance_m: float | None = None
-    follow_target_id: int | None = None
-    follow_target_speed_mps: float | None = None
-    follow_target_relative_speed_mps: float | None = None
-    follow_target_lane_id: str | None = None
-    left_lane_front_gap_m: float | None = None
-    left_lane_rear_gap_m: float | None = None
-    right_lane_front_gap_m: float | None = None
-    right_lane_rear_gap_m: float | None = None
-    rejoin_front_gap_m: float | None = None
-    rejoin_rear_gap_m: float | None = None
-    overtake_state: str | None = None
-    overtake_considered: bool | None = None
-    overtake_direction: str | None = None
-    overtake_reject_reason: str | None = None
-    overtake_target_actor_id: int | None = None
-    overtake_target_kind: str | None = None
-    overtake_target_member_actor_ids: list[int] | None = None
-    overtake_target_lane_id: str | None = None
-    target_passed: bool | None = None
-    distance_past_target_m: float | None = None
-    target_actor_visible: bool | None = None
-    target_actor_last_seen_s: float | None = None
-    current_lane_id: str | None = None
-    route_target_lane_id: str | None = None
-    target_lane_id: str | None = None
-    target_speed_kmh: float | None = None
-    emergency_stop: bool | None = None
-    min_ttc: float | None = None
     mcap_segment_index: int | None = None
     mcap_segment_path: str | None = None
+    extra_fields: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = {
+            "episode_id": self.episode_id,
+            "frame_id": self.frame_id,
+            "town_id": self.town_id,
+            "route_id": self.route_id,
+            "weather_id": self.weather_id,
+            "timestamp": self.timestamp,
+            "front_rgb_path": self.front_rgb_path,
+            "speed": self.speed,
+            "command": self.command,
+            "steer": self.steer,
+            "throttle": self.throttle,
+            "brake": self.brake,
+            "collision": self.collision,
+            "lane_invasion": self.lane_invasion,
+            "success": self.success,
+            "vehicle_x": self.vehicle_x,
+            "vehicle_y": self.vehicle_y,
+            "vehicle_z": self.vehicle_z,
+            "vehicle_yaw_deg": self.vehicle_yaw_deg,
+            "route_completion_ratio": self.route_completion_ratio,
+            "distance_to_goal_m": self.distance_to_goal_m,
+            "expert_steer": self.expert_steer,
+            "route_target_x": self.route_target_x,
+            "route_target_y": self.route_target_y,
+            "planner_state": self.planner_state,
+            "mcap_segment_index": self.mcap_segment_index,
+            "mcap_segment_path": self.mcap_segment_path,
+        }
+        payload.update(self.extra_fields)
+        return payload
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
