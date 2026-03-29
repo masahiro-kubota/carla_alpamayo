@@ -494,7 +494,8 @@ moving vehicle 追い越しでは、停止障害物よりも
   - lane-change plan materialization は adapter に寄ったが、
   - まだ execution policy の共通 contract までは上がっていない
 - `tests/integration/ad_stack/_shared/`
-  - 共通 helper はできたが、suite 間の assert / runner contract はまだ薄い
+  - 共通 helper と summary assertion contract はできた
+  - moving suite 追加時に再利用できる形まで寄った
 
 ## 6. 段階的リファクタ計画
 
@@ -530,7 +531,7 @@ moving vehicle 追い越しでは、停止障害物よりも
   - overtake runtime state holder の application 化
 - 残り:
   - execution contract の更なる型化
-  - `summary` / `manifest` の suite-level assertion contract を moving suite でも再利用できる形に揃える
+  - `manifest` の scenario-specific acceptance をどこまで generic helper に上げるかの見極め
 
 ### Phase 4: moving vehicle overtake の pure design 追加
 
@@ -544,7 +545,6 @@ moving vehicle 追い越しでは、停止障害物よりも
   - domain/application は共通 debug DTO を出す
   - manifest / summary / MCAP への写像は infrastructure / interface に寄せた
 - 残り:
-  - suite assertion 層でこの contract を再利用する
   - moving suite 追加時に field 名の generic 性を再点検する
 
 ## 7. Done の定義
