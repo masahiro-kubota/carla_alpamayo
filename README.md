@@ -1,34 +1,35 @@
 # carla_alpamayo
 
-`CARLA` 上で
+This is the `CARLA`-side workspace for `alpamayo` / `minipamayo`.
+Its primary purpose is to collect expert route-loop data used for `minipamayo` training and evaluation, and to develop the policy / scenario / artifact tooling that supports that workflow. The `PilotNet` code in this repository is kept as a small sample for exercising the training flow in a minimal setup.
 
-- expert route-loop 実行
-- `PilotNet` 系の学習
-- 学習済み checkpoint の closed-loop 評価
-- 手動 command 付き interactive 試走
+This is a minimal repository for running the following on `CARLA`:
 
-を回すための最小リポジトリです。
+- expert route-loop execution
+- `PilotNet` training as a lightweight learning example
+- closed-loop evaluation of trained checkpoints
+- interactive test driving with manual commands
 
-現在の実行アーキテクチャは [docs/DIRECTORY_RELATIONSHIPS.md](docs/DIRECTORY_RELATIONSHIPS.md) にまとめています。`simulation/` は薄い CLI wrapper で、実行本体は `ad_stack.run(request)` に集約しています。
-信号遵守と overtaking を含む将来の privileged expert policy 要件は [docs/EXPERT_POLICY_REQUIREMENTS.md](docs/EXPERT_POLICY_REQUIREMENTS.md) にまとめています。
-具体的な内部設計は [docs/EXPERT_POLICY_DESIGN.md](docs/EXPERT_POLICY_DESIGN.md) にまとめています。
+The current execution architecture is summarized in [docs/DIRECTORY_RELATIONSHIPS.md](docs/DIRECTORY_RELATIONSHIPS.md). `simulation/` is a thin CLI wrapper, and the main execution path is centralized in `ad_stack.run(request)`.
+Future privileged expert policy requirements, including traffic-light compliance and overtaking, are documented in [docs/EXPERT_POLICY_REQUIREMENTS.md](docs/EXPERT_POLICY_REQUIREMENTS.md).
+Detailed internal design is documented in [docs/EXPERT_POLICY_DESIGN.md](docs/EXPERT_POLICY_DESIGN.md).
 
-## 前提
+## Requirements
 
-- `uv` を使えること
-- `CARLA 0.9.16` を `~/sim/carla-0.9.16` で参照できること
-- Python 3.10 以上
+- `uv` must be available
+- `CARLA 0.9.16` must be accessible at `~/sim/carla-0.9.16`
+- Python 3.10 or newer
 
-## セットアップ
+## Setup
 
 ```bash
 cd /home/masa/carla_alpamayo
 uv sync
 ```
 
-`carla` wheel は `pyproject.toml` から参照します。`CARLA` の配置を変えたら wheel path も更新してください。
+The `carla` wheel is referenced from `pyproject.toml`. If you move the `CARLA` installation, update the wheel path as well.
 
-## CARLA 起動
+## Starting CARLA
 
 ```bash
 cd ~/sim/carla-0.9.16
@@ -36,24 +37,24 @@ export DISPLAY=:1
 ./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound
 ```
 
-## 並列収集
+## Parallel Collection
 
-このマシンでは、`60s` の expert route-loop を `policy.ignore_traffic_lights=true` かつ `artifacts.record_video=false` 相当の設定で実測した結果、収集用途の実用上限は `3並列` でした。
+On this machine, measuring a `60s` expert route loop with settings equivalent to `policy.ignore_traffic_lights=true` and `artifacts.record_video=false` showed that the practical upper limit for data collection was `3` parallel runs.
 
-- `1並列`: 約 `2.67x realtime`
-- `2並列`: 約 `4.42x realtime`
-- `3並列`: 約 `4.85x realtime`
-- `4並列`: 約 `3.30x realtime`
+- `1` parallel run: about `2.67x realtime`
+- `2` parallel runs: about `4.42x realtime`
+- `3` parallel runs: about `4.85x realtime`
+- `4` parallel runs: about `3.30x realtime`
 
-そのため、長時間の収集は `3並列` を推奨します。`4並列` では `RTX 4070 Ti 12GB` の GPU 使用率と VRAM 使用率がほぼ飽和して、aggregate throughput が逆に落ちました。
+For long-running collection, `3` parallel runs are therefore recommended. At `4` parallel runs, GPU usage and VRAM usage on the `RTX 4070 Ti 12GB` were nearly saturated, and aggregate throughput dropped instead.
 
-独立した CARLA server を増やすときは、`RPC port` をずらすだけでなく `-carla-streaming-port=0` を付けます。今回の環境では次の port family が安定しました。
+When launching additional independent CARLA servers, do not only shift the `RPC port`; also pass `-carla-streaming-port=0`. In this environment, the following port families were stable:
 
 - `2000` / `2002`
 - `2004` / `2006`
 - `2008` / `2010`
 
-起動例:
+Launch example:
 
 ```bash
 cd ~/sim/carla-0.9.16
@@ -64,13 +65,13 @@ export DISPLAY=:1
 ./CarlaUE4.sh -quality-level=Low -RenderOffScreen -nosound -carla-rpc-port=2008 -carla-streaming-port=0
 ```
 
-それぞれに対して、run config JSON 内の `runtime.port` を `2000`, `2004`, `2008` に振り分けます。
+Assign `runtime.port` in each run config JSON to `2000`, `2004`, and `2008` respectively.
 
 ## Expert Route Loop
 
-route-loop 実行は JSON-only です。CLI override や環境変数 override は使わず、設定はすべて `simulation/run_configs/*.json` に書きます。
+Route-loop execution is JSON-only. Do not use CLI overrides or environment-variable overrides; put all configuration in `simulation/run_configs/*.json`.
 
-単発の expert 実行:
+Single expert run:
 
 ```bash
 cd /home/masa/carla_alpamayo
@@ -78,10 +79,10 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   simulation/run_configs/town01_perimeter_cw_expert.json
 ```
 
-内部では `simulation.pipelines.run_route_loop` が run config JSON から `RunRequest(mode="evaluate", policy.kind=..., ...)` を作り、`ad_stack.run(...)` を呼びます。
-route は `scenarios/routes/*.json`、周辺環境と stopping 条件は `scenarios/environments/*.json`、ego 側の expert policy 閾値は `ad_stack/configs/expert/*.json` で管理します。
+Internally, `simulation.pipelines.run_route_loop` builds `RunRequest(mode="evaluate", policy.kind=..., ...)` from the run config JSON and then calls `ad_stack.run(...)`.
+Routes are managed in `scenarios/routes/*.json`, surrounding environment and stopping conditions in `scenarios/environments/*.json`, and ego-side expert policy thresholds in `ad_stack/configs/expert/*.json`.
 
-主な出力:
+Main outputs:
 
 - manifest: `outputs/evaluate/<run_id>/manifest.jsonl`
 - summary: `outputs/evaluate/<run_id>/summary.json`
@@ -91,7 +92,7 @@ route は `scenarios/routes/*.json`、周辺環境と stopping 条件は `scenar
 - input run config: `outputs/evaluate/<run_id>/run_config.json`
 - resolved request: `outputs/evaluate/<run_id>/run_request.json`
 
-3 並列で回すときは、config JSON を 3 つ並べるだけです。
+To run three in parallel, just pass three config JSON files:
 
 ```bash
 cd /home/masa/carla_alpamayo
@@ -101,20 +102,20 @@ PYTHONPATH="" uv run python -m simulation.pipelines.run_route_loop \
   simulation/run_configs/town01_intersection_weave_ccw_collection.json
 ```
 
-この場合、元コマンドと各 worker の config/log/exit code は `outputs/launcher_runs/<run_id>/launcher_manifest.json` に残ります。
+In this case, the original command plus each worker's config / log / exit code are recorded in `outputs/launcher_runs/<run_id>/launcher_manifest.json`.
 
 ## Route Preview
 
-`scenarios/routes/*.json` は anchor index の列だけだと人間には分かりにくいので、route JSON と同名の preview PNG を `scenarios/routes/previews/` に併せて管理します。
+Because `scenarios/routes/*.json` is hard for humans to read as a list of anchor indices alone, keep a preview PNG with the same name alongside each route JSON under `scenarios/routes/previews/`.
 
-route preview を全部更新するときは:
+To regenerate all route previews:
 
 ```bash
 cd /home/masa/carla_alpamayo
 PYTHONPATH="" uv run python -m simulation.pipelines.plot_route_map --all
 ```
 
-個別 route だけ更新するときは:
+To update only one route:
 
 ```bash
 cd /home/masa/carla_alpamayo
@@ -122,49 +123,49 @@ PYTHONPATH="" uv run python -m simulation.pipelines.plot_route_map \
   --route-config scenarios/routes/town01_perimeter_cw.json
 ```
 
-出力先は `scenarios/routes/previews/<route_name>.png` です。
+Output goes to `scenarios/routes/previews/<route_name>.png`.
 
-Town 全体の top-down map asset を更新するときは:
+To regenerate the town-wide top-down map asset:
 
 ```bash
 cd /home/masa/carla_alpamayo
 PYTHONPATH="" uv run python -m simulation.pipelines.render_town_topdown_asset --town Town01
 ```
 
-出力先は `scenarios/maps/town01_topdown.png` と `scenarios/maps/town01_topdown.json` です。
-この `town01_topdown.png` はレーン図ではなく、Town 全体を真上から撮った RGB の俯瞰画像です。
+Outputs go to `scenarios/maps/town01_topdown.png` and `scenarios/maps/town01_topdown.json`.
+This `town01_topdown.png` is not a lane diagram. It is an RGB bird's-eye image of the entire town captured from directly above.
 
-## 学習
+## Training
 
-`PilotNet` 系の学習:
+Training `PilotNet`:
 
 ```bash
 cd /home/masa/carla_alpamayo
 ./learning/scripts/run_train_pilotnet.sh
 ```
 
-`front RGB + speed + command -> steer` を試すときは:
+To try `front RGB + speed + command -> steer`:
 
 ```bash
 cd /home/masa/carla_alpamayo
 PILOTNET_COMMAND_CONDITIONING=embedding ./learning/scripts/run_train_pilotnet.sh
 ```
 
-train artifact は `outputs/train/<run_id>/{config.json,summary.json,best.pt}` に出ます。
+Training artifacts are written to `outputs/train/<run_id>/{config.json,summary.json,best.pt}`.
 
-## 評価
+## Evaluation
 
-closed-loop 評価も同じで、checkpoint を含む learned 用 run config JSON を 1 つ渡します。
+Closed-loop evaluation works the same way: pass one learned run config JSON that includes a checkpoint.
 
-`simulation.pipelines.run_route_loop` は clean git worktree が必要です。出力先は `outputs/evaluate/<date>_<time>_<memo>_<commit>/` です。
-default では `telemetry/segment_0000.mcap` から始まる segmented MCAP を出力し、front camera の JPEG、`/ego/state`, `/ego/control`, `/ego/planning`, `/tf`、Foxglove `SceneUpdate` の static route / lane centerline を記録します。Town ごとの top-down asset が `scenarios/maps/` にある場合は `/map/topdown/compressed` と `/map/topdown/camera_info` も各 segment 先頭に入ります。segment 一覧は `telemetry/index.json` に残り、default の split 間隔は `600s` です。必要なら run config JSON の `artifacts.mcap_segment_seconds` で変えられます。地図は default で town 全体を出し、重い場合だけ `artifacts.mcap_map_scope` を `near_route` にします。不要なら `artifacts.record_mcap` を `false` にします。`front_rgb/` の連番 PNG は常設せず、`artifacts.record_video=true` のときだけ一時フレームから `front_rgb.mp4` を生成します。
-default の front camera は `1280x720`、artifact 記録レートは `10Hz` です。必要なら run config JSON の `runtime.camera_width`, `runtime.camera_height`, `artifacts.record_hz` を変えます。
-route-loop 実行時の raw argv は `cli_args.json`、入力 run config は `run_config.json`、解決済み request は `run_request.json` として出力ディレクトリに保存します。
-expert policy の設定値は `summary.json` に `expert_config_path` と `expert_config` として残ります。
+`simulation.pipelines.run_route_loop` requires a clean git worktree. Outputs are written to `outputs/evaluate/<date>_<time>_<memo>_<commit>/`.
+By default, it writes segmented MCAP starting from `telemetry/segment_0000.mcap`, records front-camera JPEGs, `/ego/state`, `/ego/control`, `/ego/planning`, `/tf`, and Foxglove `SceneUpdate` static route / lane centerline data. If a town-specific top-down asset exists under `scenarios/maps/`, `/map/topdown/compressed` and `/map/topdown/camera_info` are also inserted at the start of each segment. The segment list is written to `telemetry/index.json`, and the default split interval is `600s`. If needed, change it with `artifacts.mcap_segment_seconds` in the run config JSON. By default, the map covers the entire town; if that is too heavy, set `artifacts.mcap_map_scope` to `near_route`. If you do not need MCAP output, set `artifacts.record_mcap` to `false`. Numbered PNGs under `front_rgb/` are not kept permanently; `front_rgb.mp4` is generated from temporary frames only when `artifacts.record_video=true`.
+The default front camera is `1280x720`, and the artifact recording rate is `10Hz`. If needed, adjust `runtime.camera_width`, `runtime.camera_height`, and `artifacts.record_hz` in the run config JSON.
+The raw argv used for route-loop execution is saved as `cli_args.json`, the input run config as `run_config.json`, and the resolved request as `run_request.json` in the output directory.
+Expert policy settings are recorded in `summary.json` as `expert_config_path` and `expert_config`.
 
-フロントカメラをライブ表示したいときは、run config JSON の `preview.show_front_camera` を `true` にした上で `DISPLAY` を設定します。
+To display the live front camera, set `preview.show_front_camera` to `true` in the run config JSON and set `DISPLAY`.
 
-interactive 試走:
+Interactive test drive:
 
 ```bash
 cd /home/masa/carla_alpamayo
@@ -172,7 +173,7 @@ export DISPLAY=:1
 PYTHONPATH="" uv run python -m simulation.pipelines.interactive_command_drive
 ```
 
-操作:
+Controls:
 
 - `w`: `lanefollow`
 - `a`: `left`
@@ -180,21 +181,21 @@ PYTHONPATH="" uv run python -m simulation.pipelines.interactive_command_drive
 - `d`: `right`
 - `q`: quit
 
-## いまの責務分割
+## Current Responsibility Split
 
 - `simulation/`
-  - collect / evaluate / interactive 用 CLI
-  - `RunRequest` を組み立てる
+  - CLI entrypoints for collect / evaluate / interactive
+  - builds `RunRequest`
 - `ad_stack/`
-  - `run(request)` を提供する single entrypoint
-  - CARLA world setup, actor/sensor lifecycle, simulation loop, artifact 出力を持つ
-  - `configs/expert/*.json` に ego expert policy の閾値を置く
+  - provides the `run(request)` single entrypoint
+  - owns CARLA world setup, actor / sensor lifecycle, simulation loop, and artifact output
+  - stores ego expert policy thresholds in `configs/expert/*.json`
 - `learning/`
-  - `PilotNet` の model / train / inference runtime
+  - `PilotNet` model / training / inference runtime
 - `libs/`
-  - route helper, schema, project helper
+  - route helpers, schemas, project helpers
 
-## リポジトリ構成
+## Repository Layout
 
 ```text
 carla_alpamayo/
